@@ -50,7 +50,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
     if (character === 'Arzoo') return 'Priyank';
     if (character === 'Anish') return 'Co-founder';
     if (character === 'Debu') return 'Assistant';
-    if (character === 'Chirag') return 'Athlete';
+    if (character === 'Chirag') return 'Cricket Pro';
     return 'User';
   };
   
@@ -79,23 +79,23 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
       systemPrompt.current = `You are Debu, a senior Indian filmmaker and mentor. Wise, clear, authoritative. Guide with surgical precision. END WITH ONE FOLLOW UP QUESTION. MAX 60 WORDS. NO DEVANAGARI.`;
     } else if (character === 'Anish') {
       let taskGuide = '';
-      if (episodeLabel.includes('1')) {
-        taskGuide = "Guide them on readiness, validation, and bootstrapping vs fundraising.";
-      } else if (episodeLabel.includes('2')) {
-        taskGuide = "Guide them on identifying roles/responsibilities and finding a co-founder with fit.";
-      } else if (episodeLabel.includes('3')) {
-        taskGuide = "Guide them on AI niche differentiation vs Gemini/OpenAI and moats.";
-      } else if (episodeLabel.includes('4')) {
-        taskGuide = "Guide them on evaluating their idea and defining a 7-14 day action plan.";
-      } else if (episodeLabel.includes('5')) {
-        taskGuide = "Guide them on pivoting vs patience and building a lean budget team.";
+      if (episodeLabel.includes('Phase 1')) {
+        taskGuide = "Guide them on readiness: deciding if they're truly ready, validating the problem, and deciding between bootstrapping, grants, or fundraising.";
+      } else if (episodeLabel.includes('Phase 2')) {
+        taskGuide = "Guide them on roles: mapping immediate responsibilities, identifying their specific core role, and finding a co-founder with a perfect cultural/skill fit.";
+      } else if (episodeLabel.includes('Phase 3')) {
+        taskGuide = "Guide them on differentiation: identifying a clear niche and 'moat' (defensible advantage) against large platforms like Gemini and OpenAI.";
+      } else if (episodeLabel.includes('Phase 4')) {
+        taskGuide = "Guide them on evaluation: clarifying the problem-solution fit, target users, and defining exact next steps for the next 7-14 days.";
+      } else if (episodeLabel.includes('Phase 5')) {
+        taskGuide = "Guide them on pivots: helping them decide whether to pivot or stay patient, and how to build a lean early team with very limited resources.";
       }
 
-      systemPrompt.current = `You are Anish, a 20-year-old Indian boy building his own startup called "Insayy". Energetic hustler vibe. Natural Hinglish (English + Hindi in Latin script). Use slang like 'bro', 'yaar', 'scene', 'vibe check'. 
-      Your mission now: ${taskGuide}
-      Speak like a cool founder friend. MAX 35 WORDS. NO DEVANAGARI. SCENE: ${initialHook}.`;
+      systemPrompt.current = `You are Anish, a 20-year-old startup founder building 'Insayy'. Energetic, slightly stressed, but highly passionate hustler. Natural Hinglish (Latin script). Use startup slang like 'MVP', 'scale', 'burn rate', 'vibe check'. 
+      MISSION: ${taskGuide}
+      Speak like a founder-to-founder friend. MAX 35 WORDS. NO DEVANAGARI. SCENE: ${initialHook}.`;
     } else if (character === 'Chirag') {
-      systemPrompt.current = `You are Chirag Saini, also known as Fit Monk. You are an elite Cricket Athlete Coach. You are disciplined, motivational, and technical. You help players improve their game, fitness, and mindset. Speak in natural Hinglish. Give specific cricket advice and training tips. Be encouraging but firm on discipline. MAX 40 WORDS. NO DEVANAGARI. SCENE: ${initialHook}.`;
+      systemPrompt.current = `You are Chirag Saini (Fit Monk), an elite Cricket Athlete Coach. Disciplined, technical, and motivational. You answer user doubts regarding cricket fitness, skill improvement, and athlete mindset. Use natural Hinglish. Be precise with training advice. Encourage discipline. MAX 40 WORDS. NO DEVANAGARI. SCENE: ${initialHook}.`;
     } else {
       systemPrompt.current = `You are ${character}, a lead character in the premium drama "${episodeLabel}". Speak in natural "Hinglish" (English + Hindi in Latin). Modern slang. Quick WhatsApp style. MAX 25 WORDS. NO DEVANAGARI. SCENE: ${initialHook}. USER IS: ${userRoleName}.`;
     }
@@ -103,8 +103,13 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
 
   const handleSend = async () => {
     if (!inputValue.trim() || isTyping) return;
+    
+    // EXCLUSIVELY obtain key from process.env.API_KEY
     const apiKey = process.env.API_KEY;
-    if (!apiKey) return;
+    if (!apiKey) {
+      setMessages(prev => [...prev, { role: 'assistant', content: "API key is missing in production environment. Please check Vercel settings." }]);
+      return;
+    }
 
     const userText = inputValue.trim();
     setInputValue('');
@@ -112,8 +117,13 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
     setIsTyping(true);
 
     try {
-      const ai = new GoogleGenAI({ apiKey });
-      const modelName = (character === 'Debu' || character === 'Anish' || character === 'Chirag') ? 'gemini-3-pro-preview' : 'gemini-3-flash-preview';
+      // Create fresh instance right before call as per guidelines
+      const ai = new GoogleGenAI({ apiKey: apiKey });
+      
+      // Use pro for coaching/startup tasks, flash for drama
+      const modelName = (character === 'Debu' || character === 'Anish' || character === 'Chirag') 
+        ? 'gemini-3-pro-preview' 
+        : 'gemini-3-flash-preview';
       
       const response = await ai.models.generateContent({
         model: modelName,
@@ -130,7 +140,8 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
 
       setMessages(prev => [...prev, { role: 'assistant', content: response.text || "..." }]);
     } catch (error) {
-      setMessages(prev => [...prev, { role: 'assistant', content: "Engine error. Try again." }]);
+      console.error("AI Error:", error);
+      setMessages(prev => [...prev, { role: 'assistant', content: "Engine lag. Try again yaar." }]);
     } finally {
       setIsTyping(false);
     }
