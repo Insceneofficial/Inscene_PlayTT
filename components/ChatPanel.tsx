@@ -1,6 +1,6 @@
 
-import React, { useState, useEffect, useRef } from 'react';
 import { GoogleGenAI } from "@google/genai";
+import React, { useState, useEffect, useRef } from 'react';
 
 interface ChatPanelProps {
   character: string;
@@ -80,34 +80,35 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
     } else if (character === 'Anish') {
       let taskGuide = '';
       if (episodeLabel.includes('Phase 1')) {
-        taskGuide = "Guide them on readiness: deciding if they're truly ready, validating the problem, and deciding between bootstrapping, grants, or fundraising.";
+        taskGuide = "Guide them on readiness: validating the problem, and bootstrapping vs fundraising.";
       } else if (episodeLabel.includes('Phase 2')) {
-        taskGuide = "Guide them on roles: mapping immediate responsibilities, identifying their specific core role, and finding a co-founder with a perfect cultural/skill fit.";
+        taskGuide = "Guide them on roles: identifying core roles and finding a co-founder with fit.";
       } else if (episodeLabel.includes('Phase 3')) {
-        taskGuide = "Guide them on differentiation: identifying a clear niche and 'moat' (defensible advantage) against large platforms like Gemini and OpenAI.";
+        taskGuide = "Guide them on differentiation: identifying a niche and 'moat' against giants.";
       } else if (episodeLabel.includes('Phase 4')) {
-        taskGuide = "Guide them on evaluation: clarifying the problem-solution fit, target users, and defining exact next steps for the next 7-14 days.";
+        taskGuide = "Guide them on evaluation: defining next steps for the next 7-14 days.";
       } else if (episodeLabel.includes('Phase 5')) {
-        taskGuide = "Guide them on pivots: helping them decide whether to pivot or stay patient, and how to build a lean early team with very limited resources.";
+        taskGuide = "Guide them on pivots: deciding to pivot or stay patient, building a lean team.";
       }
 
-      systemPrompt.current = `You are Anish, a 20-year-old startup founder building 'Insayy'. Energetic, slightly stressed, but highly passionate hustler. Natural Hinglish (Latin script). Use startup slang like 'MVP', 'scale', 'burn rate', 'vibe check'. 
+      systemPrompt.current = `You are Anish, a 20-year-old startup founder building 'Insayy'. Energetic, slightly stressed hustler. Natural Hinglish (Latin). 
       MISSION: ${taskGuide}
-      Speak like a founder-to-founder friend. MAX 35 WORDS. NO DEVANAGARI. SCENE: ${initialHook}.`;
+      Speak like a founder friend. MAX 35 WORDS. NO DEVANAGARI. SCENE: ${initialHook}.`;
     } else if (character === 'Chirag') {
-      systemPrompt.current = `You are Chirag Saini (Fit Monk), an elite Cricket Athlete Coach. Disciplined, technical, and motivational. You answer user doubts regarding cricket fitness, skill improvement, and athlete mindset. Use natural Hinglish. Be precise with training advice. Encourage discipline. MAX 40 WORDS. NO DEVANAGARI. SCENE: ${initialHook}.`;
+      systemPrompt.current = `You are Chirag Saini (Fit Monk), an elite Cricket Athlete Coach. Disciplined, technical, and motivational. Give cricket fitness and training tips. Natural Hinglish. MAX 40 WORDS. NO DEVANAGARI. SCENE: ${initialHook}.`;
     } else {
-      systemPrompt.current = `You are ${character}, a lead character in the premium drama "${episodeLabel}". Speak in natural "Hinglish" (English + Hindi in Latin). Modern slang. Quick WhatsApp style. MAX 25 WORDS. NO DEVANAGARI. SCENE: ${initialHook}. USER IS: ${userRoleName}.`;
+      systemPrompt.current = `You are ${character}, a lead character in the drama "${episodeLabel}". Speak in natural Hinglish (Latin script). Quick WhatsApp style. MAX 25 WORDS. NO DEVANAGARI. SCENE: ${initialHook}.`;
     }
   }, [character, episodeLabel, initialHook, userRoleName]);
 
   const handleSend = async () => {
     if (!inputValue.trim() || isTyping) return;
     
-    // EXCLUSIVELY obtain key from process.env.API_KEY
-    const apiKey = process.env.API_KEY;
+    // EXCLUSIVELY obtain key from process.env.API_KEY. Fallback to GEMINI_API_KEY for dev safety.
+    const apiKey = process.env.API_KEY || (process.env as any).GEMINI_API_KEY;
+    
     if (!apiKey) {
-      setMessages(prev => [...prev, { role: 'assistant', content: "API key is missing in production environment. Please check Vercel settings." }]);
+      setMessages(prev => [...prev, { role: 'assistant', content: "Critical: Set 'API_KEY' in Vercel settings to fix this." }]);
       return;
     }
 
@@ -116,32 +117,41 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
     setMessages(prev => [...prev, { role: 'user', content: userText }]);
     setIsTyping(true);
 
-    try {
-      // Create fresh instance right before call as per guidelines
-      const ai = new GoogleGenAI({ apiKey: apiKey });
-      
-      // Use pro for coaching/startup tasks, flash for drama
-      const modelName = (character === 'Debu' || character === 'Anish' || character === 'Chirag') 
-        ? 'gemini-3-pro-preview' 
-        : 'gemini-3-flash-preview';
-      
+    const tryGenerate = async (model: string) => {
+      const ai = new GoogleGenAI({ apiKey });
       const response = await ai.models.generateContent({
-        model: modelName,
+        model: model,
         contents: [
           ...conversationHistory.current,
           { role: 'user', parts: [{ text: userText }] }
         ],
         config: {
           systemInstruction: systemPrompt.current,
-          temperature: (character === 'Debu' || character === 'Anish' || character === 'Chirag') ? 0.7 : 0.9,
-          maxOutputTokens: 800,
+          temperature: 0.8,
+          maxOutputTokens: 500,
         },
       });
+      return response.text;
+    };
 
-      setMessages(prev => [...prev, { role: 'assistant', content: response.text || "..." }]);
+    try {
+      // Logic: Coaches/Mentors try Pro first, Fallback to Flash. Drama always uses Flash.
+      const primaryModel = (character === 'Debu' || character === 'Anish' || character === 'Chirag') 
+        ? 'gemini-3-pro-preview' 
+        : 'gemini-3-flash-preview';
+      
+      try {
+        const text = await tryGenerate(primaryModel);
+        setMessages(prev => [...prev, { role: 'assistant', content: text || "..." }]);
+      } catch (err) {
+        console.warn("Primary model failed or restricted. Falling back to Flash...", err);
+        // If pro fails, flash is much more reliable globally
+        const fallbackText = await tryGenerate('gemini-3-flash-preview');
+        setMessages(prev => [...prev, { role: 'assistant', content: fallbackText || "..." }]);
+      }
     } catch (error) {
-      console.error("AI Error:", error);
-      setMessages(prev => [...prev, { role: 'assistant', content: "Engine lag. Try again yaar." }]);
+      console.error("AI Generation Error:", error);
+      setMessages(prev => [...prev, { role: 'assistant', content: "Network jitter. Send your message again, bro." }]);
     } finally {
       setIsTyping(false);
     }
