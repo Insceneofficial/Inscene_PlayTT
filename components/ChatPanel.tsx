@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { GoogleGenAI } from "@google/genai";
 
@@ -37,6 +38,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
     if (character === 'Priyank') return '#3b82f6';
     if (character === 'Arzoo') return '#ec4899';
     if (character === 'Debu') return '#a855f7';
+    if (character === 'Anish') return '#22d3ee';
     return '#64748b';
   };
 
@@ -45,12 +47,13 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
   const getUserRoleName = () => {
     if (character === 'Priyank') return 'Arzoo';
     if (character === 'Arzoo') return 'Priyank';
+    if (character === 'Anish') return 'Co-founder';
     if (character === 'Debu') return 'Assistant';
     return 'User';
   };
   
   const userRoleName = getUserRoleName();
-  const placeholderText = character === 'Debu' ? "Ask Debu anything..." : `Reply as ${userRoleName}...`;
+  const placeholderText = character === 'Debu' ? "Ask Debu anything..." : `Reply to ${character}...`;
 
   useEffect(() => {
     conversationHistory.current = messages.map(m => ({
@@ -71,9 +74,26 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
 
   useEffect(() => {
     if (character === 'Debu') {
-      systemPrompt.current = `You are Debu, a senior Indian filmmaker and mentor. Act as a wise teacher—clear, authoritative, and concise. Your role is to guide the next generation of creators with surgical precision. Speak like a master sharing a fundamental truth. END WITH ONE FOLLOW UP QUESTION. MAX 60 WORDS. NO DEVANAGARI.`;
+      systemPrompt.current = `You are Debu, a senior Indian filmmaker and mentor. Wise, clear, authoritative. Guide with surgical precision. END WITH ONE FOLLOW UP QUESTION. MAX 60 WORDS. NO DEVANAGARI.`;
+    } else if (character === 'Anish') {
+      let taskGuide = '';
+      if (episodeLabel.includes('1')) {
+        taskGuide = "Guide them on readiness, validation, and bootstrapping vs fundraising.";
+      } else if (episodeLabel.includes('2')) {
+        taskGuide = "Guide them on identifying roles/responsibilities and finding a co-founder with fit.";
+      } else if (episodeLabel.includes('3')) {
+        taskGuide = "Guide them on AI niche differentiation vs Gemini/OpenAI and moats.";
+      } else if (episodeLabel.includes('4')) {
+        taskGuide = "Guide them on evaluating their idea and defining a 7-14 day action plan.";
+      } else if (episodeLabel.includes('5')) {
+        taskGuide = "Guide them on pivoting vs patience and building a lean budget team.";
+      }
+
+      systemPrompt.current = `You are Anish, a 20-year-old Indian boy building his own startup called "Insayy". Energetic hustler vibe. Natural Hinglish (English + Hindi in Latin script). Use slang like 'bro', 'yaar', 'scene', 'vibe check'. 
+      Your mission now: ${taskGuide}
+      Speak like a cool founder friend. MAX 35 WORDS. NO DEVANAGARI. SCENE: ${initialHook}.`;
     } else {
-      systemPrompt.current = `You are ${character}, a lead character in the premium drama "${episodeLabel}". Speak in natural "Hinglish" (English mixed with Hindi in Latin script). Use modern slang ('yaar', 'vibe', 'scene', 'chal na'). Responses should feel like a quick WhatsApp from a real person. MAX 20 WORDS. NO DEVANAGARI. SCENE: ${initialHook}. USER IS: ${userRoleName}.`;
+      systemPrompt.current = `You are ${character}, a lead character in the premium drama "${episodeLabel}". Speak in natural "Hinglish" (English + Hindi in Latin). Modern slang. Quick WhatsApp style. MAX 25 WORDS. NO DEVANAGARI. SCENE: ${initialHook}. USER IS: ${userRoleName}.`;
     }
   }, [character, episodeLabel, initialHook, userRoleName]);
 
@@ -89,7 +109,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
 
     try {
       const ai = new GoogleGenAI({ apiKey });
-      const modelName = character === 'Debu' ? 'gemini-3-pro-preview' : 'gemini-3-flash-preview';
+      const modelName = (character === 'Debu' || character === 'Anish') ? 'gemini-3-pro-preview' : 'gemini-3-flash-preview';
       
       const response = await ai.models.generateContent({
         model: modelName,
@@ -99,7 +119,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
         ],
         config: {
           systemInstruction: systemPrompt.current,
-          temperature: character === 'Debu' ? 0.6 : 0.9,
+          temperature: (character === 'Debu' || character === 'Anish') ? 0.7 : 0.9,
           maxOutputTokens: 800,
         },
       });

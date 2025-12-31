@@ -21,14 +21,23 @@ const getSmartImageUrl = (url: string, v: string = '1', w: number = 400, h: numb
 const PRIYANK_AVATAR = "https://lh3.googleusercontent.com/d/16mQvERxp6rIlxOHMTLKoeC_-WxuqxS-C";
 const ARZOO_AVATAR = "https://lh3.googleusercontent.com/d/147CA6EL86D7QP1SWhA_XJWRQpQ9VRi8O";
 const DEBU_AVATAR = "https://lh3.googleusercontent.com/d/14o-9uKeKJVy9aa0DPMCFA43vP0vJPGM3";
+const ANISH_AVATAR = "https://lh3.googleusercontent.com/d/1m_I0IqOX8WtxfMJP1dL2qAxVfpKnAROE";
 
 /**
  * Character Avatar Component
  */
-const CharacterDP: React.FC<{ src: string, name: string, theme: 'blue' | 'pink' | 'purple', size?: string, isOnline?: boolean }> = ({ src, name, theme, size = "w-16 h-16", isOnline = true }) => {
+const CharacterDP: React.FC<{ src: string, name: string, theme: 'blue' | 'pink' | 'purple' | 'cyan', size?: string, isOnline?: boolean }> = ({ src, name, theme, size = "w-16 h-16", isOnline = true }) => {
   const [error, setError] = useState(false);
-  const borderColor = theme === 'blue' ? 'border-blue-500' : theme === 'pink' ? 'border-pink-500' : 'border-purple-500';
-  const bgColor = theme === 'blue' ? 'bg-blue-600/40' : theme === 'pink' ? 'bg-pink-600/40' : 'bg-purple-600/40';
+  const borderColor = 
+    theme === 'blue' ? 'border-blue-500' : 
+    theme === 'pink' ? 'border-pink-500' : 
+    theme === 'purple' ? 'border-purple-500' : 
+    'border-cyan-400';
+  const bgColor = 
+    theme === 'blue' ? 'bg-blue-600/40' : 
+    theme === 'pink' ? 'bg-pink-600/40' : 
+    theme === 'purple' ? 'bg-purple-600/40' : 
+    'bg-cyan-600/40';
 
   return (
     <div className={`relative ${size} rounded-full flex items-center justify-center p-0.5 border-2 shadow-2xl transition-all duration-300 group-hover:scale-105 ${borderColor} ${bgColor}`}>
@@ -168,11 +177,11 @@ const ReelItem: React.FC<{
                 style={{ animationDelay: `${idx * 150}ms` }}
               >
                 <div className="relative group">
-                   <div className={`absolute inset-0 rounded-full blur-xl opacity-0 group-hover:opacity-60 transition-opacity ${t.char === 'Priyank' ? 'bg-blue-500' : t.char === 'Arzoo' ? 'bg-pink-500' : 'bg-purple-500'}`} />
+                   <div className={`absolute inset-0 rounded-full blur-xl opacity-0 group-hover:opacity-60 transition-opacity ${t.char === 'Priyank' ? 'bg-blue-500' : t.char === 'Arzoo' ? 'bg-pink-500' : t.char === 'Anish' ? 'bg-cyan-400' : 'bg-purple-500'}`} />
                    <CharacterDP 
                     src={series.avatars[t.char]} 
                     name={t.char} 
-                    theme={t.char === 'Priyank' ? 'blue' : t.char === 'Arzoo' ? 'pink' : 'purple'} 
+                    theme={t.char === 'Priyank' ? 'blue' : t.char === 'Arzoo' ? 'pink' : t.char === 'Anish' ? 'cyan' : 'purple'} 
                     size="w-14 h-14"
                    />
                 </div>
@@ -202,7 +211,7 @@ const ReelItem: React.FC<{
                   <CharacterDP 
                     src={series.avatars[t.char]} 
                     name={t.char} 
-                    theme={t.char === 'Priyank' ? 'blue' : t.char === 'Arzoo' ? 'pink' : 'purple'} 
+                    theme={t.char === 'Priyank' ? 'blue' : t.char === 'Arzoo' ? 'pink' : t.char === 'Anish' ? 'cyan' : 'purple'} 
                     size="w-10 h-10"
                   />
                   <div>
@@ -258,7 +267,7 @@ const ReelItem: React.FC<{
 };
 
 /**
- * SERIES CATALOG - FULL RESTORED EPISODES
+ * SERIES CATALOG - UPDATED FOR STARTUP BOY ANISH THEMES
  */
 const SERIES_CATALOG = [
   {
@@ -307,6 +316,59 @@ const SERIES_CATALOG = [
         triggers: [
           { char: 'Priyank', intro: "Peace offering? ☕️", hook: "Approaching Arzoo in the rain with a hot tea." }, 
           { char: 'Arzoo', intro: "Extra shakkar honi chahiye... 😌", hook: "Softening up after Priyank's sincere effort." }
+        ] 
+      }
+    ]
+  },
+  {
+    id: 'startup-boy-anish',
+    title: 'Startup Boy Anish',
+    tagline: 'Insayy Journey',
+    thumbnail: getSmartImageUrl("https://lh3.googleusercontent.com/d/1FKR6HevmeSv1baTCUtfi5CWQo8FO0QAf", "anish_thumb_v1", 400, 400),
+    accentColor: '#22d3ee',
+    reelHint: 'Ask Anish about Insayy startup life',
+    avatars: {
+      Anish: ANISH_AVATAR
+    },
+    episodes: [
+      { 
+        id: 1, 
+        label: "Episode 1", 
+        url: "https://github.com/Insceneofficial/ai-studio-demo-assets/releases/download/Video/Anish_Ep1.mp4", 
+        triggers: [
+          { char: 'Anish', intro: "Yo! Ready to start something big or just testing the waters? Startup life is brutal bro.", hook: "Validation and readiness phase. Assessing if the user is ready to bootstrap or fundraise." }
+        ] 
+      },
+      { 
+        id: 2, 
+        label: "Episode 2", 
+        url: "https://github.com/Insceneofficial/ai-studio-demo-assets/releases/download/Video/Anish_Ep2.mp4", 
+        triggers: [
+          { char: 'Anish', intro: "Core roles decide everything. What's your real strength? Tech or Sales?", hook: "Mapping responsibilities and finding a co-founder with the right fit." }
+        ] 
+      },
+      { 
+        id: 3, 
+        label: "Episode 3", 
+        url: "https://github.com/Insceneofficial/ai-studio-demo-assets/releases/download/Video/Anish_Ep3.mp4", 
+        triggers: [
+          { char: 'Anish', intro: "Gemini and OpenAI are massive, but we need to find our niche. What's our moat?", hook: "Differentiating from giants. Identifying a defensible advantage in the AI space." }
+        ] 
+      },
+      { 
+        id: 4, 
+        label: "Episode 4", 
+        url: "https://github.com/Insceneofficial/ai-studio-demo-assets/releases/download/Video/Anish_Ep4.mp4", 
+        triggers: [
+          { char: 'Anish', intro: "Idea is cheap, execution is everything. What are we building in the next 14 days?", hook: "Clarifying the core problem and defining immediate next steps." }
+        ] 
+      },
+      { 
+        id: 5, 
+        label: "Episode 5", 
+        url: "https://github.com/Insceneofficial/ai-studio-demo-assets/releases/download/Video/Anish_Ep5.mp4", 
+        triggers: [
+          { char: 'Anish', intro: "Pivot or Patience? Big question. Sometimes you gotta build a lean team first.", hook: "Decision making on pivots and building an early team with limited resources." }
         ] 
       }
     ]
@@ -401,7 +463,7 @@ const App: React.FC = () => {
 
   const filteredCatalog = SERIES_CATALOG.filter(series => {
     if (activeTab === 'For you') return true;
-    if (activeTab === 'Grow with me') return series.id === 'deb-filmmaker';
+    if (activeTab === 'Grow with me') return series.id === 'deb-filmmaker' || series.id === 'startup-boy-anish';
     if (activeTab === 'Dream World') return series.id === 'heart-beats';
     return true;
   });
@@ -413,7 +475,7 @@ const App: React.FC = () => {
         ...prev[char],
         character: char,
         messages: messages,
-        avatar: prev[char]?.avatar || (char === 'Debu' ? DEBU_AVATAR : char === 'Priyank' ? PRIYANK_AVATAR : ARZOO_AVATAR),
+        avatar: prev[char]?.avatar || (char === 'Debu' ? DEBU_AVATAR : char === 'Priyank' ? PRIYANK_AVATAR : char === 'Arzoo' ? ARZOO_AVATAR : ANISH_AVATAR),
         lastUpdate: Date.now()
       }
     }));
@@ -421,27 +483,20 @@ const App: React.FC = () => {
 
   return (
     <div className="flex flex-col min-h-[100dvh] h-[100dvh] text-white overflow-hidden" style={{ background: SIGNATURE_GRADIENT }}>
-      <header className={`fixed top-0 left-0 right-0 z-[1000] px-6 py-6 transition-all duration-500 ${selectedSeries ? 'bg-gradient-to-b from-black/80 to-transparent flex justify-between items-center' : 'bg-transparent'}`}>
+      <header className={`fixed top-0 left-0 right-0 z-[1000] px-6 py-6 transition-all duration-500 ${selectedSeries ? 'bg-gradient-to-b from-black/80 to-transparent flex justify-between items-center' : 'bg-transparent flex justify-center'}`}>
         {selectedSeries ? (
           <>
             <div className="flex items-center gap-3 cursor-pointer group active:scale-95 transition-transform" onClick={() => { setSelectedSeries(null); setChatData(null); }}>
               <Logo size={28} isPulsing={false} />
-              <span className="text-lg font-black italic tracking-tighter uppercase group-hover:text-blue-400 transition-colors">In<span className="text-blue-400">scene</span></span>
             </div>
             <button onClick={() => setSelectedSeries(null)} className="w-9 h-9 rounded-full bg-white/10 backdrop-blur-3xl border border-white/20 flex items-center justify-center active:scale-90 hover:bg-white/20 transition-all">
               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor" className="w-4 h-4 text-white"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
             </button>
           </>
         ) : (
-          <div className="flex justify-between items-center w-full">
-             <div className="flex flex-col">
-                <p className="text-[9px] font-black tracking-[0.2em] uppercase text-white/30 mb-0.5">{currentView === 'chats' ? 'Recents' : 'Welcome'}</p>
-                <h1 className="text-xl font-black italic tracking-tighter uppercase leading-none">
-                  {currentView === 'chats' ? 'My Conversations' : 'Discover'}
-                </h1>
-             </div>
-             <div className="w-9 h-9 rounded-full border border-white/10 flex items-center justify-center bg-white/5 backdrop-blur-xl">
-               <Logo size={20} isPulsing={false} />
+          <div className="flex flex-col items-center">
+             <div className="w-12 h-12 flex items-center justify-center bg-white/5 backdrop-blur-xl rounded-full border border-white/10 animate-pulse">
+               <Logo size={24} isPulsing={false} />
              </div>
           </div>
         )}
@@ -497,8 +552,7 @@ const App: React.FC = () => {
                   <div className="w-20 h-20 rounded-full bg-white/5 flex items-center justify-center mb-6 border border-white/10">
                     <svg viewBox="0 0 24 24" fill="currentColor" className="w-8 h-8 text-white/20"><path d="M4.848 2.771A49.144 49.144 0 0112 2.25c2.43 0 4.817.178 7.152.521 1.282.188 2.248 1.295 2.248 2.59v11.94c0 1.295-.966 2.402-2.248 2.59a48.754 48.754 0 01-3.042.348c-.604.048-1.2.073-1.796.073-.603 0-1.202-.025-1.804-.073l-4.71 4.71a.75.75 0 01-1.28-.53V19.95a48.556 48.556 0 01-2.422-.294C3.81 19.468 2.844 18.361 2.844 17.066V5.361c0-1.295.966-2.402 2.248-2.59z" /></svg>
                   </div>
-                  <h3 className="text-lg font-black italic tracking-tighter uppercase mb-2">No Chats Yet</h3>
-                  <p className="text-[10px] text-white/30 uppercase tracking-[0.2em] max-w-[200px] leading-relaxed">Start a story to see your conversations here</p>
+                  <h3 className="text-lg font-black italic tracking-tighter uppercase mb-2">Empty</h3>
                 </div>
               ) : (
                 (Object.values(conversations) as ConversationHistoryEntry[])
@@ -517,7 +571,7 @@ const App: React.FC = () => {
                       <CharacterDP 
                         src={conv.avatar} 
                         name={conv.character} 
-                        theme={conv.character === 'Priyank' ? 'blue' : conv.character === 'Arzoo' ? 'pink' : 'purple'} 
+                        theme={conv.character === 'Priyank' ? 'blue' : conv.character === 'Arzoo' ? 'pink' : conv.character === 'Anish' ? 'cyan' : 'purple'} 
                         size="w-14 h-14"
                       />
                       <div className="flex-1 min-w-0">
@@ -558,7 +612,6 @@ const App: React.FC = () => {
       {!selectedSeries && (
         <nav className="fixed bottom-0 left-0 right-0 z-[1001] px-6 pb-8 pt-4">
           <div className="max-w-md mx-auto h-16 rounded-[2rem] bg-black/40 backdrop-blur-3xl border border-white/10 flex items-center shadow-2xl relative overflow-hidden">
-            {/* Discovery Button */}
             <button 
               onClick={() => setCurrentView('discover')}
               className={`flex-1 flex flex-col items-center gap-1 transition-all justify-center h-full ${currentView === 'discover' ? 'text-blue-400' : 'text-white/20'}`}
@@ -567,17 +620,14 @@ const App: React.FC = () => {
                 <path d="M11.47 3.84a.75.75 0 011.06 0l8.69 8.69a.75.75 0 101.06-1.06l-8.689-8.69a2.25 2.25 0 00-3.182 0l-8.69 8.69a.75.75 0 001.061 1.06l8.69-8.69z" />
                 <path d="M12 5.432l8.159 8.159c.03.03.06.058.091.086v6.198c0 1.035-.84 1.875-1.875 1.875H15a.75.75 0 01-.75-.75v-4.5a.75.75 0 00-.75-.75h-3a.75.75 0 00-.75.75V21a.75.75 0 01-.75.75H5.625a1.875 1.875 0 01-1.875-1.875v-6.198a2.29 2.29 0 00.091-.086L12 5.43z" />
               </svg>
-              <span className="text-[8px] font-black uppercase tracking-[0.15em]">Discovery</span>
               {currentView === 'discover' && <div className="w-1 h-1 bg-blue-400 rounded-full mt-0.5 shadow-[0_0_5px_#60a5fa] animate-fade-in" />}
             </button>
 
-            {/* Chats Button */}
             <button 
               onClick={() => setCurrentView('chats')}
               className={`flex-1 flex flex-col items-center gap-1 transition-all justify-center h-full ${currentView === 'chats' ? 'text-blue-400' : 'text-white/20'}`}
             >
               <div className="relative">
-                {/* Clean Premium Message Icon */}
                 <svg viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6">
                   <path fillRule="evenodd" d="M4.804 21.644A6.707 6.707 0 006 21.75a6.721 6.721 0 003.583-1.029c.774.182 1.584.279 2.417.279 5.322 0 9.75-3.97 9.75-9 0-5.03-4.428-9-9.75-9s-9.75 3.97-9.75 9c0 2.409 1.025 4.587 2.674 6.192.232.226.277.428.178.713a19.022 19.022 0 01-1.522 3.535c-.211.373.08.794.48.754a10.875 10.875 0 002.517-.504z" clipRule="evenodd" />
                 </svg>
@@ -585,7 +635,6 @@ const App: React.FC = () => {
                   <div className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-blue-500 rounded-full border-2 border-black animate-pulse" />
                 )}
               </div>
-              <span className="text-[8px] font-black uppercase tracking-[0.15em]">Chats</span>
               {currentView === 'chats' && <div className="w-1 h-1 bg-blue-400 rounded-full mt-0.5 shadow-[0_0_5px_#60a5fa] animate-fade-in" />}
             </button>
           </div>
