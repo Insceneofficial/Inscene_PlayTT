@@ -99,16 +99,16 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
     } else {
       systemPrompt.current = `You are ${character}, a lead character in the drama "${episodeLabel}". Speak in natural Hinglish (Latin script). Quick WhatsApp style. MAX 25 WORDS. NO DEVANAGARI. SCENE: ${initialHook}.`;
     }
-  }, [character, episodeLabel, initialHook, userRoleName]);
+  }, [character, episodeLabel, initialHook]);
 
   const handleSend = async () => {
     if (!inputValue.trim() || isTyping) return;
     
-    // EXCLUSIVELY obtain key from process.env.API_KEY. Fallback to GEMINI_API_KEY for dev safety.
+    // Check available env variables
     const apiKey = process.env.API_KEY || (process.env as any).GEMINI_API_KEY;
     
     if (!apiKey) {
-      setMessages(prev => [...prev, { role: 'assistant', content: "Critical: Set 'API_KEY' in Vercel settings to fix this." }]);
+      setMessages(prev => [...prev, { role: 'assistant', content: "API Key not found. Please set API_KEY in your environment." }]);
       return;
     }
 
@@ -117,41 +117,26 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
     setMessages(prev => [...prev, { role: 'user', content: userText }]);
     setIsTyping(true);
 
-    const tryGenerate = async (model: string) => {
+    try {
+      // Using gemini-flash-lite-latest as requested for maximum smoothness
       const ai = new GoogleGenAI({ apiKey });
       const response = await ai.models.generateContent({
-        model: model,
+        model: 'gemini-flash-lite-latest',
         contents: [
           ...conversationHistory.current,
           { role: 'user', parts: [{ text: userText }] }
         ],
         config: {
           systemInstruction: systemPrompt.current,
-          temperature: 0.8,
-          maxOutputTokens: 500,
+          temperature: 0.7,
+          maxOutputTokens: 600,
         },
       });
-      return response.text;
-    };
 
-    try {
-      // Logic: Coaches/Mentors try Pro first, Fallback to Flash. Drama always uses Flash.
-      const primaryModel = (character === 'Debu' || character === 'Anish' || character === 'Chirag') 
-        ? 'gemini-3-pro-preview' 
-        : 'gemini-3-flash-preview';
-      
-      try {
-        const text = await tryGenerate(primaryModel);
-        setMessages(prev => [...prev, { role: 'assistant', content: text || "..." }]);
-      } catch (err) {
-        console.warn("Primary model failed or restricted. Falling back to Flash...", err);
-        // If pro fails, flash is much more reliable globally
-        const fallbackText = await tryGenerate('gemini-3-flash-preview');
-        setMessages(prev => [...prev, { role: 'assistant', content: fallbackText || "..." }]);
-      }
+      setMessages(prev => [...prev, { role: 'assistant', content: response.text || "..." }]);
     } catch (error) {
       console.error("AI Generation Error:", error);
-      setMessages(prev => [...prev, { role: 'assistant', content: "Network jitter. Send your message again, bro." }]);
+      setMessages(prev => [...prev, { role: 'assistant', content: "Engine lag. Try sending that again, bro." }]);
     } finally {
       setIsTyping(false);
     }
