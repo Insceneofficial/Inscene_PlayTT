@@ -336,7 +336,7 @@ const SERIES_CATALOG = [
     episodes: [
       { 
         id: 1, 
-        label: "Episode 1", 
+        label: "Phase 1", 
         url: "https://github.com/Insceneofficial/ai-studio-demo-assets/releases/download/Video/Anish_Ep1.mp4", 
         triggers: [
           { char: 'Anish', intro: "Yo! Ready to start something big or just testing the waters? Startup life is brutal bro.", hook: "Validation and readiness phase. Assessing if the user is ready to bootstrap or fundraise." }
@@ -344,7 +344,7 @@ const SERIES_CATALOG = [
       },
       { 
         id: 2, 
-        label: "Episode 2", 
+        label: "Phase 2", 
         url: "https://github.com/Insceneofficial/ai-studio-demo-assets/releases/download/Video/Anish_Ep2.mp4", 
         triggers: [
           { char: 'Anish', intro: "Core roles decide everything. What's your real strength? Tech or Sales?", hook: "Mapping responsibilities and finding a co-founder with the right fit." }
@@ -352,7 +352,7 @@ const SERIES_CATALOG = [
       },
       { 
         id: 3, 
-        label: "Episode 3", 
+        label: "Phase 3", 
         url: "https://github.com/Insceneofficial/ai-studio-demo-assets/releases/download/Video/Anish_Ep3.mp4", 
         triggers: [
           { char: 'Anish', intro: "Gemini and OpenAI are massive, but we need to find our niche. What's our moat?", hook: "Differentiating from giants. Identifying a defensible advantage in the AI space." }
@@ -360,7 +360,7 @@ const SERIES_CATALOG = [
       },
       { 
         id: 4, 
-        label: "Episode 4", 
+        label: "Phase 4", 
         url: "https://github.com/Insceneofficial/ai-studio-demo-assets/releases/download/Video/Anish_Ep4.mp4", 
         triggers: [
           { char: 'Anish', intro: "Idea is cheap, execution is everything. What are we building in the next 14 days?", hook: "Clarifying the core problem and defining immediate next steps." }
@@ -368,7 +368,7 @@ const SERIES_CATALOG = [
       },
       { 
         id: 5, 
-        label: "Episode 5", 
+        label: "Phase 5", 
         url: "https://github.com/Insceneofficial/ai-studio-demo-assets/releases/download/Video/Anish_Ep5.mp4", 
         triggers: [
           { char: 'Anish', intro: "Pivot or Patience? Big question. Sometimes you gotta build a lean team first.", hook: "Decision making on pivots and building an early team with limited resources." }
