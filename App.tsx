@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import Logo from './components/Logo.tsx';
 import ChatPanel from './components/ChatPanel.tsx';
@@ -452,6 +451,7 @@ const App: React.FC = () => {
   const [chatData, setChatData] = useState<any>(null);
   const [activeTab, setActiveTab] = useState<'For you' | 'Grow with me' | 'Dream World'>('For you');
   const [currentView, setCurrentView] = useState<'discover' | 'chats'>('discover');
+  const [choiceModalData, setChoiceModalData] = useState<any>(null);
   
   const [conversations, setConversations] = useState<Record<string, ConversationHistoryEntry>>({});
 
@@ -554,7 +554,7 @@ const App: React.FC = () => {
                 {filteredCatalog.map(series => (
                   <div 
                     key={series.id}
-                    onClick={() => setSelectedSeries(series)}
+                    onClick={() => setChoiceModalData(series)}
                     className="flex flex-col items-center gap-3 group cursor-pointer"
                   >
                     <div className="relative w-full aspect-square rounded-[1.5rem] overflow-hidden border border-white/10 shadow-2xl transition-all group-hover:border-blue-400 group-hover:scale-105 active:scale-95">
@@ -647,7 +647,7 @@ const App: React.FC = () => {
             >
               <svg viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6">
                 <path d="M11.47 3.84a.75.75 0 011.06 0l8.69 8.69a.75.75 0 101.06-1.06l-8.689-8.69a2.25 2.25 0 00-3.182 0l-8.69 8.69a.75.75 0 001.061 1.06l8.69-8.69z" />
-                <path d="M12 5.432l8.159 8.159c.03.03.06.058.091.086v6.198c0 1.035-.84 1.875-1.875 1.875H15a.75.75 0 01-.75-.75v-4.5a.75.75 0 00-.75-.75h-3a.75.75 0 00-.75.75V21a.75.75 0 01-.75.75H5.625a1.875 1.875 0 01-1.875-1.875v-6.198a2.29 2.29 0 00.091-.086L12 5.43z" />
+                <path d="M12 5.432l8.159 8.159c.03.03.06.058.091.086v6.198c0 1.035-.84 1.875-1.875 1.875H15a.75.75 0 01-.75-.75v-4.5a.75.75 0 00-.75-.75h-3a.75.75 0 00-.75.75V21a.75.75 0 01-.75-.75H5.625a1.875 1.875 0 01-1.875-1.875v-6.198a2.29 2.29 0 00.091-.086L12 5.43z" />
               </svg>
               {currentView === 'discover' && <div className="w-1 h-1 bg-blue-400 rounded-full mt-0.5 shadow-[0_0_5px_#60a5fa] animate-fade-in" />}
             </button>
@@ -670,13 +670,67 @@ const App: React.FC = () => {
         </nav>
       )}
 
+      {/* Choice Selection Modal */}
+      {choiceModalData && (
+        <div className="fixed inset-0 z-[2000] flex items-center justify-center p-6 bg-black/40 backdrop-blur-sm animate-fade-in">
+          <div className="relative w-full max-w-sm bg-white/10 backdrop-blur-[60px] border border-white/20 rounded-[3.5rem] overflow-hidden shadow-[0_30px_100px_rgba(0,0,0,0.5)] p-8 animate-slide-up">
+             {/* Close Button */}
+             <button 
+               onClick={() => setChoiceModalData(null)} 
+               className="absolute top-6 right-6 w-10 h-10 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 flex items-center justify-center transition-all active:scale-90"
+             >
+               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-5 h-5 text-white/50"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+             </button>
+
+             <div className="flex flex-col items-center gap-6 mt-4">
+                <div className="relative w-28 h-28 rounded-full overflow-hidden border-2 border-white/20 shadow-2xl p-1 bg-gradient-to-tr from-white/10 to-transparent">
+                  <img src={choiceModalData.thumbnail} className="w-full h-full object-cover rounded-full" />
+                </div>
+                <div className="text-center">
+                  <h3 className="text-2xl font-black italic uppercase tracking-tighter text-white">{choiceModalData.title}</h3>
+                  <p className="text-white/30 text-[9px] font-black tracking-[0.4em] uppercase mt-2">Pick your experience</p>
+                </div>
+                
+                <div className="w-full flex flex-col gap-4 mt-2">
+                   <button 
+                     onClick={() => {
+                       const firstEp = choiceModalData.episodes[0];
+                       const firstTrigger = firstEp.triggers[0];
+                       setChatData({
+                         char: firstTrigger.char,
+                         intro: firstTrigger.intro,
+                         hook: firstTrigger.hook,
+                         isFromHistory: false
+                       });
+                       setChoiceModalData(null);
+                     }}
+                     className="w-full py-5 rounded-[2rem] bg-white text-black font-black uppercase tracking-widest text-[10px] shadow-[0_10px_30px_rgba(255,255,255,0.1)] active:scale-95 transition-all"
+                   >
+                     {choiceModalData.id === 'heart-beats' ? '1. Immersive story on text' : '1. Chat with AI Avatar'}
+                   </button>
+                   
+                   <button 
+                     onClick={() => {
+                       setSelectedSeries(choiceModalData);
+                       setChoiceModalData(null);
+                     }}
+                     className="w-full py-5 rounded-[2rem] bg-white/10 border border-white/10 text-white font-black uppercase tracking-widest text-[10px] active:scale-95 transition-all"
+                   >
+                     {choiceModalData.id === 'heart-beats' ? '2. Watch and interact' : '2. Watch and Learn'}
+                   </button>
+                </div>
+             </div>
+          </div>
+        </div>
+      )}
+
       {chatData && (
         <ChatPanel 
           character={chatData.char} 
           episodeLabel={selectedSeries?.episodes[activeIdx]?.label || "Inscene History"}
           instantGreeting={chatData.intro || ""}
           initialHook={chatData.hook || "Continuing conversation"}
-          avatar={chatData.avatar || selectedSeries?.avatars[chatData.char]}
+          avatar={chatData.avatar || (selectedSeries?.avatars ? selectedSeries.avatars[chatData.char] : (chatData.char === 'Debu' ? DEBU_AVATAR : chatData.char === 'Priyank' ? PRIYANK_AVATAR : chatData.char === 'Arzoo' ? ARZOO_AVATAR : chatData.char === 'Anish' ? ANISH_AVATAR : CHIRAG_AVATAR))}
           onClose={() => setChatData(null)}
           onMessagesUpdate={(messages) => handleChatUpdate(chatData.char, messages)}
           existingMessages={chatData.isFromHistory ? chatData.history : undefined}
