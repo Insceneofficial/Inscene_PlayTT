@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#000000">
+    <title>Inscene | Immersive Stories</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&display=swap');
+      
+      :root {
+        --bg-dark-blue: #020617;
+        --accent-blue: #1e3a8a;
+        --accent-purple: #7e22ce;
+      }
+
+      html, body {
+        height: 100%;
+        width: 100%;
+        overflow: hidden;
+        background-color: #000;
+        position: fixed; /* Prevents bounce scroll on iOS */
+      }
+
+      body {
+        font-family: 'Outfit', sans-serif;
+        margin: 0;
+        padding: 0;
+        background: radial-gradient(circle at top left, var(--accent-blue) 0%, var(--bg-dark-blue) 40%, #581c87 80%, var(--accent-purple) 100%);
+        background-attachment: fixed;
+        color: #ffffff;
+        -webkit-tap-highlight-color: transparent;
+        user-select: none;
+      }
+
+      @keyframes slideUp {
+        from { transform: translateY(20px); opacity: 0; }
+        to { transform: translateY(0); opacity: 1; }
+      }
+      .animate-slide-up {
+        animation: slideUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+      }
+
+      ::-webkit-scrollbar { display: none; }
+      #root { height: 100%; width: 100%; }
+
+      /* Improved snapping for YouTube-like experience */
+      .reel-snap-container {
+        scroll-snap-type: y mandatory;
+        height: 100dvh;
+        overflow-y: scroll;
+        scroll-behavior: smooth;
+        -webkit-overflow-scrolling: touch;
+        overflow-x: hidden;
+      }
+      .reel-item {
+        scroll-snap-align: start;
+        scroll-snap-stop: always; /* Critical for YouTube/TikTok feel */
+        height: 100dvh;
+        width: 100%;
+        position: relative;
+        overflow: hidden;
+      }
+    </style>
+    <script type="importmap">
+{
+  "imports": {
+    "react": "https://esm.sh/react@19.0.0",
+    "react-dom": "https://esm.sh/react-dom@19.0.0",
+    "react-dom/client": "https://esm.sh/react-dom@19.0.0/client",
+    "react-dom/": "https://esm.sh/react-dom@19.0.0/",
+    "react/": "https://esm.sh/react@19.0.0/",
+    "@google/genai": "https://esm.sh/@google/genai@^1.34.0",
+    "@vercel/analytics/react": "https://esm.sh/@vercel/analytics@1.5.0/react?external=react,react-dom",
+    "@vercel/analytics/": "https://esm.sh/@vercel/analytics@1.5.0/?external=react,react-dom"
+  }
+}
+</script>
+    <script type="module" src="./index.tsx"></script>
+  </head>
+  <body>
+    <div id="root"></div>
+  </body>
+</html>
