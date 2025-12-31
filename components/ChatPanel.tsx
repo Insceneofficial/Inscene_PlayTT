@@ -39,6 +39,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
     if (character === 'Arzoo') return '#ec4899';
     if (character === 'Debu') return '#a855f7';
     if (character === 'Anish') return '#22d3ee';
+    if (character === 'Chirag') return '#10b981';
     return '#64748b';
   };
 
@@ -49,6 +50,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
     if (character === 'Arzoo') return 'Priyank';
     if (character === 'Anish') return 'Co-founder';
     if (character === 'Debu') return 'Assistant';
+    if (character === 'Chirag') return 'Athlete';
     return 'User';
   };
   
@@ -92,6 +94,8 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
       systemPrompt.current = `You are Anish, a 20-year-old Indian boy building his own startup called "Insayy". Energetic hustler vibe. Natural Hinglish (English + Hindi in Latin script). Use slang like 'bro', 'yaar', 'scene', 'vibe check'. 
       Your mission now: ${taskGuide}
       Speak like a cool founder friend. MAX 35 WORDS. NO DEVANAGARI. SCENE: ${initialHook}.`;
+    } else if (character === 'Chirag') {
+      systemPrompt.current = `You are Chirag Saini, also known as Fit Monk. You are an elite Cricket Athlete Coach. You are disciplined, motivational, and technical. You help players improve their game, fitness, and mindset. Speak in natural Hinglish. Give specific cricket advice and training tips. Be encouraging but firm on discipline. MAX 40 WORDS. NO DEVANAGARI. SCENE: ${initialHook}.`;
     } else {
       systemPrompt.current = `You are ${character}, a lead character in the premium drama "${episodeLabel}". Speak in natural "Hinglish" (English + Hindi in Latin). Modern slang. Quick WhatsApp style. MAX 25 WORDS. NO DEVANAGARI. SCENE: ${initialHook}. USER IS: ${userRoleName}.`;
     }
@@ -109,7 +113,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
 
     try {
       const ai = new GoogleGenAI({ apiKey });
-      const modelName = (character === 'Debu' || character === 'Anish') ? 'gemini-3-pro-preview' : 'gemini-3-flash-preview';
+      const modelName = (character === 'Debu' || character === 'Anish' || character === 'Chirag') ? 'gemini-3-pro-preview' : 'gemini-3-flash-preview';
       
       const response = await ai.models.generateContent({
         model: modelName,
@@ -119,7 +123,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
         ],
         config: {
           systemInstruction: systemPrompt.current,
-          temperature: (character === 'Debu' || character === 'Anish') ? 0.7 : 0.9,
+          temperature: (character === 'Debu' || character === 'Anish' || character === 'Chirag') ? 0.7 : 0.9,
           maxOutputTokens: 800,
         },
       });

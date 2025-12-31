@@ -22,22 +22,25 @@ const PRIYANK_AVATAR = "https://lh3.googleusercontent.com/d/16mQvERxp6rIlxOHMTLK
 const ARZOO_AVATAR = "https://lh3.googleusercontent.com/d/147CA6EL86D7QP1SWhA_XJWRQpQ9VRi8O";
 const DEBU_AVATAR = "https://lh3.googleusercontent.com/d/14o-9uKeKJVy9aa0DPMCFA43vP0vJPGM3";
 const ANISH_AVATAR = "https://lh3.googleusercontent.com/d/1m_I0IqOX8WtxfMJP1dL2qAxVfpKnAROE";
+const CHIRAG_AVATAR = "https://lh3.googleusercontent.com/d/1AQEFvk1ZlB9YclySsOz0QpHkkV6PDir7";
 
 /**
  * Character Avatar Component
  */
-const CharacterDP: React.FC<{ src: string, name: string, theme: 'blue' | 'pink' | 'purple' | 'cyan', size?: string, isOnline?: boolean }> = ({ src, name, theme, size = "w-16 h-16", isOnline = true }) => {
+const CharacterDP: React.FC<{ src: string, name: string, theme: 'blue' | 'pink' | 'purple' | 'cyan' | 'green', size?: string, isOnline?: boolean }> = ({ src, name, theme, size = "w-16 h-16", isOnline = true }) => {
   const [error, setError] = useState(false);
   const borderColor = 
     theme === 'blue' ? 'border-blue-500' : 
     theme === 'pink' ? 'border-pink-500' : 
     theme === 'purple' ? 'border-purple-500' : 
-    'border-cyan-400';
+    theme === 'cyan' ? 'border-cyan-400' :
+    'border-emerald-400';
   const bgColor = 
     theme === 'blue' ? 'bg-blue-600/40' : 
     theme === 'pink' ? 'bg-pink-600/40' : 
     theme === 'purple' ? 'bg-purple-600/40' : 
-    'bg-cyan-600/40';
+    theme === 'cyan' ? 'bg-cyan-600/40' :
+    'bg-emerald-600/40';
 
   return (
     <div className={`relative ${size} rounded-full flex items-center justify-center p-0.5 border-2 shadow-2xl transition-all duration-300 group-hover:scale-105 ${borderColor} ${bgColor}`}>
@@ -177,11 +180,11 @@ const ReelItem: React.FC<{
                 style={{ animationDelay: `${idx * 150}ms` }}
               >
                 <div className="relative group">
-                   <div className={`absolute inset-0 rounded-full blur-xl opacity-0 group-hover:opacity-60 transition-opacity ${t.char === 'Priyank' ? 'bg-blue-500' : t.char === 'Arzoo' ? 'bg-pink-500' : t.char === 'Anish' ? 'bg-cyan-400' : 'bg-purple-500'}`} />
+                   <div className={`absolute inset-0 rounded-full blur-xl opacity-0 group-hover:opacity-60 transition-opacity ${t.char === 'Priyank' ? 'bg-blue-500' : t.char === 'Arzoo' ? 'bg-pink-500' : t.char === 'Anish' ? 'bg-cyan-400' : t.char === 'Chirag' ? 'bg-emerald-400' : 'bg-purple-500'}`} />
                    <CharacterDP 
                     src={series.avatars[t.char]} 
                     name={t.char} 
-                    theme={t.char === 'Priyank' ? 'blue' : t.char === 'Arzoo' ? 'pink' : t.char === 'Anish' ? 'cyan' : 'purple'} 
+                    theme={t.char === 'Priyank' ? 'blue' : t.char === 'Arzoo' ? 'pink' : t.char === 'Anish' ? 'cyan' : t.char === 'Chirag' ? 'green' : 'purple'} 
                     size="w-14 h-14"
                    />
                 </div>
@@ -211,7 +214,7 @@ const ReelItem: React.FC<{
                   <CharacterDP 
                     src={series.avatars[t.char]} 
                     name={t.char} 
-                    theme={t.char === 'Priyank' ? 'blue' : t.char === 'Arzoo' ? 'pink' : t.char === 'Anish' ? 'cyan' : 'purple'} 
+                    theme={t.char === 'Priyank' ? 'blue' : t.char === 'Arzoo' ? 'pink' : t.char === 'Anish' ? 'cyan' : t.char === 'Chirag' ? 'green' : 'purple'} 
                     size="w-10 h-10"
                   />
                   <div>
@@ -267,7 +270,7 @@ const ReelItem: React.FC<{
 };
 
 /**
- * SERIES CATALOG - UPDATED FOR STARTUP BOY ANISH THEMES
+ * SERIES CATALOG
  */
 const SERIES_CATALOG = [
   {
@@ -374,6 +377,27 @@ const SERIES_CATALOG = [
     ]
   },
   {
+    id: 'cricket-coaching',
+    title: 'Cricket Coaching',
+    tagline: 'Athlete Mindset',
+    thumbnail: getSmartImageUrl("https://lh3.googleusercontent.com/d/1vnGIc3ILJuslfqS035KflVhNEemOiyif", "chirag_thumb_v1", 400, 400),
+    accentColor: '#10b981',
+    reelHint: 'Ask Coach Chirag about cricket fitness and skills',
+    avatars: {
+      Chirag: CHIRAG_AVATAR
+    },
+    episodes: [
+      { 
+        id: 1, 
+        label: "Coaching Intro", 
+        url: "https://github.com/Insceneofficial/ai-studio-demo-assets/releases/download/Video/FitMonk.Chirag._Ep0_Demo.mp4", 
+        triggers: [
+          { char: 'Chirag', intro: "Ready to dominate the pitch? Fitness is 70% of the game. What's holding you back?", hook: "Athlete coaching session focused on cricket performance and doubt clearing." }
+        ] 
+      }
+    ]
+  },
+  {
     id: 'deb-filmmaker',
     title: 'Debu',
     tagline: 'Growth Path',
@@ -463,7 +487,7 @@ const App: React.FC = () => {
 
   const filteredCatalog = SERIES_CATALOG.filter(series => {
     if (activeTab === 'For you') return true;
-    if (activeTab === 'Grow with me') return series.id === 'deb-filmmaker' || series.id === 'startup-boy-anish';
+    if (activeTab === 'Grow with me') return series.id === 'deb-filmmaker' || series.id === 'startup-boy-anish' || series.id === 'cricket-coaching';
     if (activeTab === 'Dream World') return series.id === 'heart-beats';
     return true;
   });
@@ -475,7 +499,12 @@ const App: React.FC = () => {
         ...prev[char],
         character: char,
         messages: messages,
-        avatar: prev[char]?.avatar || (char === 'Debu' ? DEBU_AVATAR : char === 'Priyank' ? PRIYANK_AVATAR : char === 'Arzoo' ? ARZOO_AVATAR : ANISH_AVATAR),
+        avatar: prev[char]?.avatar || 
+          (char === 'Debu' ? DEBU_AVATAR : 
+           char === 'Priyank' ? PRIYANK_AVATAR : 
+           char === 'Arzoo' ? ARZOO_AVATAR : 
+           char === 'Anish' ? ANISH_AVATAR : 
+           CHIRAG_AVATAR),
         lastUpdate: Date.now()
       }
     }));
@@ -571,7 +600,7 @@ const App: React.FC = () => {
                       <CharacterDP 
                         src={conv.avatar} 
                         name={conv.character} 
-                        theme={conv.character === 'Priyank' ? 'blue' : conv.character === 'Arzoo' ? 'pink' : conv.character === 'Anish' ? 'cyan' : 'purple'} 
+                        theme={conv.character === 'Priyank' ? 'blue' : conv.character === 'Arzoo' ? 'pink' : conv.character === 'Anish' ? 'cyan' : conv.character === 'Chirag' ? 'green' : 'purple'} 
                         size="w-14 h-14"
                       />
                       <div className="flex-1 min-w-0">
