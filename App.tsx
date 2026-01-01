@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import Logo from './components/Logo.tsx';
 import ChatPanel from './components/ChatPanel.tsx';
@@ -511,8 +512,8 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className="flex flex-col min-h-[100dvh] h-[100dvh] text-white overflow-hidden" style={{ background: SIGNATURE_GRADIENT }}>
-      <header className={`fixed top-0 left-0 right-0 z-[1000] px-6 py-6 transition-all duration-500 ${selectedSeries ? 'bg-gradient-to-b from-black/80 to-transparent flex justify-between items-center' : 'bg-transparent flex justify-center'}`}>
+    <div className="flex flex-col min-h-[100dvh] h-[100dvh] text-white overflow-hidden" style={{ background: currentView === 'chats' ? '#ffffff' : SIGNATURE_GRADIENT }}>
+      <header className={`fixed top-0 left-0 right-0 z-[1000] px-6 py-6 transition-all duration-500 ${selectedSeries ? 'bg-gradient-to-b from-black/80 to-transparent flex justify-between items-center' : 'bg-transparent flex justify-center'} ${currentView === 'chats' ? 'hidden' : ''}`}>
         {selectedSeries ? (
           <>
             <div className="flex items-center gap-3 cursor-pointer group active:scale-95 transition-transform" onClick={() => { setSelectedSeries(null); setChatData(null); }}>
@@ -532,7 +533,7 @@ const App: React.FC = () => {
       </header>
 
       {!selectedSeries && (
-        <main className="flex-1 overflow-y-auto pt-24 pb-28 px-6 animate-slide-up hide-scrollbar">
+        <main className={`flex-1 overflow-y-auto hide-scrollbar ${currentView === 'chats' ? 'pt-0 pb-20' : 'pt-24 pb-28 px-6 animate-slide-up'}`}>
           {currentView === 'discover' ? (
             <div className="flex flex-col gap-6 max-w-lg mx-auto">
               <div className="flex items-center gap-6 pb-2 border-b border-white/5 overflow-x-auto hide-scrollbar">
@@ -575,49 +576,75 @@ const App: React.FC = () => {
               </div>
             </div>
           ) : (
-            <div className="flex flex-col gap-4 max-w-lg mx-auto">
-              {Object.keys(conversations).length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-20 text-center animate-fade-in">
-                  <div className="w-20 h-20 rounded-full bg-white/5 flex items-center justify-center mb-6 border border-white/10">
-                    <svg viewBox="0 0 24 24" fill="currentColor" className="w-8 h-8 text-white/20"><path d="M4.848 2.771A49.144 49.144 0 0112 2.25c2.43 0 4.817.178 7.152.521 1.282.188 2.248 1.295 2.248 2.59v11.94c0 1.295-.966 2.402-2.248 2.59a48.754 48.754 0 01-3.042.348c-.604.048-1.2.073-1.796.073-.603 0-1.202-.025-1.804-.073l-4.71 4.71a.75.75 0 01-1.28-.53V19.95a48.556 48.556 0 01-2.422-.294C3.81 19.468 2.844 18.361 2.844 17.066V5.361c0-1.295.966-2.402 2.248-2.59z" /></svg>
+            <div className="flex flex-col h-full bg-white relative">
+              {/* WhatsApp Style Header (Simplified for request) */}
+              <div className="bg-[#075E54] text-white pt-10 px-6 pb-4 shadow-md">
+                <div className="flex items-center justify-between">
+                  <h1 className="text-2xl font-medium tracking-wide">Chats</h1>
+                  <div className="flex items-center gap-5">
+                    <button className="p-1 hover:bg-white/10 rounded-full transition-colors">
+                      <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+                    </button>
+                    <button className="p-1 hover:bg-white/10 rounded-full transition-colors">
+                      <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/></svg>
+                    </button>
                   </div>
-                  <h3 className="text-lg font-black italic tracking-tighter uppercase mb-2">Empty</h3>
                 </div>
-              ) : (
-                (Object.values(conversations) as ConversationHistoryEntry[])
-                  .sort((a, b) => b.lastUpdate - a.lastUpdate)
-                  .map((conv, idx) => (
-                    <div 
-                      key={idx}
-                      onClick={() => setChatData({ 
-                        char: conv.character, 
-                        avatar: conv.avatar, 
-                        history: conv.messages,
-                        isFromHistory: true,
-                        isWhatsApp: true
-                      })}
-                      className="flex items-center gap-4 p-4 rounded-3xl bg-white/5 border border-white/5 hover:bg-white/10 hover:border-white/10 transition-all cursor-pointer group animate-slide-up"
-                    >
-                      <CharacterDP 
-                        src={conv.avatar} 
-                        name={conv.character} 
-                        theme={conv.character === 'Priyank' ? 'blue' : conv.character === 'Arzoo' ? 'pink' : conv.character === 'Anish' ? 'cyan' : conv.character === 'Chirag' ? 'green' : 'purple'} 
-                        size="w-14 h-14"
-                      />
-                      <div className="flex-1 min-w-0">
-                        <div className="flex justify-between items-center mb-1">
-                          <h4 className="font-black italic uppercase tracking-tighter group-hover:text-blue-400 transition-colors">{conv.character}</h4>
-                          <span className="text-[8px] font-bold text-white/20 uppercase tracking-widest">
-                            {new Date(conv.lastUpdate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                          </span>
+              </div>
+
+              {/* Chat List Area */}
+              <div className="flex-1 overflow-y-auto pt-1 bg-white">
+                {Object.keys(conversations).length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-20 text-center animate-fade-in text-slate-400">
+                    <h3 className="text-lg font-medium mb-1">Your inbox is quiet</h3>
+                    <p className="text-sm px-10">Messages from characters you interact with will appear here.</p>
+                  </div>
+                ) : (
+                  (Object.values(conversations) as ConversationHistoryEntry[])
+                    .sort((a, b) => b.lastUpdate - a.lastUpdate)
+                    .map((conv, idx) => (
+                      <div 
+                        key={idx}
+                        onClick={() => setChatData({ 
+                          char: conv.character, 
+                          avatar: conv.avatar, 
+                          history: conv.messages,
+                          isFromHistory: true,
+                          isWhatsApp: true
+                        })}
+                        className="flex items-center gap-4 px-4 py-3.5 hover:bg-slate-50 active:bg-slate-100 transition-all cursor-pointer group"
+                      >
+                        <div className="relative w-[54px] h-[54px] rounded-full overflow-hidden bg-slate-100 border border-slate-50">
+                           <img src={conv.avatar} alt={conv.character} className="w-full h-full object-cover" />
                         </div>
-                        <p className="text-[11px] text-white/40 truncate pr-4 font-medium italic">
-                          {conv.messages[conv.messages.length - 1]?.content || 'Start a conversation...'}
-                        </p>
+                        <div className="flex-1 border-b border-slate-100 pb-4 flex flex-col justify-center min-w-0">
+                          <div className="flex justify-between items-baseline mb-0.5">
+                            <h4 className="text-[17px] font-bold text-[#111] leading-tight truncate">{conv.character}</h4>
+                            <span className="text-[11px] font-medium text-[#25D366] whitespace-nowrap ml-2">
+                              {new Date(conv.lastUpdate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                          </div>
+                          <div className="flex justify-between items-center">
+                            <p className="text-[14px] text-[#666] truncate pr-4 font-normal leading-tight">
+                              {conv.messages[conv.messages.length - 1]?.content || 'Tap to chat'}
+                            </p>
+                            <div className="bg-[#25D366] text-white rounded-full min-w-[20px] h-5 flex items-center justify-center text-[10px] font-bold px-1.5 shadow-sm">
+                               1
+                            </div>
+                          </div>
+                        </div>
                       </div>
-                    </div>
-                  ))
-              )}
+                    ))
+                )}
+              </div>
+
+              {/* Floating Action Button */}
+              <button 
+                onClick={() => setCurrentView('discover')}
+                className="fixed bottom-24 right-6 w-16 h-16 bg-[#25D366] rounded-full shadow-[0_4px_12px_rgba(0,0,0,0.2)] flex items-center justify-center text-white active:scale-90 transition-transform z-[1002]"
+              >
+                <svg viewBox="0 0 24 24" width="30" height="30" fill="currentColor"><path d="M20 2H4c-1.1 0-1.99.9-1.99 2L2 22l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zM6 9h12v2H6V9zm8 5H6v-2h8v2zm4-5H6V7h12v2z"/></svg>
+              </button>
             </div>
           )}
         </main>
@@ -640,11 +667,11 @@ const App: React.FC = () => {
       )}
 
       {!selectedSeries && (
-        <nav className="fixed bottom-0 left-0 right-0 z-[1001] px-6 pb-8 pt-4">
-          <div className="max-w-md mx-auto h-16 rounded-[2rem] bg-black/40 backdrop-blur-3xl border border-white/10 flex items-center shadow-2xl relative overflow-hidden">
+        <nav className={`fixed bottom-0 left-0 right-0 z-[1001] px-6 pb-8 pt-4 ${currentView === 'chats' ? 'bg-white' : ''}`}>
+          <div className={`max-w-md mx-auto h-16 rounded-[2rem] border flex items-center shadow-2xl relative overflow-hidden transition-colors ${currentView === 'chats' ? 'bg-slate-50 border-slate-200' : 'bg-black/40 backdrop-blur-3xl border-white/10'}`}>
             <button 
               onClick={() => setCurrentView('discover')}
-              className={`flex-1 flex flex-col items-center gap-1 transition-all justify-center h-full ${currentView === 'discover' ? 'text-blue-400' : 'text-white/20'}`}
+              className={`flex-1 flex flex-col items-center gap-1 transition-all justify-center h-full ${currentView === 'discover' ? 'text-blue-400' : (currentView === 'chats' ? 'text-slate-400' : 'text-white/20')}`}
             >
               <svg viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6">
                 <path d="M11.47 3.84a.75.75 0 011.06 0l8.69 8.69a.75.75 0 101.06-1.06l-8.689-8.69a2.25 2.25 0 00-3.182 0l-8.69 8.69a.75.75 0 001.061 1.06l8.69-8.69z" />
@@ -655,7 +682,7 @@ const App: React.FC = () => {
 
             <button 
               onClick={() => setCurrentView('chats')}
-              className={`flex-1 flex flex-col items-center gap-1 transition-all justify-center h-full ${currentView === 'chats' ? 'text-blue-400' : 'text-white/20'}`}
+              className={`flex-1 flex flex-col items-center gap-1 transition-all justify-center h-full ${currentView === 'chats' ? 'text-[#075E54]' : 'text-white/20'}`}
             >
               <div className="relative">
                 <svg viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6">
@@ -665,7 +692,7 @@ const App: React.FC = () => {
                   <div className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-blue-500 rounded-full border-2 border-black animate-pulse" />
                 )}
               </div>
-              {currentView === 'chats' && <div className="w-1 h-1 bg-blue-400 rounded-full mt-0.5 shadow-[0_0_5px_#60a5fa] animate-fade-in" />}
+              {currentView === 'chats' && <div className="w-1 h-1 bg-[#075E54] rounded-full mt-0.5 shadow-[0_0_5px_#075E54] animate-fade-in" />}
             </button>
           </div>
         </nav>
