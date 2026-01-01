@@ -593,7 +593,8 @@ const App: React.FC = () => {
                         char: conv.character, 
                         avatar: conv.avatar, 
                         history: conv.messages,
-                        isFromHistory: true 
+                        isFromHistory: true,
+                        isWhatsApp: true
                       })}
                       className="flex items-center gap-4 p-4 rounded-3xl bg-white/5 border border-white/5 hover:bg-white/10 hover:border-white/10 transition-all cursor-pointer group animate-slide-up"
                     >
@@ -630,7 +631,7 @@ const App: React.FC = () => {
                 episode={ep} series={selectedSeries} 
                 isActive={activeIdx === i} isMuted={isMuted} 
                 toggleMute={() => setIsMuted(!isMuted)} 
-                onEnterStory={(char, intro, hook) => setChatData({char, intro, hook, isFromHistory: false})}
+                onEnterStory={(char, intro, hook) => setChatData({char, intro, hook, isFromHistory: false, isWhatsApp: false})}
                 onNextEpisode={handleNext}
               />
             </div>
@@ -700,7 +701,8 @@ const App: React.FC = () => {
                          char: firstTrigger.char,
                          intro: firstTrigger.intro,
                          hook: firstTrigger.hook,
-                         isFromHistory: false
+                         isFromHistory: false,
+                         isWhatsApp: true
                        });
                        setChoiceModalData(null);
                      }}
@@ -734,6 +736,7 @@ const App: React.FC = () => {
           onClose={() => setChatData(null)}
           onMessagesUpdate={(messages) => handleChatUpdate(chatData.char, messages)}
           existingMessages={chatData.isFromHistory ? chatData.history : undefined}
+          isWhatsApp={chatData.isWhatsApp}
         />
       )}
 
