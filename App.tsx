@@ -1,7 +1,26 @@
 import React, { useState, useEffect, useRef } from 'react';
 import Logo from './components/Logo.tsx';
 import ChatPanel from './components/ChatPanel.tsx';
+import AuthModal from './components/AuthModal.tsx';
+import UserMenu from './components/UserMenu.tsx';
+import { AuthProvider, useAuth } from './lib/auth';
 import { Analytics } from "@vercel/analytics/react";
+import { 
+  trackViewer, 
+  trackVideoStart, 
+  updateVideoProgress, 
+  trackVideoEnd,
+  trackPageView
+} from './lib/analytics';
+import { loadAllChatHistories } from './lib/chatStorage';
+import { AVATARS, getCharacterAvatar } from './lib/characters';
+
+// Re-export for backward compatibility with existing code
+const PRIYANK_AVATAR = AVATARS.Priyank;
+const ARZOO_AVATAR = AVATARS.Arzoo;
+const DEBU_AVATAR = AVATARS.Debu;
+const ANISH_AVATAR = AVATARS.Anish;
+const CHIRAG_AVATAR = AVATARS.Chirag;
 
 /**
  * Optimized Image Proxy Utility
@@ -13,15 +32,6 @@ const getSmartImageUrl = (url: string, v: string = '1', w: number = 400, h: numb
   const encodedUrl = encodeURIComponent(url);
   return `https://wsrv.nl/?url=${encodedUrl}&w=${w}&h=${h}&fit=cover&a=top&output=jpg&q=85&il&maxage=7d&t=${cacheBuster}`;
 };
-
-/**
- * CHARACTER AVATARS
- */
-const PRIYANK_AVATAR = "https://lh3.googleusercontent.com/d/16mQvERxp6rIlxOHMTLKoeC_-WxuqxS-C";
-const ARZOO_AVATAR = "https://lh3.googleusercontent.com/d/147CA6EL86D7QP1SWhA_XJWRQpQ9VRi8O";
-const DEBU_AVATAR = "https://lh3.googleusercontent.com/d/14o-9uKeKJVy9aa0DPMCFA43vP0vJPGM3";
-const ANISH_AVATAR = "https://lh3.googleusercontent.com/d/1m_I0IqOX8WtxfMJP1dL2qAxVfpKnAROE";
-const CHIRAG_AVATAR = "https://lh3.googleusercontent.com/d/1AQEFvk1ZlB9YclySsOz0QpHkkV6PDir7";
 
 /**
  * Character Avatar Component
@@ -76,7 +86,7 @@ const ReelItem: React.FC<{
   isActive: boolean,
   isMuted: boolean,
   toggleMute: () => void,
-  onEnterStory: (char: string, intro: string, hook: string) => void,
+  onEnterStory: (char: string, intro: string, hook: string, entryPoint: string) => void,
   onNextEpisode: () => void
 }> = ({ episode, series, isActive, isMuted, toggleMute, onEnterStory, onNextEpisode }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -86,6 +96,21 @@ const ReelItem: React.FC<{
   const [currentTime, setCurrentTime] = useState(0);
   const [isEnded, setIsEnded] = useState(false);
   const [isScrubbing, setIsScrubbing] = useState(false);
+  
+  // Analytics tracking refs
+  const analyticsRecordId = useRef<string | null>(null);
+  const progressIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const seekCountRef = useRef(0);
+  const pauseCountRef = useRef(0);
+  const wasUnmutedRef = useRef(false);
+  const initialMutedRef = useRef(isMuted);
+
+  // Track when unmuted during watch
+  useEffect(() => {
+    if (!isMuted && initialMutedRef.current) {
+      wasUnmutedRef.current = true;
+    }
+  }, [isMuted]);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -95,6 +120,39 @@ const ReelItem: React.FC<{
       setIsEnded(false);
       video.currentTime = 0;
       video.preload = "auto";
+      
+      // Reset tracking state
+      seekCountRef.current = 0;
+      pauseCountRef.current = 0;
+      wasUnmutedRef.current = false;
+      initialMutedRef.current = isMuted;
+      
+      // Start analytics tracking
+      trackVideoStart({
+        seriesId: series.id,
+        seriesTitle: series.title,
+        episodeId: episode.id,
+        episodeLabel: episode.label,
+        videoUrl: episode.url,
+        entryPoint: 'discover_grid',
+        isMuted: isMuted
+      }).then(recordId => {
+        analyticsRecordId.current = recordId;
+      });
+      
+      // Update progress every 10 seconds
+      progressIntervalRef.current = setInterval(() => {
+        if (video && analyticsRecordId.current && !video.paused) {
+          updateVideoProgress(
+            analyticsRecordId.current,
+            video.currentTime,
+            video.duration || 0,
+            pauseCountRef.current,
+            seekCountRef.current
+          );
+        }
+      }, 10000);
+      
       const playPromise = video.play();
       if (playPromise !== undefined) {
         playPromise.catch(() => {});
@@ -102,8 +160,51 @@ const ReelItem: React.FC<{
     } else {
       video.pause();
       video.preload = "none";
+      
+      // End tracking when scrolling away
+      if (analyticsRecordId.current && video.duration) {
+        trackVideoEnd(
+          analyticsRecordId.current,
+          video.currentTime,
+          video.duration,
+          false,
+          wasUnmutedRef.current
+        );
+        analyticsRecordId.current = null;
+      }
+      
+      // Clear interval
+      if (progressIntervalRef.current) {
+        clearInterval(progressIntervalRef.current);
+        progressIntervalRef.current = null;
+      }
     }
-  }, [isActive]);
+    
+    return () => {
+      if (progressIntervalRef.current) {
+        clearInterval(progressIntervalRef.current);
+      }
+    };
+  }, [isActive, series, episode, isMuted]);
+
+  // Track video end
+  useEffect(() => {
+    if (isEnded && analyticsRecordId.current && videoRef.current) {
+      trackVideoEnd(
+        analyticsRecordId.current,
+        videoRef.current.currentTime,
+        videoRef.current.duration || 0,
+        true,
+        wasUnmutedRef.current
+      );
+      analyticsRecordId.current = null;
+      
+      if (progressIntervalRef.current) {
+        clearInterval(progressIntervalRef.current);
+        progressIntervalRef.current = null;
+      }
+    }
+  }, [isEnded]);
 
   const handleTimeUpdate = () => {
     if (videoRef.current) {
@@ -118,7 +219,12 @@ const ReelItem: React.FC<{
       const newTime = (parseFloat(e.target.value) / 100) * videoRef.current.duration;
       videoRef.current.currentTime = newTime;
       setProgress(parseFloat(e.target.value));
+      seekCountRef.current += 1;
     }
+  };
+  
+  const handlePause = () => {
+    pauseCountRef.current += 1;
   };
 
   return (
@@ -134,6 +240,7 @@ const ReelItem: React.FC<{
         onLoadStart={() => setLoading(true)}
         onCanPlay={() => setLoading(false)}
         onTimeUpdate={handleTimeUpdate}
+        onPause={handlePause}
         onClick={() => videoRef.current?.paused ? videoRef.current.play() : videoRef.current?.pause()}
       />
 
@@ -174,7 +281,7 @@ const ReelItem: React.FC<{
             {episode.triggers.map((t: any, idx: number) => (
               <button 
                 key={idx}
-                onClick={(e) => { e.stopPropagation(); onEnterStory(t.char, t.intro, t.hook); }}
+                onClick={(e) => { e.stopPropagation(); onEnterStory(t.char, t.intro, t.hook, 'video_sidebar'); }}
                 className="flex flex-col items-center gap-2 active:scale-95 transition-all group animate-slide-up-side"
                 style={{ animationDelay: `${idx * 150}ms` }}
               >
@@ -207,7 +314,7 @@ const ReelItem: React.FC<{
              {episode.triggers.map((t: any, idx: number) => (
                 <button 
                   key={idx}
-                  onClick={() => onEnterStory(t.char, t.intro, t.hook)}
+                  onClick={() => onEnterStory(t.char, t.intro, t.hook, 'video_end_screen')}
                   className="w-full flex items-center gap-4 p-4 rounded-2xl bg-white/5 border border-white/10 hover:bg-white/10 transition-all text-left group"
                 >
                   <CharacterDP 
@@ -444,7 +551,8 @@ interface ConversationHistoryEntry {
   lastUpdate: number;
 }
 
-const App: React.FC = () => {
+const AppContent: React.FC = () => {
+  const { user, isAuthenticated } = useAuth();
   const [selectedSeries, setSelectedSeries] = useState<any>(null);
   const [activeIdx, setActiveIdx] = useState(0);
   const [isMuted, setIsMuted] = useState(false);
@@ -452,8 +560,48 @@ const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'For you' | 'Grow with me' | 'Dream World'>('For you');
   const [currentView, setCurrentView] = useState<'discover' | 'chats'>('discover');
   const [choiceModalData, setChoiceModalData] = useState<any>(null);
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   
   const [conversations, setConversations] = useState<Record<string, ConversationHistoryEntry>>({});
+
+  // Track viewer on app load
+  useEffect(() => {
+    trackViewer();
+    trackPageView({ viewType: 'app_open' });
+  }, []);
+
+  // Load chat histories when user logs in
+  useEffect(() => {
+    const loadSavedChats = async () => {
+      if (isAuthenticated && user) {
+        console.log('App: User logged in, loading saved chat histories...');
+        const savedChats = await loadAllChatHistories();
+        console.log('App: Loaded chat histories:', savedChats);
+        
+        if (savedChats.length > 0) {
+          const newConversations: Record<string, ConversationHistoryEntry> = {};
+          
+          for (const chat of savedChats) {
+            const charName = chat.characterName;
+            newConversations[charName] = {
+              character: charName,
+              messages: chat.messages.map(m => ({
+                role: m.role,
+                content: m.content
+              })),
+              avatar: getCharacterAvatar(charName),
+              lastUpdate: new Date(chat.lastMessageAt).getTime()
+            };
+          }
+          
+          setConversations(newConversations);
+          console.log('App: Populated conversations:', newConversations);
+        }
+      }
+    };
+    
+    loadSavedChats();
+  }, [isAuthenticated, user]);
 
   useEffect(() => {
     if (selectedSeries) {
@@ -512,23 +660,34 @@ const App: React.FC = () => {
 
   return (
     <div className="flex flex-col min-h-[100dvh] h-[100dvh] text-white overflow-hidden" style={{ background: currentView === 'chats' ? '#ffffff' : SIGNATURE_GRADIENT }}>
-      <header className={`fixed top-0 left-0 right-0 z-[1000] px-6 py-6 transition-all duration-500 ${selectedSeries ? 'bg-gradient-to-b from-black/80 to-transparent flex justify-between items-center' : 'bg-transparent flex justify-center'} ${currentView === 'chats' ? 'hidden' : ''}`}>
-        {selectedSeries ? (
-          <>
-            <div className="flex items-center gap-3 cursor-pointer group active:scale-95 transition-transform" onClick={() => { setSelectedSeries(null); setChatData(null); }}>
-              <Logo size={28} isPulsing={false} />
-            </div>
-            <button onClick={() => setSelectedSeries(null)} className="w-9 h-9 rounded-full bg-white/10 backdrop-blur-3xl border border-white/20 flex items-center justify-center active:scale-90 hover:bg-white/20 transition-all">
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor" className="w-4 h-4 text-white"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
-            </button>
-          </>
-        ) : (
-          <div className="flex flex-col items-center">
-             <div className="w-12 h-12 flex items-center justify-center bg-white/5 backdrop-blur-xl rounded-full border border-white/10 animate-pulse">
-               <Logo size={24} isPulsing={false} />
-             </div>
-          </div>
-        )}
+      <header className={`fixed top-0 left-0 right-0 z-[1000] px-6 py-6 transition-all duration-500 ${selectedSeries ? 'bg-gradient-to-b from-black/80 to-transparent' : 'bg-transparent'} ${currentView === 'chats' ? 'hidden' : ''}`}>
+        <div className="flex justify-between items-center max-w-4xl mx-auto">
+          {selectedSeries ? (
+            <>
+              <div className="flex items-center gap-3 cursor-pointer group active:scale-95 transition-transform" onClick={() => { setSelectedSeries(null); setChatData(null); }}>
+                <Logo size={28} isPulsing={false} />
+              </div>
+              <div className="flex items-center gap-3">
+                <UserMenu onSignInClick={() => setIsAuthModalOpen(true)} />
+                <button onClick={() => setSelectedSeries(null)} className="w-9 h-9 rounded-full bg-white/10 backdrop-blur-3xl border border-white/20 flex items-center justify-center active:scale-90 hover:bg-white/20 transition-all">
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor" className="w-4 h-4 text-white"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="flex-1" />
+              <div className="flex flex-col items-center">
+                <div className="w-12 h-12 flex items-center justify-center bg-white/5 backdrop-blur-xl rounded-full border border-white/10 animate-pulse">
+                  <Logo size={24} isPulsing={false} />
+                </div>
+              </div>
+              <div className="flex-1 flex justify-end">
+                <UserMenu onSignInClick={() => setIsAuthModalOpen(true)} />
+              </div>
+            </>
+          )}
+        </div>
       </header>
 
       {!selectedSeries && (
@@ -609,7 +768,8 @@ const App: React.FC = () => {
                           avatar: conv.avatar, 
                           history: conv.messages,
                           isFromHistory: true,
-                          isWhatsApp: true
+                          isWhatsApp: true,
+                          entryPoint: 'chat_history'
                         })}
                         className="flex items-center gap-4 px-4 py-3.5 hover:bg-slate-50 active:bg-slate-100 transition-all cursor-pointer group"
                       >
@@ -657,7 +817,16 @@ const App: React.FC = () => {
                 episode={ep} series={selectedSeries} 
                 isActive={activeIdx === i} isMuted={isMuted} 
                 toggleMute={() => setIsMuted(!isMuted)} 
-                onEnterStory={(char, intro, hook) => setChatData({char, intro, hook, isFromHistory: false, isWhatsApp: false})}
+                onEnterStory={(char, intro, hook, entryPoint) => setChatData({
+                  char, intro, hook, 
+                  isFromHistory: false, 
+                  isWhatsApp: false,
+                  entryPoint,
+                  seriesId: selectedSeries.id,
+                  seriesTitle: selectedSeries.title,
+                  episodeId: ep.id,
+                  episodeLabel: ep.label
+                })}
                 onNextEpisode={handleNext}
               />
             </div>
@@ -731,7 +900,12 @@ const App: React.FC = () => {
                          intro: firstTrigger.intro,
                          hook: firstTrigger.hook,
                          isFromHistory: false,
-                         isWhatsApp: true
+                         isWhatsApp: true,
+                         entryPoint: 'choice_modal',
+                         seriesId: choiceModalData.id,
+                         seriesTitle: choiceModalData.title,
+                         episodeId: firstEp.id,
+                         episodeLabel: firstEp.label
                        });
                        setChoiceModalData(null);
                      }}
@@ -758,7 +932,7 @@ const App: React.FC = () => {
       {chatData && (
         <ChatPanel 
           character={chatData.char} 
-          episodeLabel={selectedSeries?.episodes[activeIdx]?.label || "Inscene History"}
+          episodeLabel={chatData.episodeLabel || selectedSeries?.episodes[activeIdx]?.label || "Inscene History"}
           instantGreeting={chatData.intro || ""}
           initialHook={chatData.hook || "Continuing conversation"}
           avatar={chatData.avatar || (selectedSeries?.avatars ? selectedSeries.avatars[chatData.char] : (chatData.char === 'Debu' ? DEBU_AVATAR : chatData.char === 'Priyank' ? PRIYANK_AVATAR : chatData.char === 'Arzoo' ? ARZOO_AVATAR : chatData.char === 'Anish' ? ANISH_AVATAR : CHIRAG_AVATAR))}
@@ -766,8 +940,18 @@ const App: React.FC = () => {
           onMessagesUpdate={(messages) => handleChatUpdate(chatData.char, messages)}
           existingMessages={chatData.isFromHistory ? chatData.history : undefined}
           isWhatsApp={chatData.isWhatsApp}
+          entryPoint={chatData.entryPoint || 'choice_modal'}
+          seriesId={chatData.seriesId}
+          seriesTitle={chatData.seriesTitle}
+          episodeId={chatData.episodeId}
         />
       )}
+
+      {/* Auth Modal */}
+      <AuthModal 
+        isOpen={isAuthModalOpen} 
+        onClose={() => setIsAuthModalOpen(false)} 
+      />
 
       <Analytics />
 
@@ -784,5 +968,12 @@ const App: React.FC = () => {
     </div>
   );
 };
+
+// Wrap AppContent with AuthProvider
+const App: React.FC = () => (
+  <AuthProvider>
+    <AppContent />
+  </AuthProvider>
+);
 
 export default App;
