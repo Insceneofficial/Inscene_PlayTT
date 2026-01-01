@@ -1,5 +1,8 @@
 import { GoogleGenAI } from "@google/genai";
 import React, { useState, useEffect, useRef } from 'react';
+import { trackChatStart, updateChatMessages, trackChatEnd } from '../lib/analytics';
+import { saveMessage, loadChatHistory, isUserLoggedIn, debugListAllMessages } from '../lib/chatStorage';
+import { getCharacterPrompt } from '../lib/characters';
 
 interface ChatPanelProps {
   character: string;
@@ -11,6 +14,11 @@ interface ChatPanelProps {
   onMessagesUpdate?: (messages: any[]) => void;
   existingMessages?: { role: 'user' | 'assistant'; content: string }[];
   isWhatsApp?: boolean;
+  // Analytics props
+  entryPoint?: 'video_sidebar' | 'video_end_screen' | 'choice_modal' | 'chat_history';
+  seriesId?: string;
+  seriesTitle?: string;
+  episodeId?: number;
 }
 
 const ChatPanel: React.FC<ChatPanelProps> = ({ 
@@ -22,18 +30,131 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
   onClose,
   onMessagesUpdate,
   existingMessages,
-  isWhatsApp = false
+  isWhatsApp = false,
+  entryPoint = 'choice_modal' as const,
+  seriesId,
+  seriesTitle,
+  episodeId
 }) => {
-  const [messages, setMessages] = useState<{ role: 'user' | 'assistant'; content: string; time: string }[]>(
-    existingMessages?.map(m => ({ ...m, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) })) || 
-    [{ role: 'assistant', content: instantGreeting, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }]
-  );
+  const [messages, setMessages] = useState<{ role: 'user' | 'assistant'; content: string; time: string }[]>([]);
   const [inputValue, setInputValue] = useState('');
   const [isTyping, setIsTyping] = useState(false);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(true);
   const scrollRef = useRef<HTMLDivElement>(null);
   
   const conversationHistory = useRef<{ role: 'user' | 'model'; parts: { text: string }[] }[]>([]);
   const systemPrompt = useRef<string>('');
+  
+  // Analytics tracking refs
+  const analyticsRecordId = useRef<string | null>(null);
+  const chatStartTime = useRef<number>(Date.now());
+  const messagesRef = useRef(messages);
+  
+  // Track if initial messages have been saved (to avoid duplicates)
+  const initialMessagesSaved = useRef(false);
+  
+  // Keep messagesRef in sync
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
+  
+  // Load chat history on mount (for logged-in users)
+  useEffect(() => {
+    const loadHistory = async () => {
+      setIsLoadingHistory(true);
+      
+      const isLoggedIn = isUserLoggedIn();
+      console.log('ChatPanel: Loading history, isLoggedIn:', isLoggedIn, 'character:', character);
+      
+      // Debug: List all messages in DB
+      await debugListAllMessages();
+      
+      if (isLoggedIn) {
+        // Load saved chat history from Supabase
+        const savedMessages = await loadChatHistory(character);
+        console.log('ChatPanel: Loaded messages:', savedMessages.length, savedMessages);
+        
+        if (savedMessages.length > 0) {
+          // User has existing chat history - restore it
+          setMessages(savedMessages.map(m => ({
+            role: m.role,
+            content: m.content,
+            time: m.time || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+          })));
+          initialMessagesSaved.current = true;
+        } else if (existingMessages && existingMessages.length > 0) {
+          // No saved history but have existing messages from props
+          setMessages(existingMessages.map(m => ({
+            ...m,
+            time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+          })));
+        } else {
+          // No history - start with greeting
+          setMessages([{
+            role: 'assistant',
+            content: instantGreeting,
+            time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+          }]);
+          // Save the greeting message
+          saveMessage(character, 'assistant', instantGreeting, seriesId, episodeId);
+          initialMessagesSaved.current = true;
+        }
+      } else {
+        // Not logged in - use existing messages or greeting
+        if (existingMessages && existingMessages.length > 0) {
+          setMessages(existingMessages.map(m => ({
+            ...m,
+            time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+          })));
+        } else {
+          setMessages([{
+            role: 'assistant',
+            content: instantGreeting,
+            time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+          }]);
+        }
+      }
+      
+      setIsLoadingHistory(false);
+    };
+    
+    loadHistory();
+  }, [character, existingMessages, instantGreeting, seriesId, episodeId]);
+  
+  // Start chat session tracking on mount
+  useEffect(() => {
+    chatStartTime.current = Date.now();
+    
+    trackChatStart({
+      characterName: character,
+      seriesId,
+      seriesTitle,
+      episodeId,
+      episodeLabel,
+      isWhatsAppStyle: isWhatsApp,
+      entryPoint
+    }).then(recordId => {
+      analyticsRecordId.current = recordId;
+    });
+    
+    // End tracking on unmount
+    return () => {
+      if (analyticsRecordId.current) {
+        const durationSeconds = Math.floor((Date.now() - chatStartTime.current) / 1000);
+        const currentMessages = messagesRef.current;
+        const userMsgCount = currentMessages.filter(m => m.role === 'user').length;
+        const assistantMsgCount = currentMessages.filter(m => m.role === 'assistant').length;
+        
+        trackChatEnd(
+          analyticsRecordId.current,
+          durationSeconds,
+          currentMessages.length,
+          userMsgCount,
+          assistantMsgCount
+        );
+      }
+    };
+  }, [character, seriesId, seriesTitle, episodeId, episodeLabel, isWhatsApp, entryPoint]);
 
   useEffect(() => {
     conversationHistory.current = messages.map(m => ({
@@ -44,6 +165,18 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
     if (onMessagesUpdate) {
       onMessagesUpdate(messages);
     }
+    
+    // Update analytics with message counts
+    if (analyticsRecordId.current) {
+      const userMsgCount = messages.filter(m => m.role === 'user').length;
+      const assistantMsgCount = messages.filter(m => m.role === 'assistant').length;
+      updateChatMessages(
+        analyticsRecordId.current,
+        messages.length,
+        userMsgCount,
+        assistantMsgCount
+      );
+    }
   }, [messages]);
 
   useEffect(() => {
@@ -53,14 +186,8 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
   }, [messages, isTyping]);
 
   useEffect(() => {
-    // Dynamic System Instruction based on character
-    if (character === 'Debu') {
-      systemPrompt.current = `You are Debu, a senior Indian filmmaker. Wise, brief. WhatsApp style. MAX 30 WORDS. NO DEVANAGARI.`;
-    } else if (character === 'Anish') {
-      systemPrompt.current = `You are Anish, a startup founder. Hustler vibe, Hinglish. WhatsApp style. MAX 25 WORDS. NO DEVANAGARI.`;
-    } else {
-      systemPrompt.current = `You are ${character} from the series ${episodeLabel}. Natural Hinglish, brief WhatsApp style responses. MAX 20 WORDS. NO DEVANAGARI.`;
-    }
+    // Get system prompt from centralized character config
+    systemPrompt.current = getCharacterPrompt(character, episodeLabel);
   }, [character, episodeLabel]);
 
   const handleSend = async () => {
@@ -73,6 +200,11 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
     setInputValue('');
     setMessages(prev => [...prev, { role: 'user', content: userText, time: now }]);
     setIsTyping(true);
+    
+    // Save user message to Supabase
+    if (isUserLoggedIn()) {
+      saveMessage(character, 'user', userText, seriesId, episodeId);
+    }
 
     try {
       const ai = new GoogleGenAI({ apiKey });
@@ -88,22 +220,43 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
         },
       });
 
+      const assistantResponse = response.text || "...";
+      
       setMessages(prev => [...prev, { 
         role: 'assistant', 
-        content: response.text || "...", 
+        content: assistantResponse, 
         time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) 
       }]);
+      
+      // Save assistant response to Supabase
+      if (isUserLoggedIn()) {
+        saveMessage(character, 'assistant', assistantResponse, seriesId, episodeId);
+      }
     } catch (error) {
       console.error("AI Error:", error);
+      const errorMessage = "Network issue. Try again later.";
+      
       setMessages(prev => [...prev, { 
         role: 'assistant', 
-        content: "Network issue. Try again later.", 
+        content: errorMessage, 
         time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) 
       }]);
     } finally {
       setIsTyping(false);
     }
   };
+
+  // Loading state
+  if (isLoadingHistory) {
+    return (
+      <div className="fixed inset-0 z-[5000] flex items-center justify-center bg-black/50 backdrop-blur-sm">
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-12 h-12 border-4 border-white/20 border-t-white rounded-full animate-spin" />
+          <p className="text-white/60 text-sm">Loading chat...</p>
+        </div>
+      </div>
+    );
+  }
 
   // PATH A: WhatsApp UI (Full Screen)
   if (isWhatsApp) {
