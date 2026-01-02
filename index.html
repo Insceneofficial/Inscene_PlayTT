@@ -5,31 +5,45 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="theme-color" content="#000000">
+    <meta name="theme-color" content="#0a0a0f">
     <title>Inscene | Immersive Stories</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
       @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&display=swap');
       
       :root {
-        --bg-dark-blue: #020617;
-        --accent-blue: #1e3a8a;
-        --accent-purple: #7e22ce;
+        /* Charcoal Black Theme */
+        --bg-charcoal: #0a0a0f;
+        --bg-charcoal-light: #121218;
+        --bg-charcoal-lighter: #1a1a24;
+        --bg-charcoal-surface: #222230;
+        
+        /* Blue/Violet Accent Palette */
+        --accent-blue: #3b82f6;
+        --accent-blue-bright: #60a5fa;
+        --accent-violet: #8b5cf6;
+        --accent-violet-bright: #a78bfa;
+        --accent-indigo: #6366f1;
+        --accent-purple: #a855f7;
+        
+        /* Glow effects */
+        --glow-blue: rgba(59, 130, 246, 0.4);
+        --glow-violet: rgba(139, 92, 246, 0.4);
       }
 
       html, body {
         height: 100%;
         width: 100%;
         overflow: hidden;
-        background-color: #000;
-        position: fixed; /* Prevents bounce scroll on iOS */
+        background-color: var(--bg-charcoal);
+        position: fixed;
       }
 
       body {
         font-family: 'Outfit', sans-serif;
         margin: 0;
         padding: 0;
-        background: radial-gradient(circle at top left, var(--accent-blue) 0%, var(--bg-dark-blue) 40%, #581c87 80%, var(--accent-purple) 100%);
+        background: var(--bg-charcoal);
         background-attachment: fixed;
         color: #ffffff;
         -webkit-tap-highlight-color: transparent;
@@ -42,6 +56,30 @@
       }
       .animate-slide-up {
         animation: slideUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+      }
+
+      @keyframes slideUpSide {
+        from { transform: translateY(30px) scale(0.9); opacity: 0; }
+        to { transform: translateY(0) scale(1); opacity: 1; }
+      }
+      .animate-slide-up-side {
+        animation: slideUpSide 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+      }
+
+      @keyframes fadeIn {
+        from { opacity: 0; }
+        to { opacity: 1; }
+      }
+      .animate-fade-in {
+        animation: fadeIn 0.4s ease-out forwards;
+      }
+
+      @keyframes pulse-glow {
+        0%, 100% { box-shadow: 0 0 20px var(--glow-violet), 0 0 40px var(--glow-blue); }
+        50% { box-shadow: 0 0 30px var(--glow-violet), 0 0 60px var(--glow-blue); }
+      }
+      .pulse-glow {
+        animation: pulse-glow 2s ease-in-out infinite;
       }
 
       ::-webkit-scrollbar { display: none; }
@@ -58,11 +96,23 @@
       }
       .reel-item {
         scroll-snap-align: start;
-        scroll-snap-stop: always; /* Critical for YouTube/TikTok feel */
+        scroll-snap-stop: always;
         height: 100dvh;
         width: 100%;
         position: relative;
         overflow: hidden;
+      }
+
+      /* Custom scrollbar for chat */
+      .custom-scrollbar::-webkit-scrollbar {
+        width: 4px;
+      }
+      .custom-scrollbar::-webkit-scrollbar-track {
+        background: transparent;
+      }
+      .custom-scrollbar::-webkit-scrollbar-thumb {
+        background: var(--accent-violet);
+        border-radius: 2px;
       }
     </style>
     <script type="importmap">
