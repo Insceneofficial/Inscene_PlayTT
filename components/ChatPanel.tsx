@@ -53,6 +53,19 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
   // Track if initial messages have been saved (to avoid duplicates)
   const initialMessagesSaved = useRef(false);
   
+  // Drop-off reminder system refs
+  const reminderCount = useRef<number>(0);
+  const reminderTimeoutId = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isGeneratingReminder = useRef<boolean>(false);
+  const MAX_REMINDERS = 2;
+  
+  // Get random delay between 10 seconds and 2 minutes
+  const getRandomDelay = () => {
+    const minMs = 30 * 1000;      // 30 seconds
+    const maxMs = 2 * 60 * 1000; // 2 minutes
+    return Math.floor(Math.random() * (maxMs - minMs)) + minMs;
+  };
+  
   // Keep messagesRef in sync
   useEffect(() => {
     messagesRef.current = messages;
@@ -190,6 +203,116 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
     systemPrompt.current = getCharacterPrompt(character, episodeLabel);
   }, [character, episodeLabel]);
 
+  // Generate personalized drop-off reminder using Gemini
+  const generateDropOffReminder = async () => {
+    // Prevent duplicate calls and check limits
+    if (isGeneratingReminder.current || reminderCount.current >= MAX_REMINDERS) return;
+    
+    isGeneratingReminder.current = true;
+    const apiKey = process.env.API_KEY;
+    
+    try {
+      const ai = new GoogleGenAI({ apiKey });
+      
+      // Build context from recent conversation
+      const currentMessages = messagesRef.current;
+      const recentMessages = currentMessages.slice(-6); // Last 6 messages for context
+      const contextSummary = recentMessages
+        .map(m => `${m.role === 'user' ? 'User' : character}: ${m.content}`)
+        .join('\n');
+      
+      const dropOffPrompt = `
+You are ${character}. The user has been inactive for a while during your conversation.
+Based on your ongoing chat, send a SHORT, natural follow-up message to re-engage them.
+Stay completely in character. Be playful, curious, teasing, or concerned — match the tone of your previous messages.
+
+Recent conversation:
+${contextSummary}
+
+Rules:
+- Keep it under 20 words
+- Don't repeat what you already said
+- Make it feel spontaneous and natural, not robotic
+- Reference something specific from the conversation if possible
+- Use emojis sparingly if it fits your character
+- Sound like a real person checking in, not a notification
+
+Generate ONLY the follow-up message, nothing else.
+`;
+
+      const response = await ai.models.generateContent({
+        model: 'gemini-3-flash-preview',
+        contents: [{ role: 'user', parts: [{ text: dropOffPrompt }] }],
+        config: { 
+          systemInstruction: systemPrompt.current, 
+          temperature: 0.95 
+        }
+      });
+
+      const reminderText = response.text?.trim();
+      if (reminderText) {
+        const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        
+        setMessages(prev => [...prev, {
+          role: 'assistant',
+          content: reminderText,
+          time: now
+        }]);
+        
+        // Save to Supabase if logged in
+        if (isUserLoggedIn()) {
+          saveMessage(character, 'assistant', reminderText, seriesId, episodeId);
+        }
+        
+        reminderCount.current += 1;
+        console.log(`[DropOff] Sent reminder ${reminderCount.current}/${MAX_REMINDERS}: "${reminderText}"`);
+        
+        // Schedule next reminder if we haven't hit the limit
+        if (reminderCount.current < MAX_REMINDERS) {
+          scheduleNextReminder();
+        }
+      }
+    } catch (error) {
+      console.error('[DropOff] Reminder generation error:', error);
+    } finally {
+      isGeneratingReminder.current = false;
+    }
+  };
+
+  // Schedule the next drop-off reminder
+  const scheduleNextReminder = () => {
+    if (reminderCount.current >= MAX_REMINDERS) return;
+    
+    // Clear any existing timer
+    if (reminderTimeoutId.current) {
+      clearTimeout(reminderTimeoutId.current);
+      reminderTimeoutId.current = null;
+    }
+    
+    const delay = getRandomDelay();
+    console.log(`[DropOff] Next reminder scheduled in ${Math.round(delay / 1000)}s`);
+    
+    reminderTimeoutId.current = setTimeout(() => {
+      generateDropOffReminder();
+    }, delay);
+  };
+
+  // Initialize drop-off reminder system after history loads
+  useEffect(() => {
+    if (!isLoadingHistory) {
+      // Start the reminder timer once chat is ready
+      scheduleNextReminder();
+    }
+    
+    // Cleanup on unmount
+    return () => {
+      if (reminderTimeoutId.current) {
+        clearTimeout(reminderTimeoutId.current);
+        reminderTimeoutId.current = null;
+      }
+    };
+  }, [isLoadingHistory]);
+
   const handleSend = async () => {
     if (!inputValue.trim() || isTyping) return;
     
@@ -200,6 +323,10 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
     setInputValue('');
     setMessages(prev => [...prev, { role: 'user', content: userText, time: now }]);
     setIsTyping(true);
+    
+    // Reset drop-off reminder system on user engagement
+    reminderCount.current = 0;
+    scheduleNextReminder();
     
     // Save user message to Supabase
     if (isUserLoggedIn()) {
