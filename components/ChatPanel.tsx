@@ -389,12 +389,13 @@ Generate ONLY the follow-up message, nothing else.
   if (isWhatsApp) {
     return (
       <div className="fixed inset-0 z-[5000] flex flex-col bg-[#0a0a0f] animate-fade-in h-full w-full overflow-hidden">
-        {/* Subtle Pattern Background */}
+        {/* Chat Background Image */}
         <div 
-          className="absolute inset-0 opacity-[0.03] pointer-events-none" 
+          className="absolute inset-0 opacity-20 pointer-events-none" 
           style={{ 
-            backgroundImage: `radial-gradient(circle at 1px 1px, #8b5cf6 1px, transparent 0)`,
-            backgroundSize: '24px 24px'
+            backgroundImage: `url('./components/chat_bg.png')`,
+            backgroundSize: 'cover',
+            backgroundPosition: 'center'
           }}
         />
 
