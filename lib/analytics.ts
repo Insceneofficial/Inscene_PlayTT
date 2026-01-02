@@ -261,11 +261,14 @@ export const trackChatStart = async (data: ChatSessionData): Promise<string | nu
   if (!isSupabaseConfigured()) return null;
   
   const googleUserId = getGoogleUserId();
+  // Generate ID client-side to avoid needing SELECT permission after INSERT
+  const recordId = crypto.randomUUID();
   
   try {
-    const { data: result, error } = await supabase
+    const { error } = await supabase
       .from('chat_sessions')
       .insert({
+        id: recordId,
         viewer_id: getViewerId(),
         session_id: getSessionId(),
         google_user_id: googleUserId,
@@ -277,12 +280,15 @@ export const trackChatStart = async (data: ChatSessionData): Promise<string | nu
         is_whatsapp_style: data.isWhatsAppStyle,
         entry_point: data.entryPoint,
         started_at: new Date().toISOString()
-      })
-      .select('id')
-      .single();
+      });
     
-    if (error) throw error;
-    return result?.id || null;
+    if (error) {
+      console.error('[Analytics] ❌ chat_sessions INSERT failed:', error.message, error.details, error.hint);
+      throw error;
+    }
+    
+    console.log('[Analytics] ✓ chat_sessions INSERT success, id:', recordId);
+    return recordId;
   } catch (error) {
     console.warn('Analytics: Failed to start chat session', error);
     return null;

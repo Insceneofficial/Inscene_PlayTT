@@ -41,23 +41,23 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess }) => 
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-[6000] flex items-center justify-center p-4 bg-black/60 backdrop-blur-xl animate-fade-in">
-      <div className="relative w-full max-w-md bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 border border-white/10 rounded-[2.5rem] overflow-hidden shadow-[0_40px_100px_rgba(0,0,0,0.5)] animate-slide-up">
+    <div className="fixed inset-0 z-[6000] flex items-center justify-center p-4 bg-[#0a0a0f]/80 backdrop-blur-xl animate-fade-in">
+      <div className="relative w-full max-w-md bg-gradient-to-br from-[#1a1a24] via-[#121218] to-[#0a0a0f] border border-violet-500/20 rounded-[2.5rem] overflow-hidden shadow-[0_40px_100px_rgba(139,92,246,0.2)] animate-slide-up">
         {/* Header */}
         <div className="relative px-8 pt-8 pb-6">
           {/* Close Button */}
           <button 
             onClick={onClose}
-            className="absolute top-6 right-6 w-10 h-10 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 flex items-center justify-center transition-all active:scale-90"
+            className="absolute top-6 right-6 w-10 h-10 rounded-full bg-[#1a1a24]/80 hover:bg-violet-500/20 border border-violet-500/20 flex items-center justify-center transition-all active:scale-90"
           >
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-5 h-5 text-white/50">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-5 h-5 text-violet-400/50">
               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
 
           {/* Logo/Title */}
           <div className="flex flex-col items-center gap-4">
-            <div className="w-20 h-20 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center shadow-[0_0_60px_rgba(59,130,246,0.4)]">
+            <div className="w-20 h-20 rounded-full bg-gradient-to-br from-violet-500 to-blue-500 flex items-center justify-center shadow-[0_0_60px_rgba(139,92,246,0.4)]">
               <svg viewBox="0 0 24 24" fill="currentColor" className="w-10 h-10 text-white">
                 <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
               </svg>
@@ -98,15 +98,15 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess }) => 
 
           {/* Divider */}
           <div className="flex items-center gap-4">
-            <div className="flex-1 h-px bg-white/10" />
-            <span className="text-white/20 text-xs font-bold uppercase tracking-widest">or</span>
-            <div className="flex-1 h-px bg-white/10" />
+            <div className="flex-1 h-px bg-violet-500/10" />
+            <span className="text-violet-400/30 text-xs font-bold uppercase tracking-widest">or</span>
+            <div className="flex-1 h-px bg-violet-500/10" />
           </div>
 
           {/* Continue as Guest */}
           <button
             onClick={onClose}
-            className="w-full py-4 rounded-2xl bg-white/5 border border-white/10 text-white/60 font-medium hover:bg-white/10 hover:text-white active:scale-[0.98] transition-all"
+            className="w-full py-4 rounded-2xl bg-[#1a1a24]/80 border border-violet-500/20 text-white/60 font-medium hover:bg-violet-500/10 hover:text-white active:scale-[0.98] transition-all"
           >
             Continue as Guest
           </button>
@@ -114,9 +114,9 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess }) => 
           {/* Terms */}
           <p className="text-center text-white/20 text-xs leading-relaxed">
             By continuing, you agree to our{' '}
-            <span className="text-white/40 hover:text-white/60 cursor-pointer">Terms of Service</span>
+            <span className="text-violet-400/60 hover:text-violet-400 cursor-pointer">Terms of Service</span>
             {' '}and{' '}
-            <span className="text-white/40 hover:text-white/60 cursor-pointer">Privacy Policy</span>
+            <span className="text-violet-400/60 hover:text-violet-400 cursor-pointer">Privacy Policy</span>
           </p>
         </div>
       </div>
