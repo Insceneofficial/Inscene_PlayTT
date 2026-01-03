@@ -2,8 +2,10 @@ import React, { useState, useEffect, useRef } from 'react';
 import Logo from './components/Logo.tsx';
 import ChatPanel from './components/ChatPanel.tsx';
 import AuthModal from './components/AuthModal.tsx';
+import WaitlistModal from './components/WaitlistModal.tsx';
 import UserMenu from './components/UserMenu.tsx';
 import { AuthProvider, useAuth } from './lib/auth';
+import { getUserMessageCount } from './lib/chatStorage';
 import { Analytics } from "@vercel/analytics/react";
 import { 
   trackViewer, 
@@ -673,6 +675,7 @@ const AppContent: React.FC = () => {
   const [currentView, setCurrentView] = useState<'discover' | 'chats'>('discover');
   const [choiceModalData, setChoiceModalData] = useState<any>(null);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [isWaitlistModalOpen, setIsWaitlistModalOpen] = useState(false);
   
   const [conversations, setConversations] = useState<Record<string, ConversationHistoryEntry>>({});
   const [typingStatus, setTypingStatus] = useState<Record<string, boolean>>({});
@@ -738,6 +741,26 @@ const AppContent: React.FC = () => {
       };
     }
   }, [selectedSeries]);
+
+  // Helper function to handle chat initiation with authentication check
+  const handleChatInit = async (chatDataConfig: any) => {
+    if (!isAuthenticated) {
+      // User not authenticated - show auth modal
+      setIsAuthModalOpen(true);
+      return;
+    }
+    
+    // Check message count limit
+    const messageCount = await getUserMessageCount();
+    if (messageCount >= 10) {
+      // User has reached message limit - show waitlist modal
+      setIsWaitlistModalOpen(true);
+      return;
+    }
+    
+    // User is authenticated and under limit - proceed with chat
+    setChatData(chatDataConfig);
+  };
 
   const handleNext = () => {
     const nextIdx = (activeIdx + 1) % selectedSeries.episodes.length;
@@ -914,7 +937,7 @@ const AppContent: React.FC = () => {
                 {filteredCatalog.map(series => (
                   <div 
                     key={series.id}
-                    onClick={() => setChoiceModalData(series)}
+                    onClick={() => setSelectedSeries(series)}
                     className="flex flex-col items-center gap-3 group cursor-pointer"
                   >
                     <div className="relative w-full aspect-square rounded-[1.5rem] overflow-hidden border border-violet-500/20 shadow-2xl transition-all group-hover:border-violet-500/50 group-hover:scale-105 group-hover:shadow-[0_0_30px_rgba(139,92,246,0.2)] active:scale-95">
@@ -970,7 +993,7 @@ const AppContent: React.FC = () => {
                             ...prev,
                             [conv.character]: 0
                           }));
-                          setChatData({ 
+                          handleChatInit({ 
                             char: conv.character, 
                             avatar: conv.avatar, 
                             history: conv.messages,
@@ -1029,7 +1052,7 @@ const AppContent: React.FC = () => {
                 episode={ep} series={selectedSeries} 
                 isActive={activeIdx === i} isMuted={isMuted} 
                 toggleMute={() => setIsMuted(!isMuted)} 
-                onEnterStory={(char, intro, hook, entryPoint) => setChatData({
+                onEnterStory={(char, intro, hook, entryPoint) => handleChatInit({
                   char, intro, hook, 
                   isFromHistory: false, 
                   isWhatsApp: false,
@@ -1107,7 +1130,7 @@ const AppContent: React.FC = () => {
                      onClick={() => {
                        const firstEp = choiceModalData.episodes[0];
                        const firstTrigger = firstEp.triggers[0];
-                       setChatData({
+                       handleChatInit({
                          char: firstTrigger.char,
                          intro: firstTrigger.intro,
                          hook: firstTrigger.hook,
@@ -1160,6 +1183,7 @@ const AppContent: React.FC = () => {
           seriesId={chatData.seriesId}
           seriesTitle={chatData.seriesTitle}
           episodeId={chatData.episodeId}
+          onWaitlistRequired={() => setIsWaitlistModalOpen(true)}
         />
       )}
 
@@ -1167,6 +1191,12 @@ const AppContent: React.FC = () => {
       <AuthModal 
         isOpen={isAuthModalOpen} 
         onClose={() => setIsAuthModalOpen(false)} 
+      />
+
+      {/* Waitlist Modal */}
+      <WaitlistModal 
+        isOpen={isWaitlistModalOpen} 
+        onClose={() => setIsWaitlistModalOpen(false)} 
       />
 
       <Analytics />

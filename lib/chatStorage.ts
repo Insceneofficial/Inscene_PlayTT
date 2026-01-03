@@ -342,6 +342,58 @@ export const getLastMessages = async (): Promise<Record<string, ChatMessage>> =>
 /**
  * Check if user has any chat history with a character
  */
+/**
+ * Count total user messages (not assistant messages) for the current user
+ */
+export const getUserMessageCount = async (): Promise<number> => {
+  if (!isSupabaseConfigured()) return 0;
+  
+  const googleUserId = getGoogleUserId();
+  if (!googleUserId) return 0;
+  
+  try {
+    const { count, error } = await supabase
+      .from('chat_messages')
+      .select('*', { count: 'exact', head: true })
+      .eq('google_user_id', googleUserId)
+      .eq('role', 'user');
+    
+    if (error) throw error;
+    return count || 0;
+  } catch (error) {
+    console.warn('ChatStorage: Failed to count user messages', error);
+    return 0;
+  }
+};
+
+/**
+ * Add user to premium waitlist
+ */
+export const addToWaitlist = async (email?: string, name?: string): Promise<boolean> => {
+  if (!isSupabaseConfigured()) return false;
+  
+  const googleUserId = getGoogleUserId();
+  if (!googleUserId) return false;
+  
+  try {
+    const { error } = await supabase
+      .from('premium_waitlist')
+      .insert({
+        google_user_id: googleUserId,
+        email: email || null,
+        name: name || null,
+        status: 'pending'
+      });
+    
+    if (error) throw error;
+    console.log('ChatStorage: Successfully added to waitlist');
+    return true;
+  } catch (error) {
+    console.warn('ChatStorage: Failed to add to waitlist', error);
+    return false;
+  }
+};
+
 export const hasChatHistory = async (characterName: string): Promise<boolean> => {
   if (!isSupabaseConfigured()) return false;
   
