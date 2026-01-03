@@ -1,9 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { BrowserRouter, Routes, Route, Link, useNavigate } from 'react-router-dom';
 import Logo from './components/Logo.tsx';
 import ChatPanel from './components/ChatPanel.tsx';
 import AuthModal from './components/AuthModal.tsx';
 import WaitlistModal from './components/WaitlistModal.tsx';
 import UserMenu from './components/UserMenu.tsx';
+import InfluencerPage from './components/InfluencerPage.tsx';
 import { AuthProvider, useAuth } from './lib/auth';
 import { getUserMessageCount } from './lib/chatStorage';
 import { Analytics } from "@vercel/analytics/react";
@@ -16,6 +18,7 @@ import {
 } from './lib/analytics';
 import { loadAllChatHistories } from './lib/chatStorage';
 import { AVATARS, getCharacterAvatar } from './lib/characters';
+import { setSeriesCatalog, getAllInfluencers, getInfluencerSlug, InfluencerInfo } from './lib/influencerMapping';
 
 // Re-export for backward compatibility with existing code
 const PRIYANK_AVATAR = AVATARS.Priyank;
@@ -490,7 +493,7 @@ const ReelItem: React.FC<{
 /**
  * SERIES CATALOG
  */
-const SERIES_CATALOG = [
+export const SERIES_CATALOG = [
   {
     id: 'heart-beats',
     title: 'Heart Beats',
@@ -666,6 +669,7 @@ interface ConversationHistoryEntry {
 }
 
 const AppContent: React.FC = () => {
+  const navigate = useNavigate();
   const { user, isAuthenticated } = useAuth();
   const [selectedSeries, setSelectedSeries] = useState<any>(null);
   const [activeIdx, setActiveIdx] = useState(0);
@@ -680,6 +684,11 @@ const AppContent: React.FC = () => {
   const [conversations, setConversations] = useState<Record<string, ConversationHistoryEntry>>({});
   const [typingStatus, setTypingStatus] = useState<Record<string, boolean>>({});
   const [unseenCounts, setUnseenCounts] = useState<Record<string, number>>({});
+
+  // Initialize series catalog for influencer mapping
+  useEffect(() => {
+    setSeriesCatalog(SERIES_CATALOG);
+  }, []);
 
   // Track viewer on app load
   useEffect(() => {
@@ -933,11 +942,68 @@ const AppContent: React.FC = () => {
                 ))}
               </div>
 
+              {/* Influencer Cards Section */}
+              {activeTab === 'For you' && (
+                <div className="pt-4">
+                  <h2 className="text-xs font-black uppercase tracking-[0.3em] text-white/40 mb-4">Featured Influencers</h2>
+                  <div className="grid grid-cols-2 gap-4 mb-8">
+                    {getAllInfluencers().map((influencer: InfluencerInfo) => (
+                      <div
+                        key={influencer.id}
+                        onClick={() => navigate(`/${influencer.id}`)}
+                        className="group cursor-pointer relative aspect-[9/12] rounded-[1.5rem] overflow-hidden border border-violet-500/20 shadow-xl transition-all hover:border-violet-500/50 hover:scale-[1.02] hover:shadow-[0_0_30px_rgba(139,92,246,0.2)] active:scale-95"
+                      >
+                        <div className="absolute inset-0 bg-gradient-to-br from-violet-500/20 to-blue-500/20" />
+                        <img 
+                          src={influencer.avatar} 
+                          alt={influencer.name} 
+                          className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity"
+                        />
+                        <div className="absolute inset-0 bg-gradient-to-t from-[#0a0a0f]/90 via-transparent to-transparent" />
+                        <div className="absolute bottom-0 left-0 right-0 p-4">
+                          <div className="flex items-center gap-2 mb-1">
+                            <div className={`h-2 w-2 rounded-full ${
+                              influencer.theme === 'blue' ? 'bg-blue-500' : 
+                              influencer.theme === 'cyan' ? 'bg-cyan-400' : 
+                              influencer.theme === 'green' ? 'bg-emerald-400' : 
+                              'bg-violet-500'
+                            } animate-pulse shadow-[0_0_8px_currentColor]`} />
+                            <span className="text-[8px] font-black tracking-[0.2em] uppercase text-white/60">Live</span>
+                          </div>
+                          <h3 className="text-base font-black uppercase tracking-tight text-white mb-1">{influencer.name}</h3>
+                          <p className="text-[9px] font-medium text-white/50 line-clamp-2">{influencer.seriesTitle}</p>
+                        </div>
+                        <div className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <div className="w-10 h-10 rounded-full bg-violet-500/30 backdrop-blur-md border border-violet-500/50 flex items-center justify-center">
+                            <svg viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5 text-white ml-0.5"><path d="M8 5v14l11-7z" /></svg>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <div className="grid grid-cols-3 gap-6 pt-4">
-                {filteredCatalog.map(series => (
+                {filteredCatalog.map(series => {
+                  // Get first influencer from series for routing
+                  const firstInfluencerName = series.avatars ? Object.keys(series.avatars)[0] : null;
+                  const firstInfluencerSlug = firstInfluencerName ? getInfluencerSlug(firstInfluencerName) : null;
+                  
+                  // Check if this series has influencers with pages (exclude Arzoo)
+                  const influencersWithPages = series.avatars ? Object.keys(series.avatars).filter(name => name !== 'Arzoo') : [];
+                  
+                  return (
                   <div 
                     key={series.id}
-                    onClick={() => setSelectedSeries(series)}
+                    onClick={() => {
+                      // Navigate to influencer page if single influencer (and not Arzoo), otherwise show choice modal
+                      if (firstInfluencerSlug && influencersWithPages.length === 1) {
+                        navigate(`/${firstInfluencerSlug}`);
+                      } else {
+                        setChoiceModalData(series);
+                      }
+                    }}
                     className="flex flex-col items-center gap-3 group cursor-pointer"
                   >
                     <div className="relative w-full aspect-square rounded-[1.5rem] overflow-hidden border border-violet-500/20 shadow-2xl transition-all group-hover:border-violet-500/50 group-hover:scale-105 group-hover:shadow-[0_0_30px_rgba(139,92,246,0.2)] active:scale-95">
@@ -954,7 +1020,8 @@ const AppContent: React.FC = () => {
                       <p className="text-[7px] font-bold uppercase tracking-widest text-white/30 truncate">{series.tagline}</p>
                     </div>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           ) : (
@@ -1126,38 +1193,66 @@ const AppContent: React.FC = () => {
                 </div>
                 
                 <div className="w-full flex flex-col gap-4 mt-2">
-                   <button 
-                     onClick={() => {
-                       const firstEp = choiceModalData.episodes[0];
-                       const firstTrigger = firstEp.triggers[0];
-                       handleChatInit({
-                         char: firstTrigger.char,
-                         intro: firstTrigger.intro,
-                         hook: firstTrigger.hook,
-                         isFromHistory: false,
-                         isWhatsApp: true,
-                         entryPoint: 'choice_modal',
-                         seriesId: choiceModalData.id,
-                         seriesTitle: choiceModalData.title,
-                         episodeId: firstEp.id,
-                         episodeLabel: firstEp.label
-                       });
-                       setChoiceModalData(null);
-                     }}
-                     className="w-full py-5 rounded-[2rem] bg-gradient-to-r from-violet-500 to-blue-500 text-white font-black uppercase tracking-widest text-[10px] shadow-[0_10px_30px_rgba(139,92,246,0.3)] active:scale-95 transition-all"
-                   >
-                     {choiceModalData.id === 'heart-beats' ? '1. Immersive story on text' : '1. Chat with AI Avatar'}
-                   </button>
-                   
-                   <button 
-                     onClick={() => {
-                       setSelectedSeries(choiceModalData);
-                       setChoiceModalData(null);
-                     }}
-                     className="w-full py-5 rounded-[2rem] bg-[#1a1a24]/80 border border-violet-500/20 text-white font-black uppercase tracking-widest text-[10px] active:scale-95 transition-all hover:bg-violet-500/10"
-                   >
-                     {choiceModalData.id === 'heart-beats' ? '2. Watch and interact' : '2. Watch and Learn'}
-                   </button>
+                  {/* Show influencer options if multiple, otherwise show default options */}
+                  {choiceModalData.avatars && Object.keys(choiceModalData.avatars).filter(name => name !== 'Arzoo').length > 1 ? (
+                    // Multiple influencers - show routes to each (excluding Arzoo)
+                    Object.keys(choiceModalData.avatars)
+                      .filter(name => name !== 'Arzoo')
+                      .map((influencerName) => (
+                        <button
+                          key={influencerName}
+                          onClick={() => {
+                            navigate(`/${getInfluencerSlug(influencerName)}`);
+                            setChoiceModalData(null);
+                          }}
+                          className="w-full py-5 rounded-[2rem] bg-gradient-to-r from-violet-500 to-blue-500 text-white font-black uppercase tracking-widest text-[10px] shadow-[0_10px_30px_rgba(139,92,246,0.3)] active:scale-95 transition-all"
+                        >
+                          Visit {influencerName}'s Page
+                        </button>
+                      ))
+                  ) : (
+                    // Single influencer or default options
+                    <>
+                      <button 
+                        onClick={() => {
+                          const firstEp = choiceModalData.episodes[0];
+                          const firstTrigger = firstEp.triggers[0];
+                          handleChatInit({
+                            char: firstTrigger.char,
+                            intro: firstTrigger.intro,
+                            hook: firstTrigger.hook,
+                            isFromHistory: false,
+                            isWhatsApp: true,
+                            entryPoint: 'choice_modal',
+                            seriesId: choiceModalData.id,
+                            seriesTitle: choiceModalData.title,
+                            episodeId: firstEp.id,
+                            episodeLabel: firstEp.label
+                          });
+                          setChoiceModalData(null);
+                        }}
+                        className="w-full py-5 rounded-[2rem] bg-gradient-to-r from-violet-500 to-blue-500 text-white font-black uppercase tracking-widest text-[10px] shadow-[0_10px_30px_rgba(139,92,246,0.3)] active:scale-95 transition-all"
+                      >
+                        {choiceModalData.id === 'heart-beats' ? '1. Immersive story on text' : '1. Chat with AI Avatar'}
+                      </button>
+                      
+                      <button 
+                        onClick={() => {
+                          // Get first influencer that's not Arzoo
+                          const firstInfluencerName = choiceModalData.avatars ? Object.keys(choiceModalData.avatars).find(name => name !== 'Arzoo') : null;
+                          if (firstInfluencerName) {
+                            navigate(`/${getInfluencerSlug(firstInfluencerName)}`);
+                          } else {
+                            setSelectedSeries(choiceModalData);
+                          }
+                          setChoiceModalData(null);
+                        }}
+                        className="w-full py-5 rounded-[2rem] bg-[#1a1a24]/80 border border-violet-500/20 text-white font-black uppercase tracking-widest text-[10px] active:scale-95 transition-all hover:bg-violet-500/10"
+                      >
+                        {choiceModalData.id === 'heart-beats' ? '2. Watch and interact' : '2. Watch and Learn'}
+                      </button>
+                    </>
+                  )}
                 </div>
              </div>
           </div>
@@ -1215,11 +1310,16 @@ const AppContent: React.FC = () => {
   );
 };
 
-// Wrap AppContent with AuthProvider
+// Wrap AppContent with AuthProvider and Router
 const App: React.FC = () => (
-  <AuthProvider>
-    <AppContent />
-  </AuthProvider>
+  <BrowserRouter>
+    <AuthProvider>
+      <Routes>
+        <Route path="/" element={<AppContent />} />
+        <Route path="/:slug" element={<InfluencerPage />} />
+      </Routes>
+    </AuthProvider>
+  </BrowserRouter>
 );
 
 export default App;
