@@ -99,11 +99,14 @@ const ReelItem: React.FC<{
   
   // Analytics tracking refs
   const analyticsRecordId = useRef<string | null>(null);
+  const trackVideoStartPromise = useRef<Promise<string | null> | null>(null);
   const progressIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const seekCountRef = useRef(0);
   const pauseCountRef = useRef(0);
   const wasUnmutedRef = useRef(false);
   const initialMutedRef = useRef(isMuted);
+  const isEndingSession = useRef(false); // Prevent duplicate end calls
+  const sessionStartTime = useRef<number | null>(null); // Track when session started
 
   // Track when unmuted during watch
   useEffect(() => {
@@ -111,6 +114,90 @@ const ReelItem: React.FC<{
       wasUnmutedRef.current = true;
     }
   }, [isMuted]);
+
+  // Helper function to end video session
+  const endVideoSession = async (isCompleted: boolean = false) => {
+    // Prevent duplicate calls
+    if (isEndingSession.current) {
+      console.log('[Video Analytics] Already ending session, skipping duplicate call');
+      return;
+    }
+    
+    // If recordId is not set, wait for the trackVideoStart promise to complete
+    if (!analyticsRecordId.current && trackVideoStartPromise.current) {
+      console.log('[Video Analytics] Waiting for trackVideoStart to complete...');
+      try {
+        const recordId = await trackVideoStartPromise.current;
+        if (recordId) {
+          analyticsRecordId.current = recordId;
+          console.log('[Video Analytics] Got recordId from promise:', recordId);
+        }
+      } catch (error) {
+        console.error('[Video Analytics] Error waiting for trackVideoStart:', error);
+      }
+    }
+    
+    if (!analyticsRecordId.current) {
+      console.warn('[Video Analytics] No recordId available, cannot end session');
+      // Clear interval even if no recordId
+      if (progressIntervalRef.current) {
+        clearInterval(progressIntervalRef.current);
+        progressIntervalRef.current = null;
+      }
+      return;
+    }
+    
+    // Prevent ending session too quickly (likely from React StrictMode double-invocation)
+    if (sessionStartTime.current) {
+      const sessionDuration = Date.now() - sessionStartTime.current;
+      if (sessionDuration < 1000 && !isCompleted) { // Less than 1 second and not completed
+        console.log('[Video Analytics] Session too short (' + sessionDuration + 'ms), skipping end (likely StrictMode double-invocation)');
+        return;
+      }
+    }
+    
+    // Mark as ending to prevent duplicate calls
+    isEndingSession.current = true;
+    const recordIdToEnd = analyticsRecordId.current; // Store before clearing
+    
+    const video = videoRef.current;
+    let currentTime = 0;
+    let duration = 0;
+    
+    if (video) {
+      currentTime = video.currentTime || 0;
+      duration = video.duration || 0;
+    } else {
+      console.warn('[Video Analytics] No video element available, using default values');
+    }
+    
+    console.log('[Video Analytics] Ending session:', {
+      recordId: recordIdToEnd,
+      currentTime,
+      duration,
+      isCompleted
+    });
+    
+    // Call trackVideoEnd and only clear refs after it completes
+    await trackVideoEnd(
+      recordIdToEnd,
+      currentTime,
+      duration,
+      isCompleted,
+      wasUnmutedRef.current
+    );
+    
+    // Clear refs only after successful end
+    analyticsRecordId.current = null;
+    trackVideoStartPromise.current = null;
+    isEndingSession.current = false;
+    
+    // Clear interval
+    if (progressIntervalRef.current) {
+      clearInterval(progressIntervalRef.current);
+      progressIntervalRef.current = null;
+    }
+  };
 
   useEffect(() => {
     const video = videoRef.current;
@@ -126,19 +213,38 @@ const ReelItem: React.FC<{
       pauseCountRef.current = 0;
       wasUnmutedRef.current = false;
       initialMutedRef.current = isMuted;
+      isEndingSession.current = false; // Reset ending flag
+      sessionStartTime.current = null; // Reset session start time
       
-      // Start analytics tracking
-      trackVideoStart({
-        seriesId: series.id,
-        seriesTitle: series.title,
-        episodeId: episode.id,
-        episodeLabel: episode.label,
-        videoUrl: episode.url,
-        entryPoint: 'discover_grid',
-        isMuted: isMuted
-      }).then(recordId => {
-        analyticsRecordId.current = recordId;
-      });
+      // Only start a new session if we don't already have one in progress
+      if (!analyticsRecordId.current && !trackVideoStartPromise.current) {
+        // Start analytics tracking - store the promise so cleanup can await it
+        const startPromise = trackVideoStart({
+          seriesId: series.id,
+          seriesTitle: series.title,
+          episodeId: episode.id,
+          episodeLabel: episode.label,
+          videoUrl: episode.url,
+          entryPoint: 'discover_grid',
+          isMuted: isMuted
+        });
+        
+        trackVideoStartPromise.current = startPromise;
+        
+        startPromise.then(recordId => {
+          if (recordId) {
+            console.log('[Video Analytics] Session started, recordId:', recordId);
+            analyticsRecordId.current = recordId;
+            sessionStartTime.current = Date.now(); // Track when session actually started
+          } else {
+            console.warn('[Video Analytics] Failed to get recordId from trackVideoStart');
+          }
+        }).catch(error => {
+          console.error('[Video Analytics] Error starting session:', error);
+        });
+      } else {
+        console.log('[Video Analytics] Session already in progress, skipping duplicate start');
+      }
       
       // Update progress every 10 seconds
       progressIntervalRef.current = setInterval(() => {
@@ -157,52 +263,56 @@ const ReelItem: React.FC<{
       if (playPromise !== undefined) {
         playPromise.catch(() => {});
       }
+
+      // Handle page unload/visibility change
+      const handleBeforeUnload = () => {
+        endVideoSession(false);
+      };
+      
+      const handleVisibilityChange = () => {
+        if (document.hidden) {
+          endVideoSession(false);
+        }
+      };
+      
+      window.addEventListener('beforeunload', handleBeforeUnload);
+      window.addEventListener('pagehide', handleBeforeUnload);
+      document.addEventListener('visibilitychange', handleVisibilityChange);
+      
+      return () => {
+        // Cleanup: end session if component is unmounting or effect is re-running
+        // The isEndingSession flag will prevent duplicate calls if isActive is changing to false
+        // (in which case the else branch will also try to call it)
+        endVideoSession(false);
+        window.removeEventListener('beforeunload', handleBeforeUnload);
+        window.removeEventListener('pagehide', handleBeforeUnload);
+        document.removeEventListener('visibilitychange', handleVisibilityChange);
+        if (progressIntervalRef.current) {
+          clearInterval(progressIntervalRef.current);
+          progressIntervalRef.current = null;
+        }
+      };
     } else {
       video.pause();
       video.preload = "none";
       
-      // End tracking when scrolling away
-      if (analyticsRecordId.current && video.duration) {
-        trackVideoEnd(
-          analyticsRecordId.current,
-          video.currentTime,
-          video.duration,
-          false,
-          wasUnmutedRef.current
-        );
-        analyticsRecordId.current = null;
-      }
+      // End tracking when scrolling away (isActive became false)
+      endVideoSession(false);
       
-      // Clear interval
-      if (progressIntervalRef.current) {
-        clearInterval(progressIntervalRef.current);
-        progressIntervalRef.current = null;
-      }
+      // Cleanup when inactive - just clear interval, don't call endVideoSession again
+      return () => {
+        if (progressIntervalRef.current) {
+          clearInterval(progressIntervalRef.current);
+          progressIntervalRef.current = null;
+        }
+      };
     }
-    
-    return () => {
-      if (progressIntervalRef.current) {
-        clearInterval(progressIntervalRef.current);
-      }
-    };
   }, [isActive, series, episode, isMuted]);
 
   // Track video end
   useEffect(() => {
     if (isEnded && analyticsRecordId.current && videoRef.current) {
-      trackVideoEnd(
-        analyticsRecordId.current,
-        videoRef.current.currentTime,
-        videoRef.current.duration || 0,
-        true,
-        wasUnmutedRef.current
-      );
-      analyticsRecordId.current = null;
-      
-      if (progressIntervalRef.current) {
-        clearInterval(progressIntervalRef.current);
-        progressIntervalRef.current = null;
-      }
+      endVideoSession(true);
     }
   }, [isEnded]);
 

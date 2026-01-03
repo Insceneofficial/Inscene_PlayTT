@@ -216,26 +216,93 @@ export const trackVideoEnd = async (
   isCompleted: boolean,
   unmutedDuringWatch?: boolean
 ): Promise<void> => {
-  if (!isSupabaseConfigured() || !recordId) return;
+  if (!isSupabaseConfigured() || !recordId) {
+    console.warn('[Analytics] trackVideoEnd called without recordId or Supabase not configured');
+    return;
+  }
   
   const completionPercentage = videoDurationSeconds > 0
     ? Math.min(100, (watchDurationSeconds / videoDurationSeconds) * 100)
     : 0;
   
+  const endedAt = new Date().toISOString();
+  
+  console.log('[Analytics] Attempting to update video_sessions:', {
+    recordId,
+    endedAt,
+    watchDurationSeconds,
+    videoDurationSeconds,
+    isCompleted
+  });
+  
   try {
-    await supabase
+    // First, verify the record exists (using .maybeSingle() to avoid throwing on no match)
+    const { data: existingRecord, error: selectError } = await supabase
+      .from('video_sessions')
+      .select('id, started_at')
+      .eq('id', recordId)
+      .maybeSingle();
+    
+    if (selectError) {
+      console.error('[Analytics] ❌ Error checking if record exists for video_sessions:', {
+        recordId,
+        error: selectError?.message,
+        code: selectError?.code
+      });
+      // Continue anyway - maybe it's an RLS issue but UPDATE will work
+    } else if (!existingRecord) {
+      console.error('[Analytics] ❌ Record not found for video_sessions:', {
+        recordId,
+        hint: 'The record might not exist or INSERT might have failed. Check if INSERT succeeded.'
+      });
+      // Continue anyway - try UPDATE to see what error we get
+    } else {
+      console.log('[Analytics] Found existing record, updating:', {
+        recordId,
+        startedAt: existingRecord.started_at
+      });
+    }
+    
+    console.log('[Analytics] Found existing record, updating:', {
+      recordId,
+      startedAt: existingRecord.started_at
+    });
+    
+    // Now update the record
+    // Note: watch_duration_seconds is a generated column, so we don't update it
+    const { data, error } = await supabase
       .from('video_sessions')
       .update({
-        watch_duration_seconds: Math.floor(watchDurationSeconds),
         video_duration_seconds: Math.floor(videoDurationSeconds),
         completion_percentage: Math.round(completionPercentage * 100) / 100,
         is_completed: isCompleted || completionPercentage >= 90,
         unmuted_during_watch: unmutedDuringWatch,
-        ended_at: new Date().toISOString()
+        ended_at: endedAt
       })
-      .eq('id', recordId);
+      .eq('id', recordId)
+      .select();
+    
+    if (error) {
+      console.error('[Analytics] ❌ video_sessions UPDATE failed:', {
+        message: error.message,
+        details: error.details,
+        hint: error.hint,
+        recordId,
+        code: error.code
+      });
+    } else {
+      console.log('[Analytics] ✓ video_sessions UPDATE success:', {
+        recordId,
+        rowsUpdated: data?.length || 0,
+        endedAt: data?.[0]?.ended_at,
+        fullData: data?.[0]
+      });
+      if (!data || data.length === 0) {
+        console.error('[Analytics] ⚠️ UPDATE returned no rows despite record existing - possible RLS issue');
+      }
+    }
   } catch (error) {
-    console.warn('Analytics: Failed to end video session', error);
+    console.error('[Analytics] ❌ Failed to end video session:', error);
   }
 };
 
@@ -330,21 +397,82 @@ export const trackChatEnd = async (
   userMessageCount: number,
   assistantMessageCount: number
 ): Promise<void> => {
-  if (!isSupabaseConfigured() || !recordId) return;
+  if (!isSupabaseConfigured() || !recordId) {
+    console.warn('[Analytics] trackChatEnd called without recordId or Supabase not configured');
+    return;
+  }
+  
+  const endedAt = new Date().toISOString();
+  
+  console.log('[Analytics] Attempting to update chat_sessions:', {
+    recordId,
+    endedAt,
+    durationSeconds,
+    messageCount
+  });
   
   try {
-    await supabase
+    // First, verify the record exists (using .maybeSingle() to avoid throwing on no match)
+    const { data: existingRecord, error: selectError } = await supabase
+      .from('chat_sessions')
+      .select('id, started_at')
+      .eq('id', recordId)
+      .maybeSingle();
+    
+    if (selectError) {
+      console.error('[Analytics] ❌ Error checking if record exists for chat_sessions:', {
+        recordId,
+        error: selectError?.message,
+        code: selectError?.code
+      });
+      // Continue anyway - maybe it's an RLS issue but UPDATE will work
+    } else if (!existingRecord) {
+      console.error('[Analytics] ❌ Record not found for chat_sessions:', {
+        recordId,
+        hint: 'The record might not exist or INSERT might have failed. Check if INSERT succeeded.'
+      });
+      // Continue anyway - try UPDATE to see what error we get
+    } else {
+      console.log('[Analytics] Found existing record, updating:', {
+        recordId,
+        startedAt: existingRecord.started_at
+      });
+    }
+    
+    // Now update the record
+    const { data, error } = await supabase
       .from('chat_sessions')
       .update({
-        duration_seconds: Math.floor(durationSeconds),
+        duration_seconds: durationSeconds,
         message_count: messageCount,
         user_message_count: userMessageCount,
         assistant_message_count: assistantMessageCount,
-        ended_at: new Date().toISOString()
+        ended_at: endedAt
       })
-      .eq('id', recordId);
+      .eq('id', recordId)
+      .select();
+    
+    if (error) {
+      console.error('[Analytics] ❌ chat_sessions UPDATE failed:', {
+        message: error.message,
+        details: error.details,
+        hint: error.hint,
+        recordId,
+        code: error.code
+      });
+    } else {
+      console.log('[Analytics] ✓ chat_sessions UPDATE success:', {
+        recordId,
+        rowsUpdated: data?.length || 0,
+        endedAt: data?.[0]?.ended_at,
+        fullData: data?.[0]
+      });
+      if (!data || data.length === 0) {
+        console.error('[Analytics] ⚠️ UPDATE returned no rows despite record existing - possible RLS issue');
+      }
+    }
   } catch (error) {
-    console.warn('Analytics: Failed to end chat session', error);
+    console.error('[Analytics] ❌ Failed to end chat session:', error);
   }
 };
 

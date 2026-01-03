@@ -47,8 +47,10 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
   
   // Analytics tracking refs
   const analyticsRecordId = useRef<string | null>(null);
+  const trackChatStartPromise = useRef<Promise<string | null> | null>(null);
   const chatStartTime = useRef<number>(Date.now());
   const messagesRef = useRef(messages);
+  const hasEndedSession = useRef<boolean>(false);
   
   // Track if initial messages have been saved (to avoid duplicates)
   const initialMessagesSaved = useRef(false);
@@ -134,11 +136,81 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
     loadHistory();
   }, [character, existingMessages, instantGreeting, seriesId, episodeId]);
   
+  // Helper function to end chat session
+  const endChatSession = async () => {
+    // Prevent duplicate calls
+    if (hasEndedSession.current) {
+      return;
+    }
+    
+    // If recordId is not set, wait for the trackChatStart promise to complete
+    if (!analyticsRecordId.current && trackChatStartPromise.current) {
+      console.log('[Chat Analytics] Waiting for trackChatStart to complete...');
+      try {
+        const recordId = await trackChatStartPromise.current;
+        if (recordId) {
+          analyticsRecordId.current = recordId;
+          console.log('[Chat Analytics] Got recordId from promise:', recordId);
+        }
+      } catch (error) {
+        console.error('[Chat Analytics] Error waiting for trackChatStart:', error);
+      }
+    }
+    
+    if (!analyticsRecordId.current) {
+      console.warn('[Chat Analytics] No recordId available, cannot end session');
+      return;
+    }
+    
+    // Prevent ending session too quickly (likely from React StrictMode double-invocation)
+    const durationMs = Date.now() - chatStartTime.current;
+    const durationSeconds = Math.floor(durationMs / 1000);
+    if (durationMs < 1000) { // Less than 1 second
+      console.log('[Chat Analytics] Session too short (' + durationMs + 'ms), skipping end (likely StrictMode double-invocation)');
+      return;
+    }
+    
+    // Mark as ended immediately to prevent duplicate calls
+    hasEndedSession.current = true;
+    
+    const recordId = analyticsRecordId.current; // Save recordId before clearing
+    const currentMessages = messagesRef.current;
+    const userMsgCount = currentMessages.filter(m => m.role === 'user').length;
+    const assistantMsgCount = currentMessages.filter(m => m.role === 'assistant').length;
+    
+    console.log('[Chat Analytics] Ending session:', {
+      recordId,
+      durationSeconds,
+      messageCount: currentMessages.length,
+      userMsgCount,
+      assistantMsgCount
+    });
+    
+    trackChatEnd(
+      recordId,
+      durationSeconds,
+      currentMessages.length,
+      userMsgCount,
+      assistantMsgCount
+    );
+    analyticsRecordId.current = null; // Prevent duplicate calls
+    trackChatStartPromise.current = null;
+  };
+
+  // Wrapper for onClose that ends the session
+  const handleClose = () => {
+    endChatSession();
+    onClose();
+  };
+
   // Start chat session tracking on mount
   useEffect(() => {
     chatStartTime.current = Date.now();
+    analyticsRecordId.current = null; // Reset previous recordId
+    hasEndedSession.current = false; // Reset ended flag for new session
     
-    trackChatStart({
+    // Start new session tracking
+    const startPromise = trackChatStart({
       characterName: character,
       seriesId,
       seriesTitle,
@@ -146,26 +218,46 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
       episodeLabel,
       isWhatsAppStyle: isWhatsApp,
       entryPoint
-    }).then(recordId => {
-      analyticsRecordId.current = recordId;
     });
     
-    // End tracking on unmount
-    return () => {
-      if (analyticsRecordId.current) {
-        const durationSeconds = Math.floor((Date.now() - chatStartTime.current) / 1000);
-        const currentMessages = messagesRef.current;
-        const userMsgCount = currentMessages.filter(m => m.role === 'user').length;
-        const assistantMsgCount = currentMessages.filter(m => m.role === 'assistant').length;
-        
-        trackChatEnd(
-          analyticsRecordId.current,
-          durationSeconds,
-          currentMessages.length,
-          userMsgCount,
-          assistantMsgCount
-        );
+    trackChatStartPromise.current = startPromise;
+    
+    startPromise.then(recordId => {
+      if (recordId) {
+        console.log('[Chat Analytics] Session started, recordId:', recordId);
+        analyticsRecordId.current = recordId;
+      } else {
+        console.warn('[Chat Analytics] Failed to get recordId from trackChatStart');
       }
+    }).catch(error => {
+      console.error('[Chat Analytics] Error starting session:', error);
+    });
+    
+    // Handle page unload/visibility change
+    const handleBeforeUnload = () => {
+      endChatSession();
+    };
+    
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        endChatSession();
+      }
+    };
+    
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    window.addEventListener('pagehide', handleBeforeUnload);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    
+    // End tracking on unmount or dependency change
+    return () => {
+      // Only end session if it was actually started (has a recordId)
+      // This prevents ending a session that was just created
+      if (analyticsRecordId.current && !hasEndedSession.current) {
+        endChatSession();
+      }
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      window.removeEventListener('pagehide', handleBeforeUnload);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, [character, seriesId, seriesTitle, episodeId, episodeLabel, isWhatsApp, entryPoint]);
 
@@ -401,13 +493,13 @@ Generate ONLY the follow-up message, nothing else.
 
         {/* Dark Theme Header with Violet Accent */}
         <div className="relative z-10 flex items-center gap-2 px-3 py-2.5 bg-gradient-to-r from-[#1a1a24] to-[#121218] border-b border-violet-500/20 shadow-lg">
-          <button onClick={onClose} className="p-1 hover:bg-violet-500/20 rounded-full transition-colors active:scale-90 flex items-center">
+          <button onClick={handleClose} className="p-1 hover:bg-violet-500/20 rounded-full transition-colors active:scale-90 flex items-center">
             <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor" className="text-violet-400"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"></path></svg>
             <div className="w-9 h-9 rounded-full overflow-hidden border border-violet-500/30 ml-1 shadow-[0_0_15px_rgba(139,92,246,0.2)]">
               <img src={avatar} alt={character} className="w-full h-full object-cover" />
             </div>
           </button>
-          <div className="flex flex-col flex-1" onClick={onClose}>
+          <div className="flex flex-col flex-1" onClick={handleClose}>
             <h4 className="text-[16px] font-semibold text-white leading-tight truncate">{character}</h4>
             <p className="text-[12px] text-violet-400">online</p>
           </div>
@@ -507,7 +599,7 @@ Generate ONLY the follow-up message, nothing else.
               <h4 className="text-xl font-black italic tracking-tighter uppercase leading-none text-white">{character}</h4>
             </div>
           </div>
-          <button onClick={onClose} className="w-10 h-10 flex items-center justify-center hover:bg-violet-500/20 bg-[#1a1a24] rounded-full transition-all active:scale-90 border border-violet-500/20">
+          <button onClick={handleClose} className="w-10 h-10 flex items-center justify-center hover:bg-violet-500/20 bg-[#1a1a24] rounded-full transition-all active:scale-90 border border-violet-500/20">
              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor" className="w-5 h-5 text-violet-400/60"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
           </button>
         </div>
