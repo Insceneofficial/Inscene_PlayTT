@@ -250,6 +250,13 @@ CREATE POLICY "Allow public updates on video_sessions"
 CREATE POLICY "Allow public updates on chat_sessions"
   ON chat_sessions FOR UPDATE TO anon, authenticated USING (true) WITH CHECK (true);
 
+-- Allow selects (needed for .select() after updates and for analytics queries)
+CREATE POLICY "Allow public select on video_sessions"
+  ON video_sessions FOR SELECT TO anon, authenticated USING (true);
+
+CREATE POLICY "Allow public select on chat_sessions"
+  ON chat_sessions FOR SELECT TO anon, authenticated USING (true);
+
 -- Chat messages policies (insert, select, delete for the owning user)
 CREATE POLICY "Allow public inserts on chat_messages"
   ON chat_messages FOR INSERT TO anon, authenticated WITH CHECK (true);

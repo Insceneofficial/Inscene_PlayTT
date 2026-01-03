@@ -1,7 +1,7 @@
 import { GoogleGenAI } from "@google/genai";
 import React, { useState, useEffect, useRef } from 'react';
 import { trackChatStart, updateChatMessages, trackChatEnd } from '../lib/analytics';
-import { saveMessage, loadChatHistory, isUserLoggedIn, debugListAllMessages } from '../lib/chatStorage';
+import { saveMessage, loadChatHistory, isUserLoggedIn, debugListAllMessages, getUserMessageCount } from '../lib/chatStorage';
 import { getCharacterPrompt } from '../lib/characters';
 
 interface ChatPanelProps {
@@ -20,6 +20,7 @@ interface ChatPanelProps {
   seriesId?: string;
   seriesTitle?: string;
   episodeId?: number;
+  onWaitlistRequired?: () => void;
 }
 
 const ChatPanel: React.FC<ChatPanelProps> = ({ 
@@ -36,7 +37,8 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
   entryPoint = 'choice_modal' as const,
   seriesId,
   seriesTitle,
-  episodeId
+  episodeId,
+  onWaitlistRequired
 }) => {
   const [messages, setMessages] = useState<{ role: 'user' | 'assistant'; content: string; time: string }[]>([]);
   const [inputValue, setInputValue] = useState('');
@@ -425,6 +427,18 @@ Generate ONLY the follow-up message, nothing else.
 
   const handleSend = async () => {
     if (!inputValue.trim() || isTyping) return;
+    
+    // Check message count limit before sending
+    if (isUserLoggedIn()) {
+      const messageCount = await getUserMessageCount();
+      if (messageCount >= 10) {
+        // User has reached limit - show waitlist modal
+        if (onWaitlistRequired) {
+          onWaitlistRequired();
+        }
+        return;
+      }
+    }
     
     const apiKey = process.env.API_KEY;
     const userText = inputValue.trim();
