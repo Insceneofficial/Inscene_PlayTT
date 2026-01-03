@@ -659,7 +659,8 @@ interface ConversationHistoryEntry {
   messages: any[];
   character: string;
   avatar: string;
-  lastUpdate: number;
+  lastUpdate: number | undefined;
+  isTyping?: boolean;
 }
 
 const AppContent: React.FC = () => {
@@ -674,6 +675,8 @@ const AppContent: React.FC = () => {
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   
   const [conversations, setConversations] = useState<Record<string, ConversationHistoryEntry>>({});
+  const [typingStatus, setTypingStatus] = useState<Record<string, boolean>>({});
+  const [unseenCounts, setUnseenCounts] = useState<Record<string, number>>({});
 
   // Track viewer on app load
   useEffect(() => {
@@ -752,20 +755,107 @@ const AppContent: React.FC = () => {
   });
 
   const handleChatUpdate = (char: string, messages: any[]) => {
-    setConversations(prev => ({
-      ...prev,
-      [char]: {
-        ...prev[char],
-        character: char,
-        messages: messages,
-        avatar: prev[char]?.avatar || 
-          (char === 'Debu' ? DEBU_AVATAR : 
-           char === 'Priyank' ? PRIYANK_AVATAR : 
-           char === 'Arzoo' ? ARZOO_AVATAR : 
-           char === 'Anish' ? ANISH_AVATAR : 
-           CHIRAG_AVATAR),
-        lastUpdate: Date.now()
+    setConversations(prev => {
+      const existingConversation = prev[char];
+      const existingMessages = existingConversation?.messages || [];
+      const existingMessageCount = existingMessages.length;
+      const newMessageCount = messages.length;
+      
+      // Preserve existing lastUpdate by default - NEVER update it unless new messages are added
+      let lastUpdate = existingConversation?.lastUpdate;
+      
+      // Special case: If conversation exists with a lastUpdate but no messages in state,
+      // and we're loading many messages, this is likely an initial load from database.
+      // Preserve the existing lastUpdate instead of updating it.
+      const isInitialLoad = existingMessageCount === 0 && newMessageCount > 0 && lastUpdate !== undefined;
+      
+      if (isInitialLoad) {
+        // This is an initial load of existing messages - preserve the timestamp from the conversation entry
+        console.log('[App] Initial load detected for', char, 'preserving existing timestamp. Messages:', newMessageCount, 'lastUpdate:', lastUpdate, 'timestamp:', lastUpdate ? new Date(lastUpdate).toLocaleString() : 'none');
+      } else if (newMessageCount > existingMessageCount && !isInitialLoad) {
+        // New message was added - update timestamp based on last message
+        const newLastMessage = messages[messages.length - 1];
+        console.log('[App] New message detected, updating timestamp for', char, 'new count:', newMessageCount, 'old count:', existingMessageCount);
+        if (newLastMessage?.sent_at) {
+          // Message has sent_at timestamp from database
+          lastUpdate = new Date(newLastMessage.sent_at).getTime();
+        } else {
+          // For real-time messages without sent_at, use current time
+          lastUpdate = Date.now();
+        }
+      } else if (!lastUpdate && messages.length > 0 && existingMessageCount === 0) {
+        // First time creating conversation (no existing messages, no lastUpdate) - set initial timestamp from last message
+        const lastMessage = messages[messages.length - 1];
+        if (lastMessage?.sent_at) {
+          lastUpdate = new Date(lastMessage.sent_at).getTime();
+        } else {
+          lastUpdate = Date.now();
+        }
+      } else {
+        // Message count didn't increase - preserve existing lastUpdate
+        // This handles the case where chat is opened/closed without new messages
+        // DO NOT update lastUpdate - keep the existing value
+        console.log('[App] No new messages for', char, 'preserving timestamp. Count:', newMessageCount, 'existing:', existingMessageCount, 'lastUpdate:', lastUpdate, 'timestamp:', lastUpdate ? new Date(lastUpdate).toLocaleString() : 'none');
       }
+      
+      return {
+        ...prev,
+        [char]: {
+          ...prev[char],
+          character: char,
+          messages: messages,
+          avatar: prev[char]?.avatar || 
+            (char === 'Debu' ? DEBU_AVATAR : 
+             char === 'Priyank' ? PRIYANK_AVATAR : 
+             char === 'Arzoo' ? ARZOO_AVATAR : 
+             char === 'Anish' ? ANISH_AVATAR : 
+             CHIRAG_AVATAR),
+          lastUpdate: lastUpdate !== undefined ? lastUpdate : (existingConversation?.lastUpdate || Date.now())
+        }
+      };
+    });
+  };
+
+  // Clear typing status and track unseen messages when a new assistant message arrives
+  const prevMessagesRef = useRef<Record<string, any[]>>({});
+  useEffect(() => {
+    Object.keys(conversations).forEach(char => {
+      const currentMessages = conversations[char]?.messages || [];
+      const prevMessages = prevMessagesRef.current[char] || [];
+      const lastMessage = currentMessages[currentMessages.length - 1];
+      const prevLastMessage = prevMessages[prevMessages.length - 1];
+      
+      // Check if a new assistant message was added
+      if (lastMessage && lastMessage.role === 'assistant' && 
+          (!prevLastMessage || prevLastMessage.content !== lastMessage.content)) {
+        // Clear typing status if currently typing
+        if (typingStatus[char]) {
+          console.log('[App] New assistant message arrived, clearing typing status for', char);
+          setTypingStatus(prev => ({
+            ...prev,
+            [char]: false
+          }));
+        }
+        
+        // Increment unseen count if chat is not currently open
+        if (!chatData || chatData.char !== char) {
+          console.log('[App] New assistant message, incrementing unseen count for', char);
+          setUnseenCounts(prev => ({
+            ...prev,
+            [char]: (prev[char] || 0) + 1
+          }));
+        }
+      }
+      
+      prevMessagesRef.current[char] = currentMessages;
+    });
+  }, [conversations, typingStatus, chatData]);
+
+  const handleTypingStatusChange = (char: string, isTyping: boolean) => {
+    console.log('[App] Typing status change:', char, isTyping);
+    setTypingStatus(prev => ({
+      ...prev,
+      [char]: isTyping
     }));
   };
 
@@ -874,14 +964,21 @@ const AppContent: React.FC = () => {
                     .map((conv, idx) => (
                       <div 
                         key={idx}
-                        onClick={() => setChatData({ 
-                          char: conv.character, 
-                          avatar: conv.avatar, 
-                          history: conv.messages,
-                          isFromHistory: true,
-                          isWhatsApp: true,
-                          entryPoint: 'chat_history'
-                        })}
+                        onClick={() => {
+                          // Clear unseen count when opening chat
+                          setUnseenCounts(prev => ({
+                            ...prev,
+                            [conv.character]: 0
+                          }));
+                          setChatData({ 
+                            char: conv.character, 
+                            avatar: conv.avatar, 
+                            history: conv.messages,
+                            isFromHistory: true,
+                            isWhatsApp: true,
+                            entryPoint: 'chat_history'
+                          });
+                        }}
                         className="flex items-center gap-4 px-4 py-3.5 hover:bg-[#1a1a24]/50 active:bg-[#1a1a24] transition-all cursor-pointer group border-b border-violet-500/5"
                       >
                         <div className="relative w-[54px] h-[54px] rounded-full overflow-hidden bg-[#1a1a24] border border-violet-500/20">
@@ -891,16 +988,20 @@ const AppContent: React.FC = () => {
                           <div className="flex justify-between items-baseline mb-0.5">
                             <h4 className="text-[17px] font-bold text-white leading-tight truncate">{conv.character}</h4>
                             <span className="text-[11px] font-medium text-violet-400 whitespace-nowrap ml-2">
-                              {new Date(conv.lastUpdate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                              {conv.lastUpdate ? new Date(conv.lastUpdate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
                             </span>
                           </div>
                           <div className="flex justify-between items-center">
                             <p className="text-[14px] text-white/50 truncate pr-4 font-normal leading-tight">
-                              {conv.messages[conv.messages.length - 1]?.content || 'Tap to chat'}
+                              {typingStatus[conv.character] 
+                                ? 'typing...' 
+                                : (conv.messages[conv.messages.length - 1]?.content || 'Tap to chat')}
                             </p>
-                            <div className="bg-gradient-to-r from-violet-500 to-blue-500 text-white rounded-full min-w-[20px] h-5 flex items-center justify-center text-[10px] font-bold px-1.5 shadow-sm">
-                               1
-                            </div>
+                            {unseenCounts[conv.character] > 0 && (
+                              <div className="bg-gradient-to-r from-violet-500 to-blue-500 text-white rounded-full min-w-[20px] h-5 flex items-center justify-center text-[10px] font-bold px-1.5 shadow-sm">
+                                {unseenCounts[conv.character]}
+                              </div>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -1047,8 +1148,12 @@ const AppContent: React.FC = () => {
           instantGreeting={chatData.intro || ""}
           initialHook={chatData.hook || "Continuing conversation"}
           avatar={chatData.avatar || (selectedSeries?.avatars ? selectedSeries.avatars[chatData.char] : (chatData.char === 'Debu' ? DEBU_AVATAR : chatData.char === 'Priyank' ? PRIYANK_AVATAR : chatData.char === 'Arzoo' ? ARZOO_AVATAR : chatData.char === 'Anish' ? ANISH_AVATAR : CHIRAG_AVATAR))}
-          onClose={() => setChatData(null)}
+          onClose={() => {
+            // Don't clear typing status here - let it clear naturally when typing stops
+            setChatData(null);
+          }}
           onMessagesUpdate={(messages) => handleChatUpdate(chatData.char, messages)}
+          onTypingStatusChange={(isTyping) => handleTypingStatusChange(chatData.char, isTyping)}
           existingMessages={chatData.isFromHistory ? chatData.history : undefined}
           isWhatsApp={chatData.isWhatsApp}
           entryPoint={chatData.entryPoint || 'choice_modal'}

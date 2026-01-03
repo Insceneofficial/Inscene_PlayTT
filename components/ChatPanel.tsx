@@ -12,6 +12,7 @@ interface ChatPanelProps {
   avatar: string;
   onClose: () => void;
   onMessagesUpdate?: (messages: any[]) => void;
+  onTypingStatusChange?: (isTyping: boolean) => void;
   existingMessages?: { role: 'user' | 'assistant'; content: string }[];
   isWhatsApp?: boolean;
   // Analytics props
@@ -29,6 +30,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
   avatar, 
   onClose,
   onMessagesUpdate,
+  onTypingStatusChange,
   existingMessages,
   isWhatsApp = false,
   entryPoint = 'choice_modal' as const,
@@ -52,6 +54,9 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
   const messagesRef = useRef(messages);
   const hasEndedSession = useRef<boolean>(false);
   
+  // Store callback in ref so we can call it on unmount
+  const onTypingStatusChangeRef = useRef(onTypingStatusChange);
+  
   // Track if initial messages have been saved (to avoid duplicates)
   const initialMessagesSaved = useRef(false);
   
@@ -67,6 +72,11 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
     const maxMs = 2 * 60 * 1000; // 2 minutes
     return Math.floor(Math.random() * (maxMs - minMs)) + minMs;
   };
+  
+  // Keep callback ref in sync
+  useEffect(() => {
+    onTypingStatusChangeRef.current = onTypingStatusChange;
+  }, [onTypingStatusChange]);
   
   // Keep messagesRef in sync
   useEffect(() => {
@@ -284,6 +294,14 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
     }
   }, [messages]);
 
+  // Notify parent of typing status changes
+  useEffect(() => {
+    console.log('[ChatPanel] Typing status changed:', isTyping, 'Callback:', !!onTypingStatusChangeRef.current);
+    if (onTypingStatusChangeRef.current) {
+      onTypingStatusChangeRef.current(isTyping);
+    }
+  }, [isTyping]);
+
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
@@ -462,6 +480,10 @@ Generate ONLY the follow-up message, nothing else.
       }]);
     } finally {
       setIsTyping(false);
+      // Ensure typing status is cleared even if component unmounts
+      if (onTypingStatusChangeRef.current) {
+        onTypingStatusChangeRef.current(false);
+      }
     }
   };
 
@@ -501,12 +523,7 @@ Generate ONLY the follow-up message, nothing else.
           </button>
           <div className="flex flex-col flex-1" onClick={handleClose}>
             <h4 className="text-[16px] font-semibold text-white leading-tight truncate">{character}</h4>
-            <p className="text-[12px] text-violet-400">online</p>
-          </div>
-          <div className="flex items-center gap-4 mr-1 text-violet-400/70">
-             <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"></path></svg>
-             <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M20.01 15.38c-1.23 0-2.42-.2-3.53-.56a.977.977 0 0 0-1.01.24l-1.57 1.97c-2.83-1.35-5.43-3.9-6.63-6.83l1.88-1.55c.45-.34.48-.89.27-1.36-1.12-2.28-1.3-4.7-1.3-4.7 0-.55-.45-1-1-1H3.03C2.45 0 2 1.25 2 1.25c0 10.2 8.5 18.7 18.7 18.7h.06c.55 0 1-.45 1-1v-3.5c0-.55-.45-1-1-1z"></path></svg>
-             <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M12 7a2 2 0 1 0-.001 4.001A2 2 0 0 0 12 7zm0 10a2 2 0 1 0-.001 4.001A2 2 0 0 0 12 17zm0-5a2 2 0 1 0-.001 4.001A2 2 0 0 0 12 12z"></path></svg>
+            <p className="text-[12px] text-violet-400">{isTyping ? 'typing...' : 'online'}</p>
           </div>
         </div>
 
@@ -546,34 +563,19 @@ Generate ONLY the follow-up message, nothing else.
 
         {/* Input Bar */}
         <div className="relative z-10 bg-[#121218] border-t border-violet-500/10 px-3 py-3 flex items-center gap-2">
-          <button className="p-1 text-violet-400/60 hover:text-violet-400 transition-colors">
-            <svg viewBox="0 0 24 24" width="28" height="28" fill="currentColor"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"></path></svg>
-          </button>
-          
-          <div className="flex-1 flex items-center bg-[#1a1a24] rounded-full px-4 py-2.5 gap-3 border border-violet-500/10 focus-within:border-violet-500/30 transition-colors">
+          <div className="flex-1 flex items-center bg-[#1a1a24] rounded-full px-4 py-2.5 border border-violet-500/10 focus-within:border-violet-500/30 transition-colors">
             <input 
               type="text" value={inputValue} onChange={(e) => setInputValue(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleSend()} 
               placeholder="Message"
               className="flex-1 outline-none text-white text-[16px] bg-transparent placeholder:text-white/30"
             />
-            <button className="text-violet-400/50 hover:text-violet-400 transition-colors">
-              <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor"><path d="M16.5 6V17.5c0 2.21-1.79 4-4 4s-4-1.79-4-4V5c0-1.38 1.12-2.5 2.5-2.5s2.5 1.12 2.5 2.5v10.5c0 .55-.45 1-1 1s-1-.45-1-1V6H10v9.5c0 1.38 1.12 2.5 2.5 2.5s2.5-1.12 2.5-2.5V5c0-2.21-1.79-4-4-4S7 2.79 7 5v12.5c0 3.31 2.69 6 6 6s6-2.69 6-6V6h-1.5z"></path></svg>
-            </button>
           </div>
 
           <button 
-            onClick={handleSend} disabled={isTyping}
-            className={`w-11 h-11 rounded-full flex items-center justify-center transition-all shadow-lg ${
-              inputValue.trim() 
-                ? 'bg-gradient-to-br from-violet-500 to-blue-500 text-white shadow-[0_0_20px_rgba(139,92,246,0.3)]' 
-                : 'bg-[#1a1a24] text-violet-400/50'
-            }`}
+            onClick={handleSend} disabled={!inputValue.trim() || isTyping}
+            className="w-11 h-11 rounded-full flex items-center justify-center transition-all shadow-lg bg-gradient-to-br from-violet-500 to-blue-500 text-white shadow-[0_0_20px_rgba(139,92,246,0.3)] disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {inputValue.trim() ? (
-              <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"></path></svg>
-            ) : (
-              <svg viewBox="0 0 24 24" width="26" height="26" fill="currentColor"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"></path><path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"></path></svg>
-            )}
+            <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"></path></svg>
           </button>
         </div>
       </div>
