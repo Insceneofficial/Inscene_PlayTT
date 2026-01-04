@@ -59,16 +59,24 @@ const ReelItem: React.FC<{
   onEnterStory: (char: string, intro: string, hook: string, entryPoint: string) => void;
   onNextEpisode: () => void;
 }> = ({ episode, series, influencerName, influencerTheme, isActive, isMuted, toggleMute, onEnterStory, onNextEpisode }) => {
+  console.log('[InfluencerPage ReelItem] Component rendering - isActive:', isActive, 'episode:', episode?.label);
+  
   const videoRef = React.useRef<HTMLVideoElement>(null);
+  const containerRef = React.useRef<HTMLDivElement>(null);
   const [loading, setLoading] = useState(true);
   const [progress, setProgress] = useState(0);
   const [duration, setDuration] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
   const [isEnded, setIsEnded] = useState(false);
   const [isScrubbing, setIsScrubbing] = useState(false);
+  const [isUIHidden, setIsUIHidden] = useState(false);
 
   // Analytics tracking
   const analyticsRecordId = React.useRef<string | null>(null);
+  const inactivityTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const activityHandlerRef = React.useRef<((event?: Event) => void) | null>(null);
+  const mouseMoveHandlerRef = React.useRef<((event?: Event) => void) | null>(null);
+  const lastMouseMoveTimeRef = React.useRef<number>(0);
   const trackVideoStartPromise = React.useRef<Promise<string | null> | null>(null);
   const progressIntervalRef = React.useRef<ReturnType<typeof setInterval> | null>(null);
   const seekCountRef = React.useRef(0);
@@ -219,6 +227,135 @@ const ReelItem: React.FC<{
     }
   }, [isEnded, isActive, onNextEpisode]);
 
+  // Inactivity detection - hide UI after 5 seconds of inactivity
+  useEffect(() => {
+    console.log('[InfluencerPage Inactivity] Effect running - isActive:', isActive, 'isEnded:', isEnded);
+    
+    if (!isActive || isEnded) {
+      console.log('[InfluencerPage Inactivity] Video not active or ended, resetting UI visibility');
+      setIsUIHidden(false);
+      if (inactivityTimerRef.current) {
+        clearTimeout(inactivityTimerRef.current);
+        inactivityTimerRef.current = null;
+      }
+      return;
+    }
+
+    const resetInactivityTimer = () => {
+      console.log('[InfluencerPage Inactivity] Resetting timer - showing UI');
+      setIsUIHidden(false);
+      
+      if (inactivityTimerRef.current) {
+        console.log('[InfluencerPage Inactivity] Clearing existing timer');
+        clearTimeout(inactivityTimerRef.current);
+        inactivityTimerRef.current = null;
+      }
+      
+      console.log('[InfluencerPage Inactivity] Setting new timer for 5 seconds');
+      inactivityTimerRef.current = setTimeout(() => {
+        console.log('[InfluencerPage Inactivity] Timer fired - hiding UI');
+        setIsUIHidden(true);
+      }, 5000);
+    };
+
+    const handleActivity = (event?: Event) => {
+      const eventType = event?.type || 'unknown';
+      console.log('[InfluencerPage Inactivity] Activity detected:', eventType);
+      resetInactivityTimer();
+    };
+    
+    // Throttled handler for mouse movements - only reset timer once per second
+    const handleMouseMove = (event?: Event) => {
+      const now = Date.now();
+      // Only reset if it's been at least 1 second since last mouse move reset
+      if (now - lastMouseMoveTimeRef.current >= 1000) {
+        console.log('[InfluencerPage Inactivity] Mouse movement detected (throttled)');
+        lastMouseMoveTimeRef.current = now;
+        resetInactivityTimer();
+      }
+    };
+    
+    activityHandlerRef.current = handleActivity;
+    mouseMoveHandlerRef.current = handleMouseMove;
+
+    const setupTimeout = setTimeout(() => {
+      const container = containerRef.current;
+      const video = videoRef.current;
+      
+      console.log('[InfluencerPage Inactivity] Refs check - container:', !!container, 'video:', !!video);
+      
+      if (!container || !video) {
+        console.log('[InfluencerPage Inactivity] Refs not ready after timeout');
+        return;
+      }
+      
+      console.log('[InfluencerPage Inactivity] Setting up inactivity detection');
+      resetInactivityTimer();
+
+      const handler = activityHandlerRef.current;
+      const mouseMoveHandler = mouseMoveHandlerRef.current;
+      if (handler && mouseMoveHandler) {
+        console.log('[InfluencerPage Inactivity] Attaching event listeners');
+        // Immediate handlers for clicks/touches
+        container.addEventListener('mousedown', handler);
+        container.addEventListener('touchstart', handler, { passive: true });
+        container.addEventListener('touchmove', handler, { passive: true });
+        container.addEventListener('click', handler);
+        container.addEventListener('wheel', handler, { passive: true });
+        
+        // Throttled handlers for mouse movements
+        container.addEventListener('mousemove', mouseMoveHandler, { passive: true });
+        container.addEventListener('pointermove', mouseMoveHandler, { passive: true });
+        
+        video.addEventListener('mousedown', handler);
+        video.addEventListener('touchstart', handler, { passive: true });
+        video.addEventListener('touchmove', handler, { passive: true });
+        video.addEventListener('click', handler);
+        video.addEventListener('mousemove', mouseMoveHandler, { passive: true });
+        video.addEventListener('pointermove', mouseMoveHandler, { passive: true });
+        console.log('[InfluencerPage Inactivity] Event listeners attached');
+      }
+    }, 500);
+
+    return () => {
+      console.log('[InfluencerPage Inactivity] Cleanup - clearing timers');
+      clearTimeout(setupTimeout);
+      if (inactivityTimerRef.current) {
+        clearTimeout(inactivityTimerRef.current);
+        inactivityTimerRef.current = null;
+      }
+      
+      const container = containerRef.current;
+      const video = videoRef.current;
+      const handler = activityHandlerRef.current;
+      const mouseMoveHandler = mouseMoveHandlerRef.current;
+      
+      if (container && handler && mouseMoveHandler) {
+        container.removeEventListener('mousedown', handler);
+        container.removeEventListener('touchstart', handler);
+        container.removeEventListener('touchmove', handler);
+        container.removeEventListener('click', handler);
+        container.removeEventListener('wheel', handler);
+        container.removeEventListener('mousemove', mouseMoveHandler);
+        container.removeEventListener('pointermove', mouseMoveHandler);
+      }
+      
+      if (video && handler && mouseMoveHandler) {
+        video.removeEventListener('mousedown', handler);
+        video.removeEventListener('touchstart', handler);
+        video.removeEventListener('touchmove', handler);
+        video.removeEventListener('click', handler);
+        video.removeEventListener('mousemove', mouseMoveHandler);
+        video.removeEventListener('pointermove', mouseMoveHandler);
+      }
+    };
+  }, [isActive, isEnded]);
+
+  // Debug: Log UI hidden state changes
+  useEffect(() => {
+    console.log('[InfluencerPage Inactivity] UI Hidden state changed:', isUIHidden);
+  }, [isUIHidden]);
+
   const handleTimeUpdate = () => {
     if (videoRef.current) {
       setCurrentTime(videoRef.current.currentTime);
@@ -233,6 +370,14 @@ const ReelItem: React.FC<{
       videoRef.current.currentTime = newTime;
       setProgress(parseFloat(e.target.value));
       seekCountRef.current += 1;
+      // Reset inactivity timer on seek
+      setIsUIHidden(false);
+      if (inactivityTimerRef.current) {
+        clearTimeout(inactivityTimerRef.current);
+        inactivityTimerRef.current = setTimeout(() => {
+          setIsUIHidden(true);
+        }, 5000);
+      }
     }
   };
 
@@ -249,8 +394,13 @@ const ReelItem: React.FC<{
 
   const influencerTriggers = episode.triggers?.filter((t: any) => t.char === influencerName) || [];
 
+  // Debug: Log render state
+  if (isActive && !isEnded) {
+    console.log('[InfluencerPage ReelItem] Render - isUIHidden:', isUIHidden, 'isActive:', isActive, 'isEnded:', isEnded);
+  }
+
   return (
-    <div className="reel-item flex items-center justify-center overflow-hidden bg-[#0a0a0f]">
+    <div ref={containerRef} className="reel-item flex items-center justify-center overflow-hidden bg-[#0a0a0f]">
       <video
         ref={videoRef}
         src={episode.url}
@@ -290,7 +440,7 @@ const ReelItem: React.FC<{
 
       {!isEnded && (
         <>
-          <div className="absolute bottom-24 left-6 pointer-events-none z-50">
+          <div className={`absolute bottom-24 left-6 pointer-events-none z-50 transition-opacity duration-500 ${isUIHidden ? 'opacity-0' : 'opacity-100'}`}>
             <div className="flex items-center gap-2 mb-2">
               <div className="h-[2px] w-6 bg-violet-500 rounded-full shadow-[0_0_8px_#8b5cf6]" />
               <span className="text-[10px] font-black tracking-[0.3em] uppercase text-white/90 drop-shadow-md">{episode.label}</span>
@@ -300,8 +450,18 @@ const ReelItem: React.FC<{
 
           <div className="absolute right-4 bottom-24 flex flex-col items-center gap-8 z-[100] pointer-events-auto">
             <button 
-              onClick={(e) => { e.stopPropagation(); toggleMute(); }}
-              className="flex flex-col items-center gap-1.5 active:scale-90 transition-all group mb-2"
+              onClick={(e) => { 
+                e.stopPropagation(); 
+                setIsUIHidden(false);
+                if (inactivityTimerRef.current) {
+                  clearTimeout(inactivityTimerRef.current);
+                  inactivityTimerRef.current = setTimeout(() => {
+                    setIsUIHidden(true);
+                  }, 5000);
+                }
+                toggleMute(); 
+              }}
+              className={`flex flex-col items-center gap-1.5 active:scale-90 transition-all group mb-2 transition-opacity duration-500 ${isUIHidden ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}
             >
               <div className="w-12 h-12 rounded-full bg-[#1a1a24]/80 backdrop-blur-xl border border-violet-500/20 flex items-center justify-center text-white shadow-2xl transition-all group-hover:bg-violet-500/20 group-hover:border-violet-500/40">
                 {isMuted ? (
@@ -316,7 +476,11 @@ const ReelItem: React.FC<{
             {influencerTriggers.map((t: any, idx: number) => (
               <button 
                 key={idx}
-                onClick={(e) => { e.stopPropagation(); onEnterStory(t.char, t.intro, t.hook, 'video_sidebar'); }}
+                data-chat-button
+                onClick={(e) => { 
+                  e.stopPropagation(); 
+                  onEnterStory(t.char, t.intro, t.hook, 'video_sidebar'); 
+                }}
                 className="flex flex-col items-center gap-2 active:scale-95 transition-all group animate-slide-up-side"
                 style={{ animationDelay: `${idx * 150}ms` }}
               >
@@ -342,7 +506,7 @@ const ReelItem: React.FC<{
 
 
       {!isEnded && (
-        <div className="absolute bottom-0 left-0 right-0 z-[70] pt-20 group/scrubber transition-all pointer-events-none">
+        <div className={`absolute bottom-0 left-0 right-0 z-[70] pt-20 group/scrubber transition-all pointer-events-none transition-opacity duration-500 ${isUIHidden ? 'opacity-0' : 'opacity-100'}`}>
           <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-[#0a0a0f]/90 to-transparent h-24 pointer-events-none" />
           <div className={`relative px-6 pb-6 transition-all duration-300 ${isScrubbing ? 'translate-y-[-10px]' : 'translate-y-0'}`}>
             <div className="relative h-6 flex items-center">
@@ -353,9 +517,15 @@ const ReelItem: React.FC<{
                 step="0.1" 
                 value={progress} 
                 onChange={handleSeek} 
-                onMouseDown={() => setIsScrubbing(true)}
+                onMouseDown={() => {
+                  setIsScrubbing(true);
+                  setIsUIHidden(false);
+                }}
                 onMouseUp={() => setIsScrubbing(false)}
-                onTouchStart={() => setIsScrubbing(true)}
+                onTouchStart={() => {
+                  setIsScrubbing(true);
+                  setIsUIHidden(false);
+                }}
                 onTouchEnd={() => setIsScrubbing(false)}
                 className="scrub-range w-full h-1 bg-white/20 rounded-full appearance-none cursor-pointer pointer-events-auto z-10" 
               />
@@ -389,6 +559,11 @@ const InfluencerPage: React.FC = () => {
   const [chatData, setChatData] = useState<any>(null);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [isWaitlistModalOpen, setIsWaitlistModalOpen] = useState(false);
+  const [isCloseButtonHidden, setIsCloseButtonHidden] = useState(false);
+  const closeButtonInactivityTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const closeButtonActivityHandlerRef = React.useRef<((event?: Event) => void) | null>(null);
+  const closeButtonMouseMoveHandlerRef = React.useRef<((event?: Event) => void) | null>(null);
+  const lastCloseButtonMouseMoveTimeRef = React.useRef<number>(0);
 
   // Initialize series catalog
   useEffect(() => {
@@ -404,6 +579,90 @@ const InfluencerPage: React.FC = () => {
       trackPageView({ viewType: 'video' });
     }
   }, [influencer]);
+
+  // Close button inactivity detection - hide close button after 5 seconds of inactivity
+  useEffect(() => {
+    if (selectedEpisodeIndex === null || chatData) {
+      setIsCloseButtonHidden(false);
+      if (closeButtonInactivityTimerRef.current) {
+        clearTimeout(closeButtonInactivityTimerRef.current);
+        closeButtonInactivityTimerRef.current = null;
+      }
+      return;
+    }
+
+    const resetCloseButtonInactivityTimer = () => {
+      setIsCloseButtonHidden(false);
+      
+      if (closeButtonInactivityTimerRef.current) {
+        clearTimeout(closeButtonInactivityTimerRef.current);
+        closeButtonInactivityTimerRef.current = null;
+      }
+      
+      closeButtonInactivityTimerRef.current = setTimeout(() => {
+        setIsCloseButtonHidden(true);
+      }, 5000);
+    };
+
+    const handleCloseButtonActivity = (event?: Event) => {
+      resetCloseButtonInactivityTimer();
+    };
+
+    const handleCloseButtonMouseMove = (event?: Event) => {
+      const now = Date.now();
+      if (now - lastCloseButtonMouseMoveTimeRef.current >= 1000) {
+        lastCloseButtonMouseMoveTimeRef.current = now;
+        resetCloseButtonInactivityTimer();
+      }
+    };
+
+    closeButtonActivityHandlerRef.current = handleCloseButtonActivity;
+    closeButtonMouseMoveHandlerRef.current = handleCloseButtonMouseMove;
+
+    const setupTimeout = setTimeout(() => {
+      const container = document.querySelector('.reel-item');
+      
+      if (!container) {
+        return;
+      }
+      
+      resetCloseButtonInactivityTimer();
+
+      const handler = closeButtonActivityHandlerRef.current;
+      const mouseMoveHandler = closeButtonMouseMoveHandlerRef.current;
+      if (handler && mouseMoveHandler) {
+        container.addEventListener('mousedown', handler);
+        container.addEventListener('touchstart', handler, { passive: true });
+        container.addEventListener('touchmove', handler, { passive: true });
+        container.addEventListener('click', handler);
+        container.addEventListener('wheel', handler, { passive: true });
+        container.addEventListener('mousemove', mouseMoveHandler, { passive: true });
+        container.addEventListener('pointermove', mouseMoveHandler, { passive: true });
+      }
+    }, 500);
+
+    return () => {
+      clearTimeout(setupTimeout);
+      if (closeButtonInactivityTimerRef.current) {
+        clearTimeout(closeButtonInactivityTimerRef.current);
+        closeButtonInactivityTimerRef.current = null;
+      }
+      
+      const container = document.querySelector('.reel-item');
+      const handler = closeButtonActivityHandlerRef.current;
+      const mouseMoveHandler = closeButtonMouseMoveHandlerRef.current;
+      
+      if (container && handler && mouseMoveHandler) {
+        container.removeEventListener('mousedown', handler);
+        container.removeEventListener('touchstart', handler);
+        container.removeEventListener('touchmove', handler);
+        container.removeEventListener('click', handler);
+        container.removeEventListener('wheel', handler);
+        container.removeEventListener('mousemove', mouseMoveHandler);
+        container.removeEventListener('pointermove', mouseMoveHandler);
+      }
+    };
+  }, [selectedEpisodeIndex, chatData]);
 
   // Filter episodes to only show those with this influencer
   const influencerEpisodes = series?.episodes?.filter((ep: any) => 
@@ -582,8 +841,17 @@ const InfluencerPage: React.FC = () => {
         <div className="fixed inset-0 z-[5000] bg-[#0a0a0f]">
           {/* Close button */}
           <button
-            onClick={() => setSelectedEpisodeIndex(null)}
-            className="absolute top-6 left-6 z-[6000] w-12 h-12 rounded-full bg-[#1a1a24]/80 backdrop-blur-xl border border-violet-500/20 flex items-center justify-center text-white shadow-2xl transition-all hover:bg-violet-500/20"
+            onClick={() => {
+              setIsCloseButtonHidden(false);
+              if (closeButtonInactivityTimerRef.current) {
+                clearTimeout(closeButtonInactivityTimerRef.current);
+                closeButtonInactivityTimerRef.current = setTimeout(() => {
+                  setIsCloseButtonHidden(true);
+                }, 5000);
+              }
+              setSelectedEpisodeIndex(null);
+            }}
+            className={`absolute top-6 left-6 z-[6000] w-12 h-12 rounded-full bg-[#1a1a24]/80 backdrop-blur-xl border border-violet-500/20 flex items-center justify-center text-white shadow-2xl transition-all hover:bg-violet-500/20 transition-opacity duration-500 ${isCloseButtonHidden ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}
           >
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor" className="w-6 h-6">
               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />

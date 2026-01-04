@@ -194,7 +194,6 @@ export const updateVideoProgress = async (
     await supabase
       .from('video_sessions')
       .update({
-        watch_duration_seconds: Math.floor(watchDurationSeconds),
         video_duration_seconds: Math.floor(videoDurationSeconds),
         completion_percentage: Math.round(completionPercentage * 100) / 100,
         paused_count: pausedCount,
