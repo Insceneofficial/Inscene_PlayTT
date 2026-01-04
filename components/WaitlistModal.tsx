@@ -36,7 +36,7 @@ const WaitlistModal: React.FC<WaitlistModalProps> = ({ isOpen, onClose }) => {
   };
 
   return (
-    <div className="fixed inset-0 z-[3000] flex items-center justify-center p-6 bg-[#0a0a0f]/90 backdrop-blur-sm animate-fade-in">
+    <div className="fixed inset-0 z-[7000] flex items-center justify-center p-6 bg-[#0a0a0f]/90 backdrop-blur-sm animate-fade-in">
       <div className="relative w-full max-w-md bg-[#121218]/95 backdrop-blur-[60px] border border-violet-500/20 rounded-[3.5rem] overflow-hidden shadow-[0_30px_100px_rgba(139,92,246,0.2)] p-8 animate-slide-up">
         {/* Close Button */}
         <button 
