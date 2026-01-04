@@ -683,6 +683,8 @@ const AppContent: React.FC = () => {
   const [conversations, setConversations] = useState<Record<string, ConversationHistoryEntry>>({});
   const [typingStatus, setTypingStatus] = useState<Record<string, boolean>>({});
   const [unseenCounts, setUnseenCounts] = useState<Record<string, number>>({});
+  const [searchQuery, setSearchQuery] = useState('');
+  const [isSearchActive, setIsSearchActive] = useState(false);
 
   // Initialize series catalog for influencer mapping
   useEffect(() => {
@@ -965,15 +967,39 @@ const AppContent: React.FC = () => {
               {/* Dark Theme Chat Header */}
               <div className="bg-gradient-to-r from-[#1a1a24] to-[#121218] text-white pt-10 px-6 pb-4 shadow-lg border-b border-violet-500/10">
                 <div className="flex items-center justify-between">
-                  <h1 className="text-2xl font-bold tracking-wide">Chats</h1>
-                  <div className="flex items-center gap-5">
-                    <button className="p-1 hover:bg-violet-500/20 rounded-full transition-colors">
-                      <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" className="text-violet-400"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
-                    </button>
-                    <button className="p-1 hover:bg-violet-500/20 rounded-full transition-colors">
-                      <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" className="text-violet-400"><path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2 s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/></svg>
-                    </button>
-                  </div>
+                  {isSearchActive ? (
+                    <div className="flex-1 flex items-center gap-3 mr-4">
+                      <input
+                        type="text"
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        placeholder="Search chats..."
+                        autoFocus
+                        className="flex-1 bg-[#0a0a0f] border border-violet-500/20 rounded-full px-4 py-2 text-white placeholder:text-white/30 focus:outline-none focus:border-violet-500/50 text-sm"
+                      />
+                      <button
+                        onClick={() => {
+                          setIsSearchActive(false);
+                          setSearchQuery('');
+                        }}
+                        className="p-1 hover:bg-violet-500/20 rounded-full transition-colors"
+                      >
+                        <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" className="text-violet-400"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+                      </button>
+                    </div>
+                  ) : (
+                    <>
+                      <h1 className="text-2xl font-bold tracking-wide">Chats</h1>
+                      <div className="flex items-center gap-5">
+                        <button 
+                          onClick={() => setIsSearchActive(true)}
+                          className="p-1 hover:bg-violet-500/20 rounded-full transition-colors"
+                        >
+                          <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" className="text-violet-400"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+                        </button>
+                      </div>
+                    </>
+                  )}
                 </div>
               </div>
 
@@ -984,10 +1010,28 @@ const AppContent: React.FC = () => {
                     <h3 className="text-lg font-medium mb-1">Your inbox is quiet</h3>
                     <p className="text-sm px-10 text-white/30">Messages from characters you interact with will appear here.</p>
                   </div>
-                ) : (
-                  (Object.values(conversations) as ConversationHistoryEntry[])
-                    .sort((a, b) => b.lastUpdate - a.lastUpdate)
-                    .map((conv, idx) => (
+                ) : (() => {
+                  const filteredConversations = (Object.values(conversations) as ConversationHistoryEntry[])
+                    .filter((conv) => {
+                      if (!searchQuery.trim()) return true;
+                      const query = searchQuery.toLowerCase();
+                      return (
+                        conv.character.toLowerCase().includes(query) ||
+                        conv.messages.some(msg => msg.content.toLowerCase().includes(query))
+                      );
+                    })
+                    .sort((a, b) => b.lastUpdate - a.lastUpdate);
+                  
+                  if (searchQuery.trim() && filteredConversations.length === 0) {
+                    return (
+                      <div className="flex flex-col items-center justify-center py-20 text-center animate-fade-in text-white/40">
+                        <h3 className="text-lg font-medium mb-1">No results found</h3>
+                        <p className="text-sm px-10 text-white/30">Try searching for a different name or message.</p>
+                      </div>
+                    );
+                  }
+                  
+                  return filteredConversations.map((conv, idx) => (
                       <div 
                         key={idx}
                         onClick={() => {
@@ -1031,17 +1075,9 @@ const AppContent: React.FC = () => {
                           </div>
                         </div>
                       </div>
-                    ))
-                )}
+                    ));
+                })()}
               </div>
-
-              {/* Floating Action Button */}
-              <button 
-                onClick={() => setCurrentView('discover')}
-                className="fixed bottom-24 right-6 w-16 h-16 bg-gradient-to-br from-violet-500 to-blue-500 rounded-full shadow-[0_4px_20px_rgba(139,92,246,0.4)] flex items-center justify-center text-white active:scale-90 transition-transform z-[1002]"
-              >
-                <svg viewBox="0 0 24 24" width="30" height="30" fill="currentColor"><path d="M20 2H4c-1.1 0-1.99.9-1.99 2L2 22l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zM6 9h12v2H6V9zm8 5H6v-2h8v2zm4-5H6V7h12v2z"/></svg>
-              </button>
             </div>
           )}
         </main>
