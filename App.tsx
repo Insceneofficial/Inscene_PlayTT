@@ -1235,15 +1235,6 @@ const AppContent: React.FC = () => {
                         />
                         <div className="absolute inset-0 bg-gradient-to-t from-[#0a0a0f]/90 via-transparent to-transparent" />
                         <div className="absolute bottom-0 left-0 right-0 p-4">
-                          <div className="flex items-center gap-2 mb-1">
-                            <div className={`h-2 w-2 rounded-full ${
-                              influencer.theme === 'blue' ? 'bg-blue-500' : 
-                              influencer.theme === 'cyan' ? 'bg-cyan-400' : 
-                              influencer.theme === 'green' ? 'bg-emerald-400' : 
-                              'bg-violet-500'
-                            } animate-pulse shadow-[0_0_8px_currentColor]`} />
-                            <span className="text-[8px] font-black tracking-[0.2em] uppercase text-white/60">Live</span>
-                          </div>
                           <h3 className="text-base font-black uppercase tracking-tight text-white mb-1">{influencer.name}</h3>
                           <p className="text-[9px] font-medium text-white/50 line-clamp-2">{influencer.seriesTitle}</p>
                         </div>

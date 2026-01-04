@@ -492,6 +492,7 @@ const ReelItem: React.FC<{
                     name={influencerName} 
                     theme="purple"
                     size="w-14 h-14"
+                    isOnline={false}
                    />
                 </div>
               </button>
@@ -769,8 +770,9 @@ const InfluencerPage: React.FC = () => {
           <CharacterDP 
             src={influencer.avatar} 
             name={influencer.name} 
-            theme={influencer.theme} 
+            theme="purple"
             size="w-32 h-32"
+            isOnline={false}
           />
           <div className="flex-1 text-center md:text-left">
             <h1 className="text-5xl font-black italic uppercase tracking-tighter mb-2">{influencer.name}</h1>
