@@ -5,6 +5,7 @@ import ChatPanel from './ChatPanel.tsx';
 import UserMenu from './UserMenu.tsx';
 import AuthModal from './AuthModal.tsx';
 import WaitlistModal from './WaitlistModal.tsx';
+import ChatWidget from './ChatWidget.tsx';
 import { useAuth } from '../lib/auth';
 import { getUserMessageCount, MAX_USER_MESSAGES, hasUnlimitedMessages } from '../lib/chatStorage';
 import { getInfluencerBySlug, getSeriesForInfluencer, setSeriesCatalog } from '../lib/influencerMapping';
@@ -469,7 +470,7 @@ const ReelItem: React.FC<{
             <p className="text-white text-xs font-medium opacity-60 max-w-[200px] leading-tight drop-shadow-lg">{series.reelHint || 'Roleplay with the characters to change their destiny'}</p>
           </div>
 
-          <div className="absolute right-4 bottom-24 flex flex-col items-center gap-8 z-[100] pointer-events-auto">
+          <div className="absolute right-4 bottom-24 flex flex-col items-end gap-4 z-[100] pointer-events-auto max-w-[280px]">
             <button 
               onClick={(e) => { 
                 e.stopPropagation(); 
@@ -494,29 +495,21 @@ const ReelItem: React.FC<{
             </button>
 
             {influencerTriggers.map((t: any, idx: number) => (
-              <button 
+              <div
                 key={idx}
                 data-chat-button
-                onClick={(e) => { 
-                  e.stopPropagation(); 
-                  onEnterStory(t.char, t.intro, t.hook, 'video_sidebar'); 
-                }}
-                className="flex flex-col items-center gap-2 active:scale-95 transition-all group animate-slide-up-side"
+                className="w-full animate-slide-up-side"
                 style={{ animationDelay: `${idx * 150}ms` }}
               >
-                <div className="relative group animate-chat-pulse">
-                   <div className="absolute inset-0 rounded-full blur-xl bg-gradient-to-r from-violet-500/60 to-blue-500/60 animate-pulse-glow" />
-                   <div className="absolute inset-[-4px] rounded-full border-2 border-violet-400/50 animate-ring-pulse" />
-                   <div className={`absolute inset-0 rounded-full blur-xl opacity-0 group-hover:opacity-60 transition-opacity ${influencerTheme === 'blue' ? 'bg-blue-500' : influencerTheme === 'cyan' ? 'bg-cyan-400' : influencerTheme === 'green' ? 'bg-emerald-400' : 'bg-violet-500'}`} />
-                   <CharacterDP 
-                    src={series.avatars[influencerName]} 
-                    name={influencerName} 
-                    theme="purple"
-                    size="w-14 h-14"
-                    isOnline={false}
-                   />
-                </div>
-              </button>
+                <ChatWidget
+                  characterName={influencerName}
+                  avatar={series.avatars[influencerName]}
+                  onClick={() => {
+                    onEnterStory(t.char, t.intro, t.hook, 'video_sidebar');
+                  }}
+                  isOnline={true}
+                />
+              </div>
             ))}
           </div>
         </>
