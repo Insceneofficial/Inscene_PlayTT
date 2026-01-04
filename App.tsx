@@ -466,7 +466,7 @@ const ReelItem: React.FC<{
         }
       };
     }
-  }, [isActive, series, episode, isMuted]);
+  }, [isActive, series, episode]);
 
   // Track video end
   useEffect(() => {
@@ -567,7 +567,6 @@ const ReelItem: React.FC<{
                   <svg viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5"><path d="M13.5 4.06c0-1.336-1.616-2.005-2.56-1.06l-4.5 4.5H4.508c-1.141 0-2.318.664-2.66 1.905A9.76 9.76 0 0 0 1.5 12c0 .898.121 1.768.35 2.595.341 1.24 1.518 1.905 2.659 1.905h1.93l4.5 4.5c.945.945 2.561.276 2.561-1.06V4.06ZM17.78 9.22a.75.75 0 1 0-1.06 1.06 4.25 4.25 0 0 1 0 6.01.75.75 0 0 0 1.06 1.06 5.75 5.75 0 0 0 0-8.13ZM21.03 5.97a.75.75 0 0 0-1.06 1.06 8.5 8.5 0 0 1 0 12.02.75.75 0 1 0 1.06 1.06 10 10 0 0 0 0-14.14Z" /></svg>
                 )}
               </div>
-              <span className="text-[8px] font-black uppercase tracking-[0.2em] text-white/60 group-hover:text-white">Mute</span>
             </button>
 
             {episode.triggers.map((t: any, idx: number) => (
@@ -581,19 +580,16 @@ const ReelItem: React.FC<{
                 className="flex flex-col items-center gap-2 active:scale-95 transition-all group animate-slide-up-side"
                 style={{ animationDelay: `${idx * 150}ms` }}
               >
-                <div className="relative group">
+                <div className="relative group animate-chat-pulse">
+                   <div className="absolute inset-0 rounded-full blur-xl bg-gradient-to-r from-violet-500/60 to-blue-500/60 animate-pulse-glow" />
+                   <div className="absolute inset-[-4px] rounded-full border-2 border-violet-400/50 animate-ring-pulse" />
                    <div className={`absolute inset-0 rounded-full blur-xl opacity-0 group-hover:opacity-60 transition-opacity ${t.char === 'Priyank' ? 'bg-blue-500' : t.char === 'Arzoo' ? 'bg-pink-500' : t.char === 'Anish' ? 'bg-cyan-400' : t.char === 'Chirag' ? 'bg-emerald-400' : 'bg-violet-500'}`} />
                    <CharacterDP 
                     src={series.avatars[t.char]} 
                     name={t.char} 
-                    theme={t.char === 'Priyank' ? 'blue' : t.char === 'Arzoo' ? 'pink' : t.char === 'Anish' ? 'cyan' : t.char === 'Chirag' ? 'green' : 'purple'} 
+                    theme="purple"
                     size="w-14 h-14"
                    />
-                </div>
-                <div className={`px-2 py-0.5 rounded-full border border-violet-500/20 bg-[#1a1a24]/80 backdrop-blur-md shadow-xl group-hover:bg-violet-500 group-hover:border-violet-500 transition-all`}>
-                  <span className="text-[6px] font-black uppercase tracking-[0.1em] text-white group-hover:text-white whitespace-nowrap">
-                    CHAT {t.char.toUpperCase()}
-                  </span>
                 </div>
               </button>
             ))}
@@ -619,9 +615,6 @@ const ReelItem: React.FC<{
                     theme={t.char === 'Priyank' ? 'blue' : t.char === 'Arzoo' ? 'pink' : t.char === 'Anish' ? 'cyan' : t.char === 'Chirag' ? 'green' : 'purple'} 
                     size="w-10 h-10"
                   />
-                  <div>
-                    <span className="text-xs font-black uppercase tracking-widest text-white/80 group-hover:text-white transition-colors">Chat with {t.char}</span>
-                  </div>
                 </button>
              ))}
            </div>
@@ -1576,6 +1569,21 @@ const AppContent: React.FC = () => {
         .animate-slide-up { animation: slideUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
         .animate-fade-in { animation: fadeIn 0.4s ease-out forwards; }
+        @keyframes pulseGlow { 
+          0%, 100% { opacity: 0.5; transform: scale(1); }
+          50% { opacity: 0.9; transform: scale(1.08); }
+        }
+        .animate-pulse-glow { animation: pulseGlow 1.5s ease-in-out infinite; }
+        @keyframes chatPulse {
+          0%, 100% { transform: scale(1); }
+          50% { transform: scale(1.03); }
+        }
+        .animate-chat-pulse { animation: chatPulse 2s ease-in-out infinite; }
+        @keyframes ringPulse {
+          0%, 100% { opacity: 0.3; transform: scale(1); }
+          50% { opacity: 0.7; transform: scale(1.1); }
+        }
+        .animate-ring-pulse { animation: ringPulse 2s ease-in-out infinite; }
         .reel-snap-container { scroll-behavior: smooth; }
         .scrub-range { -webkit-appearance: none; }
         .scrub-range::-webkit-slider-thumb { -webkit-appearance: none; width: 12px; height: 12px; background: white; border-radius: 50%; border: 2px solid #8b5cf6; box-shadow: 0 0 10px rgba(139, 92, 246, 0.5); cursor: pointer; }
