@@ -818,9 +818,39 @@ const InfluencerPage: React.FC = () => {
             isOnline={false}
           />
           <div className="flex-1 text-center md:text-left">
-            <h1 className="text-5xl font-black italic uppercase tracking-tighter mb-2">{influencer.name}</h1>
-            <p className="text-violet-400/80 text-lg font-medium mb-4">{series.title}</p>
-            <p className="text-white/60 text-sm max-w-2xl">{influencer.description}</p>
+            <div className="flex flex-col md:flex-row md:items-start md:gap-8 gap-4">
+              <div className="flex-1">
+                <h1 className="text-5xl font-black italic uppercase tracking-tighter mb-2">{influencer.name}</h1>
+                <p className="text-violet-400/80 text-lg font-medium mb-4">{series.title}</p>
+                <p className="text-white/60 text-sm max-w-2xl">{influencer.description}</p>
+              </div>
+              {(() => {
+                // Get the first trigger for this influencer from any episode
+                const firstTrigger = influencerEpisodes[0]?.triggers?.find((t: any) => t.char === influencer?.name);
+                
+                if (!firstTrigger) return null;
+                
+                return (
+                  <div className="max-w-md w-full md:w-auto">
+                    <ChatWidget
+                      characterName={influencer.name}
+                      avatar={influencer.avatar}
+                      onClick={() => handleChatInit({
+                        char: firstTrigger.char,
+                        intro: firstTrigger.intro,
+                        hook: firstTrigger.hook,
+                        isFromHistory: false,
+                        isWhatsApp: true,
+                        entryPoint: 'influencer_page',
+                        seriesId: series.id,
+                        seriesTitle: series.title
+                      })}
+                      isOnline={true}
+                    />
+                  </div>
+                );
+              })()}
+            </div>
           </div>
         </div>
 

@@ -1,5 +1,4 @@
 import React from 'react';
-import { getCharacterTheme } from '../lib/characters';
 
 interface ChatWidgetProps {
   characterName: string;
@@ -14,19 +13,6 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({
   onClick,
   isOnline = true 
 }) => {
-  const theme = getCharacterTheme(characterName);
-  
-  // Get theme-specific border color (cyan-blue for the glowing effect)
-  const borderGlowColor = theme === 'cyan' 
-    ? 'from-cyan-400 to-blue-500' 
-    : theme === 'blue'
-    ? 'from-blue-400 to-cyan-500'
-    : theme === 'purple'
-    ? 'from-violet-400 to-blue-500'
-    : theme === 'pink'
-    ? 'from-pink-400 to-violet-500'
-    : 'from-emerald-400 to-cyan-500';
-
   return (
     <button
       onClick={onClick}
@@ -38,25 +24,6 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({
         <div className="relative w-full rounded-[0.9rem] md:rounded-[1.5rem] bg-gradient-to-r from-blue-500/8 via-violet-500/8 to-blue-500/8 backdrop-blur-sm">
           {/* Content Container */}
           <div className="flex items-center gap-2 md:gap-3 px-2.5 py-2 md:px-4 md:py-3">
-            {/* Profile Picture Container */}
-            <div className="relative flex-shrink-0">
-              {/* Glowing Border Effect */}
-              <div className={`absolute inset-0 rounded-full blur-sm bg-gradient-to-r ${borderGlowColor} opacity-50`} />
-              <div className="relative w-10 h-10 md:w-14 md:h-14 rounded-full border border-cyan-400/50 md:border-2 md:border-cyan-400/50 overflow-visible bg-gradient-to-br from-cyan-500/20 to-blue-500/20 shadow-[0_0_10px_rgba(34,211,238,0.3)] md:shadow-[0_0_15px_rgba(34,211,238,0.3)]">
-                <div className="w-full h-full rounded-full overflow-hidden">
-                  <img 
-                    src={avatar} 
-                    alt={characterName}
-                    className="w-full h-full object-cover"
-                  />
-                </div>
-                {/* Online Status Indicator - positioned outside to avoid cropping */}
-                {isOnline && (
-                  <div className="absolute -bottom-0.5 -right-0.5 w-2 h-2 md:w-3 md:h-3 bg-emerald-500 border border-white/80 rounded-full shadow-[0_0_4px_#10b981] md:shadow-[0_0_6px_#10b981] z-20" />
-                )}
-              </div>
-            </div>
-
             {/* Text Content */}
             <div className="flex-1 flex flex-col justify-center min-w-0">
               <h3 className="text-xs md:text-lg font-black italic uppercase tracking-tighter text-white mb-0.5 leading-tight">
