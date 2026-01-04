@@ -58,7 +58,7 @@ const CharacterDP: React.FC<{ src: string, name: string, theme: 'blue' | 'pink' 
 
   return (
     <div className={`relative ${size} rounded-full flex items-center justify-center p-0.5 border-2 shadow-2xl transition-all duration-300 group-hover:scale-105 ${borderColor} ${bgColor}`}>
-      {isOnline && <div className="absolute bottom-0 right-0 w-4 h-4 bg-emerald-500 border-2 border-[#0a0a0f] rounded-full animate-pulse shadow-[0_0_12px_#10b981] z-30" />}
+      {isOnline && <div className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-emerald-500 rounded-full animate-pulse shadow-[0_0_12px_#10b981] ring-2 ring-emerald-500/50 z-30" />}
       <div className="w-full h-full rounded-full overflow-hidden flex items-center justify-center">
         {!error ? (
           <img 
@@ -558,7 +558,7 @@ const ReelItem: React.FC<{
 
       {!isEnded && (
         <>
-          <div className={`absolute bottom-24 left-6 pointer-events-none z-50 transition-opacity duration-500 ${isUIHidden ? 'opacity-0' : 'opacity-100'}`}>
+          <div className={`absolute bottom-32 left-6 pointer-events-none z-50 transition-opacity duration-500 ${isUIHidden ? 'opacity-0' : 'opacity-100'}`}>
             <div className="flex items-center gap-2 mb-2">
               <div className="h-[2px] w-6 bg-violet-500 rounded-full shadow-[0_0_8px_#8b5cf6]" />
               <span className="text-[10px] font-black tracking-[0.3em] uppercase text-white/90 drop-shadow-md">{episode.label}</span>
@@ -566,7 +566,9 @@ const ReelItem: React.FC<{
             <p className="text-white text-xs font-medium opacity-60 max-w-[200px] leading-tight drop-shadow-lg">{series.reelHint || 'Roleplay with the characters to change their destiny'}</p>
           </div>
 
-          <div className="absolute right-4 bottom-24 flex flex-col items-center gap-8 z-[100] pointer-events-auto">
+          {/* Right Side Controls - Aligned and Separated */}
+          <div className="absolute right-4 bottom-20 flex flex-col items-end gap-3 z-[100] pointer-events-auto">
+            {/* Mute Button */}
             <button 
               onClick={(e) => { 
                 e.stopPropagation(); 
@@ -579,41 +581,73 @@ const ReelItem: React.FC<{
                 }
                 toggleMute(); 
               }}
-              className={`flex flex-col items-center gap-1.5 active:scale-90 transition-all group mb-2 transition-opacity duration-500 ${isUIHidden ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}
+              className={`w-12 h-12 rounded-full bg-white/5 backdrop-blur-xl border border-white/10 shadow-[0_8px_32px_rgba(0,0,0,0.3),0_0_0_1px_rgba(139,92,246,0.2),0_0_20px_rgba(139,92,246,0.1)] hover:bg-white/10 hover:border-white/20 hover:shadow-[0_8px_40px_rgba(139,92,246,0.4),0_0_0_1px_rgba(139,92,246,0.4),0_0_30px_rgba(139,92,246,0.3)] active:scale-95 transition-all group flex items-center justify-center transition-opacity duration-500 ${isUIHidden ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}
             >
-              <div className="w-12 h-12 rounded-full bg-[#1a1a24]/80 backdrop-blur-xl border border-violet-500/20 flex items-center justify-center text-white shadow-2xl transition-all group-hover:bg-violet-500/20 group-hover:border-violet-500/40">
+              {/* Edge Glow Effect */}
+              <div className="absolute -inset-[1px] rounded-full bg-gradient-to-r from-violet-500/40 via-blue-500/40 to-violet-500/40 opacity-50 blur-sm group-hover:opacity-80 transition-opacity -z-10" />
+              
+              <div className="relative w-5 h-5">
                 {isMuted ? (
-                  <svg viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5"><path d="M13.5 4.06c0-1.336-1.616-2.005-2.56-1.06l-4.5 4.5H4.508c-1.141 0-2.318.664-2.66 1.905A9.76 9.76 0 0 0 1.5 12c0 .898.121 1.768.35 2.595.341 1.24 1.518 1.905 2.659 1.905h1.93l4.5 4.5c.945.945 2.561.276 2.561-1.06V4.06ZM18.535 7.465a.75.75 0 0 1 1.06 0L22.12 10l-2.525 2.525a.75.75 0 1 1-1.06-1.06L20 10l-1.465-1.465a.75.75 0 0 1 0-1.06Z" /></svg>
+                  <>
+                    <svg viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5 text-white/60 absolute inset-0">
+                      <path d="M11 5L6 9H2v6h4l5 4V5z"/>
+                    </svg>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" className="w-5 h-5 text-white absolute inset-0">
+                      <line x1="18" y1="6" x2="6" y2="18"/>
+                    </svg>
+                  </>
                 ) : (
-                  <svg viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5"><path d="M13.5 4.06c0-1.336-1.616-2.005-2.56-1.06l-4.5 4.5H4.508c-1.141 0-2.318.664-2.66 1.905A9.76 9.76 0 0 0 1.5 12c0 .898.121 1.768.35 2.595.341 1.24 1.518 1.905 2.659 1.905h1.93l4.5 4.5c.945.945 2.561.276 2.561-1.06V4.06ZM17.78 9.22a.75.75 0 1 0-1.06 1.06 4.25 4.25 0 0 1 0 6.01.75.75 0 0 0 1.06 1.06 5.75 5.75 0 0 0 0-8.13ZM21.03 5.97a.75.75 0 0 0-1.06 1.06 8.5 8.5 0 0 1 0 12.02.75.75 0 1 0 1.06 1.06 10 10 0 0 0 0-14.14Z" /></svg>
+                  <svg viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5 text-white">
+                    <path d="M11 5L6 9H2v6h4l5 4V5zM19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/>
+                  </svg>
                 )}
               </div>
             </button>
 
-            {episode.triggers.map((t: any, idx: number) => (
-              <button 
-                key={idx}
-                data-chat-button
-                onClick={(e) => { 
-                  e.stopPropagation(); 
-                  onEnterStory(t.char, t.intro, t.hook, 'video_sidebar'); 
-                }}
-                className="flex flex-col items-center gap-2 active:scale-95 transition-all group animate-slide-up-side"
-                style={{ animationDelay: `${idx * 150}ms` }}
-              >
-                <div className="relative group animate-chat-pulse">
-                   <div className="absolute inset-0 rounded-full blur-xl bg-gradient-to-r from-violet-500/60 to-blue-500/60 animate-pulse-glow" />
-                   <div className="absolute inset-[-4px] rounded-full border-2 border-violet-400/50 animate-ring-pulse" />
-                   <div className={`absolute inset-0 rounded-full blur-xl opacity-0 group-hover:opacity-60 transition-opacity ${t.char === 'Priyank' ? 'bg-blue-500' : t.char === 'Arzoo' ? 'bg-pink-500' : t.char === 'Anish' ? 'bg-cyan-400' : t.char === 'Chirag' ? 'bg-emerald-400' : 'bg-violet-500'}`} />
-                   <CharacterDP 
-                    src={series.avatars[t.char]} 
-                    name={t.char} 
-                    theme="purple"
-                    size="w-14 h-14"
-                   />
-                </div>
-              </button>
-            ))}
+            {/* Chat Buttons - Always Visible with Glass Morphism */}
+            {episode.triggers.length > 0 && (
+              <div className="flex flex-col gap-2.5">
+                {episode.triggers.slice(0, 2).map((t: any, idx: number) => (
+                  <button
+                    key={idx}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setIsUIHidden(false);
+                      if (inactivityTimerRef.current) {
+                        clearTimeout(inactivityTimerRef.current);
+                        inactivityTimerRef.current = setTimeout(() => {
+                          setIsUIHidden(true);
+                        }, 5000);
+                      }
+                      onEnterStory(t.char, t.intro, t.hook, 'video_sidebar');
+                    }}
+                    className="relative flex items-center gap-3 px-3.5 py-2.5 rounded-2xl bg-white/5 backdrop-blur-xl border border-white/10 shadow-[0_8px_32px_rgba(0,0,0,0.3),0_0_0_1px_rgba(139,92,246,0.2),0_0_20px_rgba(139,92,246,0.1)] hover:bg-white/10 hover:border-white/20 hover:shadow-[0_8px_40px_rgba(139,92,246,0.4),0_0_0_1px_rgba(139,92,246,0.4),0_0_30px_rgba(139,92,246,0.3)] active:scale-95 transition-all group"
+                  >
+                    {/* Edge Glow Effect */}
+                    <div className="absolute -inset-[1px] rounded-2xl bg-gradient-to-r from-violet-500/40 via-blue-500/40 to-violet-500/40 opacity-50 blur-sm group-hover:opacity-80 transition-opacity -z-10" />
+                    
+                    <div className="relative z-10">
+                      <div className="absolute inset-0 rounded-full blur-lg bg-gradient-to-r from-violet-500/40 to-blue-500/40 animate-pulse-glow" />
+                      <CharacterDP 
+                        src={series.avatars[t.char]} 
+                        name={t.char} 
+                        theme={t.char === 'Priyank' ? 'blue' : t.char === 'Arzoo' ? 'pink' : t.char === 'Anish' ? 'cyan' : t.char === 'Chirag' ? 'green' : 'purple'}
+                        size="w-11 h-11"
+                        isOnline={false}
+                      />
+                      <div className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-emerald-500 rounded-full animate-pulse shadow-[0_0_12px_#10b981] ring-2 ring-emerald-500/50" />
+                    </div>
+                    <div className="flex flex-col items-start min-w-0 relative z-10">
+                      <span className="text-[11px] font-black uppercase tracking-wider text-white drop-shadow-md">Chat with {t.char}</span>
+                      <span className="text-[9px] font-medium text-white/60">Tap to start</span>
+                    </div>
+                    <svg viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4 text-white/70 group-hover:text-white transition-colors flex-shrink-0 relative z-10">
+                      <path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-2 12H6v-2h12v2zm0-3H6V9h12v2zm0-3H6V6h12v2z"/>
+                    </svg>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         </>
       )}
@@ -1257,6 +1291,11 @@ const AppContent: React.FC = () => {
                           className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity"
                         />
                         <div className="absolute inset-0 bg-gradient-to-t from-[#0a0a0f]/90 via-transparent to-transparent" />
+                        {/* Green Live Indicator */}
+                        <div className="absolute top-4 left-4 flex items-center gap-2 bg-emerald-500/90 backdrop-blur-sm px-2.5 py-1 rounded-full border border-emerald-400/50 shadow-[0_0_15px_rgba(16,185,129,0.5)]">
+                          <div className="w-2 h-2 bg-white rounded-full animate-pulse" />
+                          <span className="text-[9px] font-black uppercase tracking-wider text-white">LIVE</span>
+                        </div>
                         <div className="absolute bottom-0 left-0 right-0 p-4">
                           <h3 className="text-base font-black uppercase tracking-tight text-white mb-1">{influencer.name}</h3>
                           <p className="text-[9px] font-medium text-white/50 line-clamp-2">{influencer.seriesTitle}</p>
