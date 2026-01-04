@@ -189,7 +189,7 @@ CREATE TABLE IF NOT EXISTS page_views (
   series_id TEXT,
   episode_id INTEGER,
   character_name TEXT,
-  tab_name TEXT, -- 'For you', 'Grow with me', 'Dream World'
+  tab_name TEXT, -- 'For you'
   
   -- Timing
   viewed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -376,9 +376,7 @@ SELECT
   COUNT(*) FILTER (WHERE view_type = 'chat') as chat_opens,
   
   -- Tab engagement
-  COUNT(*) FILTER (WHERE tab_name = 'For you') as for_you_views,
-  COUNT(*) FILTER (WHERE tab_name = 'Grow with me') as grow_with_me_views,
-  COUNT(*) FILTER (WHERE tab_name = 'Dream World') as dream_world_views
+  COUNT(*) FILTER (WHERE tab_name = 'For you') as for_you_views
   
 FROM page_views
 GROUP BY DATE(viewed_at)

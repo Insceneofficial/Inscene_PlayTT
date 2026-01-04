@@ -126,7 +126,7 @@ Tracks navigation and page views for traffic analysis.
 | series_id | TEXT | Content context |
 | episode_id | INTEGER | Content context |
 | character_name | TEXT | Chat context |
-| tab_name | TEXT | 'For you', 'Grow with me', 'Dream World' |
+| tab_name | TEXT | 'For you' |
 | viewed_at | TIMESTAMPTZ | When viewed |
 | referrer | TEXT | Traffic source |
 
