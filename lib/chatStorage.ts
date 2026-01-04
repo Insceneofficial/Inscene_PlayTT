@@ -352,6 +352,22 @@ export const getLastMessages = async (): Promise<Record<string, ChatMessage>> =>
  * Check if user has any chat history with a character
  */
 /**
+ * Check if user has unlimited messages (bypass limit)
+ */
+export const hasUnlimitedMessages = (): boolean => {
+  try {
+    const savedUser = localStorage.getItem('inscene_google_user');
+    if (savedUser) {
+      const user = JSON.parse(savedUser);
+      return user?.email === 'insceneofficial@gmail.com';
+    }
+  } catch (error) {
+    console.warn('ChatStorage: Failed to check unlimited messages', error);
+  }
+  return false;
+};
+
+/**
  * Count total user messages (not assistant messages) for the current user
  */
 export const getUserMessageCount = async (): Promise<number> => {

@@ -1,7 +1,7 @@
 import OpenAI from "openai";
 import React, { useState, useEffect, useRef } from 'react';
 import { trackChatStart, updateChatMessages, trackChatEnd } from '../lib/analytics';
-import { saveMessage, loadChatHistory, isUserLoggedIn, debugListAllMessages, getUserMessageCount, MAX_USER_MESSAGES } from '../lib/chatStorage';
+import { saveMessage, loadChatHistory, isUserLoggedIn, debugListAllMessages, getUserMessageCount, MAX_USER_MESSAGES, hasUnlimitedMessages } from '../lib/chatStorage';
 import { getCharacterPrompt } from '../lib/characters';
 
 interface ChatPanelProps {
@@ -428,8 +428,8 @@ Generate ONLY the follow-up message, nothing else.
   const handleSend = async () => {
     if (!inputValue.trim() || isTyping) return;
     
-    // Check message count limit before sending
-    if (isUserLoggedIn()) {
+    // Check message count limit before sending (skip for unlimited users)
+    if (isUserLoggedIn() && !hasUnlimitedMessages()) {
       const messageCount = await getUserMessageCount();
       if (messageCount >= MAX_USER_MESSAGES) {
         // User has reached limit - show waitlist modal
