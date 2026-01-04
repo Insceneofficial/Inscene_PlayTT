@@ -602,10 +602,8 @@ const InfluencerPage: React.FC = () => {
   const closeButtonMouseMoveHandlerRef = React.useRef<((event?: Event) => void) | null>(null);
   const lastCloseButtonMouseMoveTimeRef = React.useRef<number>(0);
 
-  // Initialize series catalog
-  useEffect(() => {
-    setSeriesCatalog(SERIES_CATALOG);
-  }, []);
+  // Initialize series catalog immediately (not in useEffect) to avoid race conditions on direct navigation
+  setSeriesCatalog(SERIES_CATALOG);
 
   const influencer = slug ? getInfluencerBySlug(slug) : null;
   const series = slug ? getSeriesForInfluencer(slug) : null;
