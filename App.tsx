@@ -17,7 +17,7 @@ import {
   trackPageView
 } from './lib/analytics';
 import { loadAllChatHistories } from './lib/chatStorage';
-import { AVATARS, getCharacterAvatar } from './lib/characters';
+import { AVATARS, getCharacterAvatar, getAllCharacterNames, CHARACTER_PROFILES } from './lib/characters';
 import { setSeriesCatalog, getAllInfluencers, getInfluencerSlug, InfluencerInfo } from './lib/influencerMapping';
 
 // Re-export for backward compatibility with existing code
@@ -1314,22 +1314,45 @@ const AppContent: React.FC = () => {
 
               {/* Chat List Area */}
               <div className="flex-1 overflow-y-auto pt-1 bg-[#0a0a0f]">
-                {Object.keys(conversations).length === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-20 text-center animate-fade-in text-white/40">
-                    <h3 className="text-lg font-medium mb-1">Your inbox is quiet</h3>
-                    <p className="text-sm px-10 text-white/30">Messages from characters you interact with will appear here.</p>
-                  </div>
-                ) : (() => {
-                  const filteredConversations = (Object.values(conversations) as ConversationHistoryEntry[])
-                    .filter((conv) => {
-                      if (!searchQuery.trim()) return true;
-                      const query = searchQuery.toLowerCase();
-                      return (
-                        conv.character.toLowerCase().includes(query) ||
-                        conv.messages.some(msg => msg.content.toLowerCase().includes(query))
-                      );
-                    })
-                    .sort((a, b) => b.lastUpdate - a.lastUpdate);
+                {(() => {
+                  // Get all characters and merge with existing conversations (excluding Arzoo)
+                  const allCharacterNames = getAllCharacterNames().filter(name => name !== 'Arzoo');
+                  const allConversations: ConversationHistoryEntry[] = allCharacterNames.map(charName => {
+                    const existingConv = conversations[charName];
+                    const characterProfile = CHARACTER_PROFILES[charName];
+                    
+                    if (existingConv) {
+                      return existingConv;
+                    }
+                    
+                    // Create default entry for characters without conversations
+                    return {
+                      character: charName,
+                      messages: [],
+                      avatar: characterProfile?.avatar || getCharacterAvatar(charName),
+                      lastUpdate: undefined,
+                      isTyping: false
+                    };
+                  });
+                  
+                  // Filter by search query
+                  const filteredConversations = allConversations.filter((conv) => {
+                    if (!searchQuery.trim()) return true;
+                    const query = searchQuery.toLowerCase();
+                    return (
+                      conv.character.toLowerCase().includes(query) ||
+                      conv.messages.some(msg => msg.content.toLowerCase().includes(query))
+                    );
+                  })
+                  // Sort: conversations with messages first (by lastUpdate), then empty conversations alphabetically
+                  .sort((a, b) => {
+                    if (a.messages.length > 0 && b.messages.length === 0) return -1;
+                    if (a.messages.length === 0 && b.messages.length > 0) return 1;
+                    if (a.messages.length > 0 && b.messages.length > 0) {
+                      return (b.lastUpdate || 0) - (a.lastUpdate || 0);
+                    }
+                    return a.character.localeCompare(b.character);
+                  });
                   
                   if (searchQuery.trim() && filteredConversations.length === 0) {
                     return (
@@ -1352,8 +1375,8 @@ const AppContent: React.FC = () => {
                           handleChatInit({ 
                             char: conv.character, 
                             avatar: conv.avatar, 
-                            history: conv.messages,
-                            isFromHistory: true,
+                            history: conv.messages.length > 0 ? conv.messages : undefined,
+                            isFromHistory: conv.messages.length > 0,
                             isWhatsApp: true,
                             entryPoint: 'chat_history'
                           });
@@ -1374,7 +1397,9 @@ const AppContent: React.FC = () => {
                             <p className="text-[14px] text-white/50 truncate pr-4 font-normal leading-tight">
                               {typingStatus[conv.character] 
                                 ? 'typing...' 
-                                : (conv.messages[conv.messages.length - 1]?.content || 'Tap to chat')}
+                                : (conv.messages.length > 0 
+                                  ? conv.messages[conv.messages.length - 1]?.content 
+                                  : 'Tap to chat')}
                             </p>
                             {unseenCounts[conv.character] > 0 && (
                               <div className="bg-gradient-to-r from-violet-500 to-blue-500 text-white rounded-full min-w-[20px] h-5 flex items-center justify-center text-[10px] font-bold px-1.5 shadow-sm">
