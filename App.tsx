@@ -6,6 +6,7 @@ import AuthModal from './components/AuthModal.tsx';
 import WaitlistModal from './components/WaitlistModal.tsx';
 import UserMenu from './components/UserMenu.tsx';
 import InfluencerPage from './components/InfluencerPage.tsx';
+import ChatWidget from './components/ChatWidget.tsx';
 import { AuthProvider, useAuth } from './lib/auth';
 import { getUserMessageCount, MAX_USER_MESSAGES, hasUnlimitedMessages } from './lib/chatStorage';
 import { Analytics } from "@vercel/analytics/react";
@@ -566,7 +567,7 @@ const ReelItem: React.FC<{
             <p className="text-white text-xs font-medium opacity-60 max-w-[200px] leading-tight drop-shadow-lg">{series.reelHint || 'Roleplay with the characters to change their destiny'}</p>
           </div>
 
-          <div className="absolute right-4 bottom-24 flex flex-col items-center gap-8 z-[100] pointer-events-auto">
+          <div className="absolute right-4 bottom-24 flex flex-col items-end gap-4 z-[100] pointer-events-auto max-w-[280px]">
             <button 
               onClick={(e) => { 
                 e.stopPropagation(); 
@@ -591,28 +592,21 @@ const ReelItem: React.FC<{
             </button>
 
             {episode.triggers.map((t: any, idx: number) => (
-              <button 
+              <div
                 key={idx}
                 data-chat-button
-                onClick={(e) => { 
-                  e.stopPropagation(); 
-                  onEnterStory(t.char, t.intro, t.hook, 'video_sidebar'); 
-                }}
-                className="flex flex-col items-center gap-2 active:scale-95 transition-all group animate-slide-up-side"
+                className="w-full animate-slide-up-side"
                 style={{ animationDelay: `${idx * 150}ms` }}
               >
-                <div className="relative group animate-chat-pulse">
-                   <div className="absolute inset-0 rounded-full blur-xl bg-gradient-to-r from-violet-500/60 to-blue-500/60 animate-pulse-glow" />
-                   <div className="absolute inset-[-4px] rounded-full border-2 border-violet-400/50 animate-ring-pulse" />
-                   <div className={`absolute inset-0 rounded-full blur-xl opacity-0 group-hover:opacity-60 transition-opacity ${t.char === 'Priyank' ? 'bg-blue-500' : t.char === 'Arzoo' ? 'bg-pink-500' : t.char === 'Anish' ? 'bg-cyan-400' : t.char === 'Chirag' ? 'bg-emerald-400' : 'bg-violet-500'}`} />
-                   <CharacterDP 
-                    src={series.avatars[t.char]} 
-                    name={t.char} 
-                    theme="purple"
-                    size="w-14 h-14"
-                   />
-                </div>
-              </button>
+                <ChatWidget
+                  characterName={t.char}
+                  avatar={series.avatars[t.char]}
+                  onClick={() => {
+                    onEnterStory(t.char, t.intro, t.hook, 'video_sidebar');
+                  }}
+                  isOnline={true}
+                />
+              </div>
             ))}
           </div>
         </>
@@ -623,20 +617,15 @@ const ReelItem: React.FC<{
            <h3 className="text-4xl font-black italic uppercase text-white mb-2 tracking-tighter">End of Scene</h3>
            <p className="text-violet-400/60 text-[10px] font-black tracking-[0.5em] uppercase mb-12">Pick your path</p>
            
-           <div className="flex flex-col gap-5 mb-16 w-full max-w-[280px]">
+           <div className="flex flex-col gap-4 mb-16 w-full max-w-[280px]">
              {episode.triggers.map((t: any, idx: number) => (
-                <button 
+                <ChatWidget
                   key={idx}
+                  characterName={t.char}
+                  avatar={series.avatars[t.char]}
                   onClick={() => onEnterStory(t.char, t.intro, t.hook, 'video_end_screen')}
-                  className="w-full flex items-center gap-4 p-4 rounded-2xl bg-[#1a1a24]/80 border border-violet-500/20 hover:bg-violet-500/10 hover:border-violet-500/40 transition-all text-left group"
-                >
-                  <CharacterDP 
-                    src={series.avatars[t.char]} 
-                    name={t.char} 
-                    theme={t.char === 'Priyank' ? 'blue' : t.char === 'Arzoo' ? 'pink' : t.char === 'Anish' ? 'cyan' : t.char === 'Chirag' ? 'green' : 'purple'} 
-                    size="w-10 h-10"
-                  />
-                </button>
+                  isOnline={true}
+                />
              ))}
            </div>
 
