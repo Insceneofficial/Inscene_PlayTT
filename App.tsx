@@ -92,8 +92,9 @@ const ReelItem: React.FC<{
   isMuted: boolean,
   toggleMute: () => void,
   onEnterStory: (char: string, intro: string, hook: string, entryPoint: string) => void,
-  onNextEpisode: () => void
-}> = ({ episode, series, isActive, isMuted, toggleMute, onEnterStory, onNextEpisode }) => {
+  onNextEpisode: () => void,
+  isChatOpen?: boolean
+}> = ({ episode, series, isActive, isMuted, toggleMute, onEnterStory, onNextEpisode, isChatOpen = false }) => {
   console.log('[ReelItem] Component rendering - isActive:', isActive, 'episode:', episode?.label);
   
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -105,6 +106,7 @@ const ReelItem: React.FC<{
   const [isEnded, setIsEnded] = useState(false);
   const [isScrubbing, setIsScrubbing] = useState(false);
   const [isUIHidden, setIsUIHidden] = useState(false);
+  const lastEpisodeIdRef = useRef<string | number | null>(null);
   
   // Debug: Log on every render
   useEffect(() => {
@@ -358,13 +360,32 @@ const ReelItem: React.FC<{
     }
   };
 
+  // Pause video when chat opens, resume when chat closes
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || !isActive) return;
+    
+    if (isChatOpen) {
+      video.pause();
+    } else if (video.paused && !isEnded) {
+      video.play().catch(() => {});
+    }
+  }, [isChatOpen, isActive, isEnded]);
+
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
     
     if (isActive) {
       setIsEnded(false);
-      video.currentTime = 0;
+      
+      // Only reset video position if this is a different episode
+      const isNewEpisode = lastEpisodeIdRef.current !== episode.id;
+      if (isNewEpisode) {
+        video.currentTime = 0;
+        lastEpisodeIdRef.current = episode.id;
+      }
+      
       video.preload = "auto";
       
       // Reset tracking state
@@ -1371,8 +1392,8 @@ const AppContent: React.FC = () => {
         </main>
       )}
 
-      {selectedSeries && !chatData && (
-        <div className="reel-snap-container fixed inset-0 z-[500] hide-scrollbar overflow-y-scroll snap-y snap-mandatory">
+      {selectedSeries && (
+        <div className={`reel-snap-container fixed inset-0 ${chatData ? 'z-[400]' : 'z-[500]'} hide-scrollbar overflow-y-scroll snap-y snap-mandatory`}>
           {selectedSeries.episodes.map((ep: any, i: number) => (
             <div key={ep.id} data-index={i} className="reel-item-wrapper reel-item snap-start h-[100dvh]">
               <ReelItem 
@@ -1390,6 +1411,7 @@ const AppContent: React.FC = () => {
                   episodeLabel: ep.label
                 })}
                 onNextEpisode={handleNext}
+                isChatOpen={!!chatData}
               />
             </div>
           ))}

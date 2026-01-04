@@ -58,7 +58,8 @@ const ReelItem: React.FC<{
   toggleMute: () => void;
   onEnterStory: (char: string, intro: string, hook: string, entryPoint: string) => void;
   onNextEpisode: () => void;
-}> = ({ episode, series, influencerName, influencerTheme, isActive, isMuted, toggleMute, onEnterStory, onNextEpisode }) => {
+  isChatOpen?: boolean;
+}> = ({ episode, series, influencerName, influencerTheme, isActive, isMuted, toggleMute, onEnterStory, onNextEpisode, isChatOpen = false }) => {
   console.log('[InfluencerPage ReelItem] Component rendering - isActive:', isActive, 'episode:', episode?.label);
   
   const videoRef = React.useRef<HTMLVideoElement>(null);
@@ -86,6 +87,19 @@ const ReelItem: React.FC<{
   const isEndingSession = React.useRef(false);
   const sessionStartTime = React.useRef<number | null>(null);
   const hasTriggeredNextScroll = React.useRef(false);
+  const lastEpisodeIdRef = React.useRef<string | number | null>(null);
+
+  // Pause video when chat opens, resume when chat closes
+  React.useEffect(() => {
+    const video = videoRef.current;
+    if (!video || !isActive) return;
+    
+    if (isChatOpen) {
+      video.pause();
+    } else if (video.paused && !isEnded) {
+      video.play().catch(() => {});
+    }
+  }, [isChatOpen, isActive, isEnded]);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -93,7 +107,14 @@ const ReelItem: React.FC<{
     
     if (isActive) {
       setIsEnded(false);
-      video.currentTime = 0;
+      
+      // Only reset video position if this is a different episode
+      const isNewEpisode = lastEpisodeIdRef.current !== episode.id;
+      if (isNewEpisode) {
+        video.currentTime = 0;
+        lastEpisodeIdRef.current = episode.id;
+      }
+      
       video.preload = "auto";
       
       // Reset tracking state
@@ -838,8 +859,8 @@ const InfluencerPage: React.FC = () => {
       </main>
 
       {/* Video Reel Player */}
-      {selectedEpisodeIndex !== null && !chatData && (
-        <div className="fixed inset-0 z-[5000] bg-[#0a0a0f]">
+      {selectedEpisodeIndex !== null && (
+        <div className={`fixed inset-0 ${chatData ? 'z-[4000]' : 'z-[5000]'} bg-[#0a0a0f]`}>
           {/* Close button */}
           <button
             onClick={() => {
@@ -871,7 +892,6 @@ const InfluencerPage: React.FC = () => {
                   isMuted={isMuted} 
                   toggleMute={() => setIsMuted(!isMuted)} 
                   onEnterStory={(char, intro, hook, entryPoint) => {
-                    setSelectedEpisodeIndex(null);
                     handleChatInit({
                       char, intro, hook, 
                       isFromHistory: false, 
@@ -884,6 +904,7 @@ const InfluencerPage: React.FC = () => {
                     });
                   }}
                   onNextEpisode={handleNextEpisode}
+                  isChatOpen={!!chatData}
                 />
               </div>
             ))}
