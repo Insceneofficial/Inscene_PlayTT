@@ -30,7 +30,6 @@ const CharacterDP: React.FC<{ src: string, name: string, theme: 'blue' | 'pink' 
 
   return (
     <div className={`relative ${size} rounded-full flex items-center justify-center p-0.5 border-2 shadow-2xl transition-all duration-300 group-hover:scale-105 ${borderColor} ${bgColor}`}>
-      {isOnline && <div className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-emerald-500 rounded-full animate-pulse shadow-[0_0_12px_#10b981] ring-2 ring-emerald-500/50 z-30" />}
       <div className="w-full h-full rounded-full overflow-hidden flex items-center justify-center">
         {!error ? (
           <img 
@@ -43,6 +42,7 @@ const CharacterDP: React.FC<{ src: string, name: string, theme: 'blue' | 'pink' 
           <span className="text-xl font-black text-white">{name[0]}</span>
         )}
       </div>
+      {isOnline && <div className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-emerald-500 rounded-full animate-pulse shadow-[0_0_12px_#10b981] z-30" />}
     </div>
   );
 };
@@ -852,9 +852,14 @@ const InfluencerPage: React.FC = () => {
                   avatar: influencer.avatar
                 });
               }}
-              className="px-6 py-3 bg-gradient-to-r from-emerald-500 to-green-500 text-white font-black uppercase tracking-wider text-sm rounded-full shadow-[0_0_20px_rgba(16,185,129,0.4)] hover:shadow-[0_0_30px_rgba(16,185,129,0.6)] active:scale-95 transition-all flex items-center gap-2"
+              className="px-6 py-3 bg-gradient-to-r from-purple-500 to-violet-600 text-white font-black uppercase tracking-wider text-sm rounded-full shadow-[0_0_20px_rgba(139,92,246,0.4)] hover:shadow-[0_0_30px_rgba(139,92,246,0.6)] active:scale-95 transition-all flex items-center gap-2"
             >
-              <div className="w-2 h-2 bg-white rounded-full animate-pulse" />
+              <div className="w-5 h-5 rounded-full bg-white/20 flex items-center justify-center">
+                <svg viewBox="0 0 24 24" fill="currentColor" className="w-3.5 h-3.5 text-white">
+                  <path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H6l-2 2V4h16v12z"/>
+                  <path d="M7 9h10v2H7zm0-3h10v2H7zm0 6h7v2H7z"/>
+                </svg>
+              </div>
               CHAT WITH {influencer.name.toUpperCase()} NOW
             </button>
           </div>
