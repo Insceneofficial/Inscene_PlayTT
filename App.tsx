@@ -595,17 +595,42 @@ const ReelItem: React.FC<{
               <div
                 key={idx}
                 data-chat-button
-                className="w-full animate-slide-up-side"
+                onClick={(e) => { 
+                  e.stopPropagation(); 
+                  onEnterStory(t.char, t.intro, t.hook, 'video_sidebar'); 
+                }}
+                className="w-full animate-slide-up-side cursor-pointer"
                 style={{ animationDelay: `${idx * 150}ms` }}
               >
-                <ChatWidget
-                  characterName={t.char}
-                  avatar={series.avatars[t.char]}
-                  onClick={() => {
-                    onEnterStory(t.char, t.intro, t.hook, 'video_sidebar');
-                  }}
-                  isOnline={true}
-                />
+                <div className="relative group animate-chat-pulse">
+                  {/* Speech Bubble */}
+                  {isActive && !isEnded && (
+                    <div className="absolute top-1/2 -translate-y-1/2 right-full z-50 transition-all duration-500 ease-in-out pointer-events-none" style={{ opacity: 1 }}>
+                      <div className={`relative bg-blue-500 rounded-[18px] px-3.5 py-2 shadow-lg transition-all duration-500 ease-in-out ${isUIHidden ? 'max-w-[240px]' : 'max-w-[60px]'}`}>
+                        <div className="text-white text-[12px] font-medium leading-tight transition-all duration-500 ease-in-out whitespace-nowrap flex items-center gap-0.5">
+                          {isUIHidden ? 'Talk to me now!' : (
+                            <>
+                              <span className="inline-block dot-bounce-1">.</span>
+                              <span className="inline-block dot-bounce-2">.</span>
+                              <span className="inline-block dot-bounce-3">.</span>
+                            </>
+                          )}
+                        </div>
+                        {/* Tail pointing right from the bubble toward the icon - center aligned with DP */}
+                        <div className="absolute top-1/2 -translate-y-1/2 right-0 translate-x-full w-0 h-0 border-l-[8px] border-t-[6px] border-b-[6px] border-l-blue-500 border-t-transparent border-b-transparent transition-all duration-500"></div>
+                      </div>
+                    </div>
+                  )}
+                   <div className="absolute inset-0 rounded-full blur-xl bg-gradient-to-r from-violet-500/60 to-blue-500/60 animate-pulse-glow" />
+                   <div className="absolute inset-[-4px] rounded-full border-2 border-violet-400/50 animate-ring-pulse" />
+                   <div className={`absolute inset-0 rounded-full blur-xl opacity-0 group-hover:opacity-60 transition-opacity ${t.char === 'Priyank' ? 'bg-blue-500' : t.char === 'Arzoo' ? 'bg-pink-500' : t.char === 'Anish' ? 'bg-cyan-400' : t.char === 'Chirag' ? 'bg-emerald-400' : 'bg-violet-500'}`} />
+                   <CharacterDP 
+                    src={series.avatars[t.char]} 
+                    name={t.char} 
+                    theme="purple"
+                    size="w-14 h-14"
+                   />
+                </div>
               </div>
             ))}
           </div>
@@ -1613,6 +1638,13 @@ const AppContent: React.FC = () => {
           50% { opacity: 0.7; transform: scale(1.1); }
         }
         .animate-ring-pulse { animation: ringPulse 2s ease-in-out infinite; }
+        @keyframes dotBounce {
+          0%, 100% { transform: translateY(0); }
+          50% { transform: translateY(-4px); }
+        }
+        .dot-bounce-1 { animation: dotBounce 1.2s ease-in-out infinite; }
+        .dot-bounce-2 { animation: dotBounce 1.2s ease-in-out infinite 0.2s; }
+        .dot-bounce-3 { animation: dotBounce 1.2s ease-in-out infinite 0.4s; }
         .reel-snap-container { scroll-behavior: smooth; }
         .scrub-range { -webkit-appearance: none; }
         .scrub-range::-webkit-slider-thumb { -webkit-appearance: none; width: 12px; height: 12px; background: white; border-radius: 50%; border: 2px solid #8b5cf6; box-shadow: 0 0 10px rgba(139, 92, 246, 0.5); cursor: pointer; }
