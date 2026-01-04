@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import Logo from './Logo.tsx';
 import ChatPanel from './ChatPanel.tsx';
@@ -47,24 +47,25 @@ const CharacterDP: React.FC<{ src: string, name: string, theme: 'blue' | 'pink' 
   );
 };
 
-// Video Player Component
-const VideoPlayer: React.FC<{
+// Reel Item Component for influencer page
+const ReelItem: React.FC<{
   episode: any;
   series: any;
   influencerName: string;
   influencerTheme: 'blue' | 'pink' | 'purple' | 'cyan' | 'green';
+  isActive: boolean;
+  isMuted: boolean;
+  toggleMute: () => void;
   onEnterStory: (char: string, intro: string, hook: string, entryPoint: string) => void;
-  onClose: () => void;
-}> = ({ episode, series, influencerName, influencerTheme, onEnterStory, onClose }) => {
+  onNextEpisode: () => void;
+}> = ({ episode, series, influencerName, influencerTheme, isActive, isMuted, toggleMute, onEnterStory, onNextEpisode }) => {
   const videoRef = React.useRef<HTMLVideoElement>(null);
   const [loading, setLoading] = useState(true);
   const [progress, setProgress] = useState(0);
   const [duration, setDuration] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
   const [isEnded, setIsEnded] = useState(false);
-  const [isMuted, setIsMuted] = useState(false);
   const [isScrubbing, setIsScrubbing] = useState(false);
-  const [isPlaying, setIsPlaying] = useState(false);
 
   // Analytics tracking
   const analyticsRecordId = React.useRef<string | null>(null);
@@ -76,59 +77,88 @@ const VideoPlayer: React.FC<{
   const initialMutedRef = React.useRef(isMuted);
   const isEndingSession = React.useRef(false);
   const sessionStartTime = React.useRef<number | null>(null);
+  const hasTriggeredNextScroll = React.useRef(false);
 
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
-
-    // Auto-play when component mounts
-    const playPromise = video.play();
-    if (playPromise !== undefined) {
-      playPromise.then(() => setIsPlaying(true)).catch(() => {});
-    }
-
-    // Start analytics
-    if (!analyticsRecordId.current && !trackVideoStartPromise.current) {
-      const startPromise = trackVideoStart({
-        seriesId: series.id,
-        seriesTitle: series.title,
-        episodeId: episode.id,
-        episodeLabel: episode.label,
-        videoUrl: episode.url,
-        entryPoint: 'influencer_page',
-        isMuted: isMuted
-      });
+    
+    if (isActive) {
+      setIsEnded(false);
+      video.currentTime = 0;
+      video.preload = "auto";
       
-      trackVideoStartPromise.current = startPromise;
-      startPromise.then(recordId => {
-        if (recordId) {
-          analyticsRecordId.current = recordId;
-          sessionStartTime.current = Date.now();
+      // Reset tracking state
+      seekCountRef.current = 0;
+      pauseCountRef.current = 0;
+      wasUnmutedRef.current = false;
+      initialMutedRef.current = isMuted;
+      isEndingSession.current = false;
+      sessionStartTime.current = null;
+      hasTriggeredNextScroll.current = false; // Reset scroll trigger flag
+      
+      // Only start a new session if we don't already have one in progress
+      if (!analyticsRecordId.current && !trackVideoStartPromise.current) {
+        const startPromise = trackVideoStart({
+          seriesId: series.id,
+          seriesTitle: series.title,
+          episodeId: episode.id,
+          episodeLabel: episode.label,
+          videoUrl: episode.url,
+          entryPoint: 'influencer_page',
+          isMuted: isMuted
+        });
+        
+        trackVideoStartPromise.current = startPromise;
+        
+        startPromise.then(recordId => {
+          if (recordId) {
+            analyticsRecordId.current = recordId;
+            sessionStartTime.current = Date.now();
+          }
+        }).catch(error => {
+          console.error('[Video Analytics] Error starting session:', error);
+        });
+      }
+      
+      // Update progress every 10 seconds
+      progressIntervalRef.current = setInterval(() => {
+        if (video && analyticsRecordId.current && !video.paused) {
+          updateVideoProgress(
+            analyticsRecordId.current,
+            video.currentTime,
+            video.duration || 0,
+            pauseCountRef.current,
+            seekCountRef.current
+          );
         }
-      });
+      }, 10000);
+      
+      const playPromise = video.play();
+      if (playPromise !== undefined) {
+        playPromise.catch(() => {});
+      }
+
+      return () => {
+        endVideoSession(false);
+        if (progressIntervalRef.current) {
+          clearInterval(progressIntervalRef.current);
+          progressIntervalRef.current = null;
+        }
+      };
+    } else {
+      video.pause();
+      video.preload = "none";
+      endVideoSession(false);
+      
+      return () => {
+        if (progressIntervalRef.current) {
+          clearInterval(progressIntervalRef.current);
+          progressIntervalRef.current = null;
+        }
+      };
     }
-
-    progressIntervalRef.current = setInterval(() => {
-      if (video && analyticsRecordId.current && !video.paused) {
-        updateVideoProgress(
-          analyticsRecordId.current,
-          video.currentTime,
-          video.duration || 0,
-          pauseCountRef.current,
-          seekCountRef.current
-        );
-      }
-    }, 10000);
-
-    return () => {
-      if (video) {
-        video.pause();
-      }
-      if (progressIntervalRef.current) {
-        clearInterval(progressIntervalRef.current);
-      }
-    };
-  }, []);
+  }, [isActive, series, episode, isMuted]);
 
   const endVideoSession = async (isCompleted: boolean = false) => {
     if (isEndingSession.current) return;
@@ -168,10 +198,26 @@ const VideoPlayer: React.FC<{
   }, []);
 
   useEffect(() => {
-    if (isEnded && analyticsRecordId.current) {
-      endVideoSession(true);
+    // Only trigger auto-scroll if video ended AND is currently active AND we haven't already triggered it
+    if (isEnded && isActive && !hasTriggeredNextScroll.current) {
+      hasTriggeredNextScroll.current = true; // Mark as triggered to prevent multiple calls
+      
+      // End analytics session if available
+      if (analyticsRecordId.current) {
+        endVideoSession(true);
+      }
+      
+      // Auto-scroll to next video immediately when video ends
+      const timeoutId = setTimeout(() => {
+        // Double-check we're still active before scrolling
+        if (isActive) {
+          onNextEpisode();
+        }
+      }, 500); // Short delay to ensure smooth transition
+      
+      return () => clearTimeout(timeoutId);
     }
-  }, [isEnded]);
+  }, [isEnded, isActive, onNextEpisode]);
 
   const handleTimeUpdate = () => {
     if (videoRef.current) {
@@ -190,17 +236,8 @@ const VideoPlayer: React.FC<{
     }
   };
 
-  const handlePlayPause = () => {
-    if (videoRef.current) {
-      if (videoRef.current.paused) {
-        videoRef.current.play();
-        setIsPlaying(true);
-      } else {
-        videoRef.current.pause();
-        setIsPlaying(false);
-        pauseCountRef.current += 1;
-      }
-    }
+  const handlePause = () => {
+    pauseCountRef.current += 1;
   };
 
   const formatTime = (seconds: number) => {
@@ -213,34 +250,24 @@ const VideoPlayer: React.FC<{
   const influencerTriggers = episode.triggers?.filter((t: any) => t.char === influencerName) || [];
 
   return (
-    <div className="fixed inset-0 z-[5000] bg-[#0a0a0f] flex items-center justify-center">
-      <div className="relative w-full h-full flex items-center justify-center">
-        <video
-          ref={videoRef}
-          src={episode.url}
-          className="w-full h-full object-contain"
-          playsInline
-          muted={isMuted}
-          onEnded={() => setIsEnded(true)}
-          onLoadStart={() => setLoading(true)}
-          onCanPlay={() => setLoading(false)}
-          onTimeUpdate={handleTimeUpdate}
-          onPause={() => pauseCountRef.current += 1}
-          onClick={handlePlayPause}
-        />
+    <div className="reel-item flex items-center justify-center overflow-hidden bg-[#0a0a0f]">
+      <video
+        ref={videoRef}
+        src={episode.url}
+        preload={isActive ? "auto" : "none"}
+        className={`w-full h-full object-cover transition-all duration-1000 ${isEnded ? 'scale-105 blur-3xl opacity-40' : 'opacity-100'}`}
+        playsInline
+        muted={isMuted}
+        onEnded={() => {
+          setIsEnded(true);
+        }}
+        onLoadStart={() => setLoading(true)}
+        onCanPlay={() => setLoading(false)}
+        onTimeUpdate={handleTimeUpdate}
+        onPause={handlePause}
+        onClick={() => videoRef.current?.paused ? videoRef.current.play() : videoRef.current?.pause()}
+      />
 
-        {/* Close button */}
-        <button
-          onClick={() => {
-            endVideoSession(false);
-            onClose();
-          }}
-          className="absolute top-6 right-6 w-12 h-12 rounded-full bg-[#1a1a24]/80 backdrop-blur-xl border border-violet-500/20 flex items-center justify-center text-white shadow-2xl transition-all hover:bg-violet-500/20 z-50"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor" className="w-6 h-6">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-          </svg>
-        </button>
 
         {loading && !isEnded && (
           <div className="absolute inset-0 flex items-center justify-center bg-[#0a0a0f]/60 backdrop-blur-md z-10">
@@ -251,130 +278,101 @@ const VideoPlayer: React.FC<{
           </div>
         )}
 
-        {/* Play/Pause overlay */}
-        {!isPlaying && !isEnded && !loading && (
-          <div className="absolute inset-0 flex items-center justify-center z-40 pointer-events-none">
-            <button
-              onClick={handlePlayPause}
-              className="w-20 h-20 rounded-full bg-[#1a1a24]/80 backdrop-blur-xl border border-violet-500/20 flex items-center justify-center text-white shadow-2xl transition-all hover:bg-violet-500/20 pointer-events-auto"
-            >
-              <svg viewBox="0 0 24 24" fill="currentColor" className="w-10 h-10 ml-1">
-                <path d="M8 5v14l11-7z" />
-              </svg>
-            </button>
-          </div>
-        )}
 
-        {!isEnded && (
-          <>
-            {/* Video controls */}
-            <div className="absolute bottom-0 left-0 right-0 z-[70] pt-20 group/scrubber transition-all pointer-events-none">
-              <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-[#0a0a0f]/90 to-transparent h-32 pointer-events-none" />
-              <div className={`relative px-6 pb-6 transition-all duration-300 ${isScrubbing ? 'translate-y-[-10px]' : 'translate-y-0'}`}>
-                <div className="relative h-6 flex items-center mb-4">
-                  <input 
-                    type="range" 
-                    min="0" 
-                    max="100" 
-                    step="0.1" 
-                    value={progress} 
-                    onChange={handleSeek} 
-                    onMouseDown={() => setIsScrubbing(true)}
-                    onMouseUp={() => setIsScrubbing(false)}
-                    className="scrub-range w-full h-1 bg-white/20 rounded-full appearance-none cursor-pointer pointer-events-auto z-10" 
-                  />
-                  <div 
-                    className={`absolute left-0 top-1/2 -translate-y-1/2 h-1 bg-gradient-to-r from-violet-500 to-blue-500 rounded-full transition-all duration-75 pointer-events-none ${isScrubbing ? 'shadow-[0_0_15px_#8b5cf6]' : ''}`} 
-                    style={{ width: `${progress}%` }} 
-                  />
-                </div>
-                <div className="flex justify-between items-center">
-                  <div className="text-[9px] font-black text-white tracking-[0.2em] uppercase tabular-nums">
-                    <span className="text-violet-400">{formatTime(currentTime)}</span> / {formatTime(duration)}
-                  </div>
-                  <button 
-                    onClick={(e) => { e.stopPropagation(); setIsMuted(!isMuted); }}
-                    className="w-10 h-10 rounded-full bg-[#1a1a24]/80 backdrop-blur-xl border border-violet-500/20 flex items-center justify-center text-white shadow-2xl transition-all hover:bg-violet-500/20 pointer-events-auto"
-                  >
-                    {isMuted ? (
-                      <svg viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5"><path d="M13.5 4.06c0-1.336-1.616-2.005-2.56-1.06l-4.5 4.5H4.508c-1.141 0-2.318.664-2.66 1.905A9.76 9.76 0 0 0 1.5 12c0 .898.121 1.768.35 2.595.341 1.24 1.518 1.905 2.659 1.905h1.93l4.5 4.5c.945.945 2.561.276 2.561-1.06V4.06ZM18.535 7.465a.75.75 0 0 1 1.06 0L22.12 10l-2.525 2.525a.75.75 0 1 1-1.06-1.06L20 10l-1.465-1.465a.75.75 0 0 1 0-1.06Z" /></svg>
-                    ) : (
-                      <svg viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5"><path d="M13.5 4.06c0-1.336-1.616-2.005-2.56-1.06l-4.5 4.5H4.508c-1.141 0-2.318.664-2.66 1.905A9.76 9.76 0 0 0 1.5 12c0 .898.121 1.768.35 2.595.341 1.24 1.518 1.905 2.659 1.905h1.93l4.5 4.5c.945.945 2.561.276 2.561-1.06V4.06ZM17.78 9.22a.75.75 0 1 0-1.06 1.06 4.25 4.25 0 0 1 0 6.01.75.75 0 0 0 1.06 1.06 5.75 5.75 0 0 0 0-8.13ZM21.03 5.97a.75.75 0 0 0-1.06 1.06 8.5 8.5 0 0 1 0 12.02.75.75 0 1 0 1.06 1.06 10 10 0 0 0 0-14.14Z" /></svg>
-                    )}
-                  </button>
-                </div>
-              </div>
+      {loading && !isEnded && (
+        <div className="absolute inset-0 flex items-center justify-center bg-[#0a0a0f]/60 backdrop-blur-md z-10">
+          <div className="flex flex-col items-center gap-3">
+            <div className="w-10 h-10 border-2 border-violet-500/20 border-t-violet-500 rounded-full animate-spin shadow-[0_0_20px_rgba(139,92,246,0.3)]" />
+            <p className="text-[9px] font-black tracking-[0.4em] uppercase text-white/40">Loading Scene...</p>
+          </div>
+        </div>
+      )}
+
+      {!isEnded && (
+        <>
+          <div className="absolute bottom-24 left-6 pointer-events-none z-50">
+            <div className="flex items-center gap-2 mb-2">
+              <div className="h-[2px] w-6 bg-violet-500 rounded-full shadow-[0_0_8px_#8b5cf6]" />
+              <span className="text-[10px] font-black tracking-[0.3em] uppercase text-white/90 drop-shadow-md">{episode.label}</span>
             </div>
-
-            {/* Chat buttons */}
-            {influencerTriggers.length > 0 && (
-              <div className="absolute right-4 top-1/2 -translate-y-1/2 flex flex-col items-center gap-4 z-[100] pointer-events-auto">
-                {influencerTriggers.map((t: any, idx: number) => (
-                  <button 
-                    key={idx}
-                    onClick={(e) => { e.stopPropagation(); onEnterStory(t.char, t.intro, t.hook, 'video_sidebar'); }}
-                    className="flex flex-col items-center gap-2 active:scale-95 transition-all group"
-                  >
-                    <div className="relative group">
-                       <div className={`absolute inset-0 rounded-full blur-xl opacity-0 group-hover:opacity-60 transition-opacity ${
-                         influencerTheme === 'blue' ? 'bg-blue-500' : 
-                         influencerTheme === 'cyan' ? 'bg-cyan-400' : 
-                         influencerTheme === 'green' ? 'bg-emerald-400' : 
-                         'bg-violet-500'
-                       }`} />
-                       <CharacterDP 
-                        src={series.avatars[influencerName]} 
-                        name={influencerName} 
-                        theme={influencerTheme} 
-                        size="w-14 h-14"
-                       />
-                    </div>
-                    <div className="px-2 py-0.5 rounded-full border border-violet-500/20 bg-[#1a1a24]/80 backdrop-blur-md shadow-xl group-hover:bg-violet-500 group-hover:border-violet-500 transition-all">
-                      <span className="text-[6px] font-black uppercase tracking-[0.1em] text-white group-hover:text-white whitespace-nowrap">
-                        CHAT {influencerName.toUpperCase()}
-                      </span>
-                    </div>
-                  </button>
-                ))}
-              </div>
-            )}
-          </>
-        )}
-
-        {isEnded && (
-          <div className="absolute inset-0 z-[100] flex flex-col items-center justify-center p-8 bg-[#0a0a0f]/80 backdrop-blur-3xl animate-fade-in pointer-events-auto">
-             <h3 className="text-4xl font-black italic uppercase text-white mb-2 tracking-tighter">End of Scene</h3>
-             <p className="text-violet-400/60 text-[10px] font-black tracking-[0.5em] uppercase mb-12">Continue the conversation</p>
-             
-             <div className="flex flex-col gap-5 mb-16 w-full max-w-[280px]">
-               {influencerTriggers.map((t: any, idx: number) => (
-                  <button 
-                    key={idx}
-                    onClick={() => onEnterStory(t.char, t.intro, t.hook, 'video_end_screen')}
-                    className="w-full flex items-center gap-4 p-4 rounded-2xl bg-[#1a1a24]/80 border border-violet-500/20 hover:bg-violet-500/10 hover:border-violet-500/40 transition-all text-left group"
-                  >
-                    <CharacterDP 
-                      src={series.avatars[influencerName]} 
-                      name={influencerName} 
-                      theme={influencerTheme} 
-                      size="w-10 h-10"
-                    />
-                    <div>
-                      <span className="text-xs font-black uppercase tracking-widest text-white/80 group-hover:text-white transition-colors">Chat with {influencerName}</span>
-                    </div>
-                  </button>
-               ))}
-             </div>
-
-             <button onClick={onClose} className="flex flex-col items-center gap-4 group">
-               <div className="w-14 h-14 rounded-full bg-gradient-to-br from-violet-500 to-blue-500 text-white flex items-center justify-center shadow-[0_0_30px_rgba(139,92,246,0.4)] active:scale-90 transition-all group-hover:scale-110">
-                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor" className="w-6 h-6"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
-               </div>
-               <span className="text-[9px] font-black tracking-[0.4em] uppercase text-white/30 group-hover:text-violet-400 transition-colors">Close</span>
-             </button>
+            <p className="text-white text-xs font-medium opacity-60 max-w-[200px] leading-tight drop-shadow-lg">{series.reelHint || 'Roleplay with the characters to change their destiny'}</p>
           </div>
-        )}
-      </div>
+
+          <div className="absolute right-4 bottom-24 flex flex-col items-center gap-8 z-[100] pointer-events-auto">
+            <button 
+              onClick={(e) => { e.stopPropagation(); toggleMute(); }}
+              className="flex flex-col items-center gap-1.5 active:scale-90 transition-all group mb-2"
+            >
+              <div className="w-12 h-12 rounded-full bg-[#1a1a24]/80 backdrop-blur-xl border border-violet-500/20 flex items-center justify-center text-white shadow-2xl transition-all group-hover:bg-violet-500/20 group-hover:border-violet-500/40">
+                {isMuted ? (
+                  <svg viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5"><path d="M13.5 4.06c0-1.336-1.616-2.005-2.56-1.06l-4.5 4.5H4.508c-1.141 0-2.318.664-2.66 1.905A9.76 9.76 0 0 0 1.5 12c0 .898.121 1.768.35 2.595.341 1.24 1.518 1.905 2.659 1.905h1.93l4.5 4.5c.945.945 2.561.276 2.561-1.06V4.06ZM18.535 7.465a.75.75 0 0 1 1.06 0L22.12 10l-2.525 2.525a.75.75 0 1 1-1.06-1.06L20 10l-1.465-1.465a.75.75 0 0 1 0-1.06Z" /></svg>
+                ) : (
+                  <svg viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5"><path d="M13.5 4.06c0-1.336-1.616-2.005-2.56-1.06l-4.5 4.5H4.508c-1.141 0-2.318.664-2.66 1.905A9.76 9.76 0 0 0 1.5 12c0 .898.121 1.768.35 2.595.341 1.24 1.518 1.905 2.659 1.905h1.93l4.5 4.5c.945.945 2.561.276 2.561-1.06V4.06ZM17.78 9.22a.75.75 0 1 0-1.06 1.06 4.25 4.25 0 0 1 0 6.01.75.75 0 0 0 1.06 1.06 5.75 5.75 0 0 0 0-8.13ZM21.03 5.97a.75.75 0 0 0-1.06 1.06 8.5 8.5 0 0 1 0 12.02.75.75 0 1 0 1.06 1.06 10 10 0 0 0 0-14.14Z" /></svg>
+                )}
+              </div>
+              <span className="text-[8px] font-black uppercase tracking-[0.2em] text-white/60 group-hover:text-white">Mute</span>
+            </button>
+
+            {influencerTriggers.map((t: any, idx: number) => (
+              <button 
+                key={idx}
+                onClick={(e) => { e.stopPropagation(); onEnterStory(t.char, t.intro, t.hook, 'video_sidebar'); }}
+                className="flex flex-col items-center gap-2 active:scale-95 transition-all group animate-slide-up-side"
+                style={{ animationDelay: `${idx * 150}ms` }}
+              >
+                <div className="relative group">
+                   <div className={`absolute inset-0 rounded-full blur-xl opacity-0 group-hover:opacity-60 transition-opacity ${influencerTheme === 'blue' ? 'bg-blue-500' : influencerTheme === 'cyan' ? 'bg-cyan-400' : influencerTheme === 'green' ? 'bg-emerald-400' : 'bg-violet-500'}`} />
+                   <CharacterDP 
+                    src={series.avatars[influencerName]} 
+                    name={influencerName} 
+                    theme={influencerTheme} 
+                    size="w-14 h-14"
+                   />
+                </div>
+                <div className={`px-2 py-0.5 rounded-full border border-violet-500/20 bg-[#1a1a24]/80 backdrop-blur-md shadow-xl group-hover:bg-violet-500 group-hover:border-violet-500 transition-all`}>
+                  <span className="text-[6px] font-black uppercase tracking-[0.1em] text-white group-hover:text-white whitespace-nowrap">
+                    CHAT {influencerName.toUpperCase()}
+                  </span>
+                </div>
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+
+
+      {!isEnded && (
+        <div className="absolute bottom-0 left-0 right-0 z-[70] pt-20 group/scrubber transition-all pointer-events-none">
+          <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-[#0a0a0f]/90 to-transparent h-24 pointer-events-none" />
+          <div className={`relative px-6 pb-6 transition-all duration-300 ${isScrubbing ? 'translate-y-[-10px]' : 'translate-y-0'}`}>
+            <div className="relative h-6 flex items-center">
+              <input 
+                type="range" 
+                min="0" 
+                max="100" 
+                step="0.1" 
+                value={progress} 
+                onChange={handleSeek} 
+                onMouseDown={() => setIsScrubbing(true)}
+                onMouseUp={() => setIsScrubbing(false)}
+                onTouchStart={() => setIsScrubbing(true)}
+                onTouchEnd={() => setIsScrubbing(false)}
+                className="scrub-range w-full h-1 bg-white/20 rounded-full appearance-none cursor-pointer pointer-events-auto z-10" 
+              />
+              <div 
+                className={`absolute left-0 top-1/2 -translate-y-1/2 h-1 bg-gradient-to-r from-violet-500 to-blue-500 rounded-full transition-all duration-75 pointer-events-none ${isScrubbing ? 'shadow-[0_0_15px_#8b5cf6]' : ''}`} 
+                style={{ width: `${progress}%` }} 
+              />
+            </div>
+            <div className={`mt-1.5 flex justify-between items-center transition-all duration-500 ${isScrubbing ? 'opacity-100' : 'opacity-40'}`}>
+              <div className="text-[9px] font-black text-white tracking-[0.2em] uppercase tabular-nums">
+                <span className="text-violet-400">{formatTime(currentTime)}</span> / {formatTime(duration)}
+              </div>
+              <div className="text-[8px] font-black text-white/40 tracking-[0.3em] uppercase">Inscene Rhythm Engine</div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
@@ -385,7 +383,9 @@ const InfluencerPage: React.FC = () => {
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
   const { user, isAuthenticated } = useAuth();
-  const [selectedEpisode, setSelectedEpisode] = useState<any>(null);
+  const [selectedEpisodeIndex, setSelectedEpisodeIndex] = useState<number | null>(null);
+  const [activeIdx, setActiveIdx] = useState(0);
+  const [isMuted, setIsMuted] = useState(false);
   const [chatData, setChatData] = useState<any>(null);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [isWaitlistModalOpen, setIsWaitlistModalOpen] = useState(false);
@@ -401,7 +401,7 @@ const InfluencerPage: React.FC = () => {
   // Track page view
   useEffect(() => {
     if (influencer) {
-      trackPageView({ viewType: `influencer_page_${influencer.id}` });
+      trackPageView({ viewType: 'video' });
     }
   }, [influencer]);
 
@@ -409,6 +409,64 @@ const InfluencerPage: React.FC = () => {
   const influencerEpisodes = series?.episodes?.filter((ep: any) => 
     ep.triggers?.some((t: any) => t.char === influencer?.name)
   ) || [];
+
+  // Handler to scroll to next episode with debounce to prevent multiple rapid calls
+  const nextEpisodeTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const handleNextEpisode = useCallback(() => {
+    // Clear any pending scroll
+    if (nextEpisodeTimeoutRef.current) {
+      clearTimeout(nextEpisodeTimeoutRef.current);
+    }
+    
+    // Debounce the scroll to prevent rapid calls
+    nextEpisodeTimeoutRef.current = setTimeout(() => {
+      if (selectedEpisodeIndex !== null && activeIdx < influencerEpisodes.length - 1) {
+        const nextIdx = activeIdx + 1;
+        const nextEl = document.querySelector(`[data-index="${nextIdx}"]`);
+        
+        if (nextEl) {
+          // Use scrollIntoView with smooth behavior
+          nextEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          // Update active index immediately so the next video starts playing
+          setActiveIdx(nextIdx);
+        }
+      }
+      nextEpisodeTimeoutRef.current = null;
+    }, 100);
+  }, [selectedEpisodeIndex, activeIdx, influencerEpisodes.length]);
+
+  // Set up IntersectionObserver for reel scrolling and scroll to selected episode
+  useEffect(() => {
+    if (selectedEpisodeIndex !== null) {
+      // Scroll to the selected episode
+      const timer = setTimeout(() => {
+        const targetEl = document.querySelector(`[data-index="${selectedEpisodeIndex}"]`);
+        if (targetEl) {
+          targetEl.scrollIntoView({ behavior: 'instant' });
+          setActiveIdx(selectedEpisodeIndex);
+        }
+      }, 100);
+
+      const observer = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+          if (entry.isIntersecting) {
+            const index = parseInt(entry.target.getAttribute('data-index') || '0');
+            setActiveIdx(index);
+          }
+        });
+      }, { threshold: 0.6 });
+      
+      const observerTimer = setTimeout(() => {
+        document.querySelectorAll('.reel-item-wrapper').forEach(i => observer.observe(i));
+      }, 300);
+      
+      return () => {
+        clearTimeout(timer);
+        clearTimeout(observerTimer);
+        observer.disconnect();
+      };
+    }
+  }, [selectedEpisodeIndex]);
 
   const handleChatInit = async (chatDataConfig: any) => {
     if (!isAuthenticated) {
@@ -437,7 +495,7 @@ const InfluencerPage: React.FC = () => {
   }
 
   return (
-    <div className="flex flex-col min-h-[100dvh] text-white overflow-hidden" style={{ background: CHARCOAL_GRADIENT }}>
+    <div className="flex flex-col min-h-[100dvh] h-[100dvh] text-white overflow-y-auto" style={{ background: CHARCOAL_GRADIENT }}>
       <header className="fixed top-0 left-0 right-0 z-[1000] px-6 py-6 transition-all duration-500 bg-gradient-to-b from-[#0a0a0f]/90 to-transparent">
         <div className="flex justify-between items-center max-w-6xl mx-auto">
           <div className="flex items-center gap-3 cursor-pointer group active:scale-95 transition-transform" onClick={() => navigate('/')}>
@@ -473,7 +531,10 @@ const InfluencerPage: React.FC = () => {
             return (
               <div
                 key={ep.id}
-                onClick={() => setSelectedEpisode(ep)}
+                onClick={() => {
+                  const index = influencerEpisodes.findIndex(e => e.id === ep.id);
+                  setSelectedEpisodeIndex(index);
+                }}
                 className="group cursor-pointer relative aspect-[9/16] rounded-[1.5rem] overflow-hidden border border-violet-500/20 shadow-2xl transition-all hover:border-violet-500/50 hover:scale-[1.02] hover:shadow-[0_0_30px_rgba(139,92,246,0.2)] active:scale-95 bg-[#1a1a24]"
               >
                 {/* Video thumbnail or placeholder */}
@@ -516,34 +577,55 @@ const InfluencerPage: React.FC = () => {
         )}
       </main>
 
-      {/* Video Player Modal */}
-      {selectedEpisode && !chatData && (
-        <VideoPlayer
-          episode={selectedEpisode}
-          series={series}
-          influencerName={influencer.name}
-          influencerTheme={influencer.theme}
-          onEnterStory={(char, intro, hook, entryPoint) => {
-            setSelectedEpisode(null);
-            handleChatInit({
-              char, intro, hook, 
-              isFromHistory: false, 
-              isWhatsApp: false,
-              entryPoint,
-              seriesId: series.id,
-              seriesTitle: series.title,
-              episodeId: selectedEpisode.id,
-              episodeLabel: selectedEpisode.label
-            });
-          }}
-          onClose={() => setSelectedEpisode(null)}
-        />
+      {/* Video Reel Player */}
+      {selectedEpisodeIndex !== null && !chatData && (
+        <div className="fixed inset-0 z-[5000] bg-[#0a0a0f]">
+          {/* Close button */}
+          <button
+            onClick={() => setSelectedEpisodeIndex(null)}
+            className="absolute top-6 left-6 z-[6000] w-12 h-12 rounded-full bg-[#1a1a24]/80 backdrop-blur-xl border border-violet-500/20 flex items-center justify-center text-white shadow-2xl transition-all hover:bg-violet-500/20"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor" className="w-6 h-6">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+
+          <div className="reel-snap-container fixed inset-0 z-[5000] hide-scrollbar overflow-y-scroll snap-y snap-mandatory">
+            {influencerEpisodes.map((ep: any, i: number) => (
+              <div key={ep.id} data-index={i} className="reel-item-wrapper reel-item snap-start h-[100dvh]">
+                <ReelItem 
+                  episode={ep} 
+                  series={series} 
+                  influencerName={influencer.name}
+                  influencerTheme={influencer.theme}
+                  isActive={activeIdx === i} 
+                  isMuted={isMuted} 
+                  toggleMute={() => setIsMuted(!isMuted)} 
+                  onEnterStory={(char, intro, hook, entryPoint) => {
+                    setSelectedEpisodeIndex(null);
+                    handleChatInit({
+                      char, intro, hook, 
+                      isFromHistory: false, 
+                      isWhatsApp: false,
+                      entryPoint,
+                      seriesId: series.id,
+                      seriesTitle: series.title,
+                      episodeId: ep.id,
+                      episodeLabel: ep.label
+                    });
+                  }}
+                  onNextEpisode={handleNextEpisode}
+                />
+              </div>
+            ))}
+          </div>
+        </div>
       )}
 
       {chatData && (
         <ChatPanel 
           character={chatData.char} 
-          episodeLabel={chatData.episodeLabel || selectedEpisode?.label || "Inscene History"}
+          episodeLabel={chatData.episodeLabel || influencerEpisodes[selectedEpisodeIndex || 0]?.label || "Inscene History"}
           instantGreeting={chatData.intro || influencer.greeting}
           initialHook={chatData.hook || "Continuing conversation"}
           avatar={chatData.avatar || influencer.avatar}
@@ -572,6 +654,29 @@ const InfluencerPage: React.FC = () => {
         .hide-scrollbar::-webkit-scrollbar { display: none; }
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
         .animate-fade-in { animation: fadeIn 0.4s ease-out forwards; }
+        @keyframes slideUpSide {
+          from { transform: translateY(30px) scale(0.9); opacity: 0; }
+          to { transform: translateY(0) scale(1); opacity: 1; }
+        }
+        .animate-slide-up-side {
+          animation: slideUpSide 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+        .reel-snap-container {
+          scroll-snap-type: y mandatory;
+          height: 100dvh;
+          overflow-y: scroll;
+          scroll-behavior: smooth;
+          -webkit-overflow-scrolling: touch;
+          overflow-x: hidden;
+        }
+        .reel-item {
+          scroll-snap-align: start;
+          scroll-snap-stop: always;
+          height: 100dvh;
+          width: 100%;
+          position: relative;
+          overflow: hidden;
+        }
         .scrub-range { -webkit-appearance: none; }
         .scrub-range::-webkit-slider-thumb { -webkit-appearance: none; width: 12px; height: 12px; background: white; border-radius: 50%; border: 2px solid #8b5cf6; box-shadow: 0 0 10px rgba(139, 92, 246, 0.5); cursor: pointer; }
       `}</style>

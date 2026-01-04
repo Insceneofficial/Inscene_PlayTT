@@ -675,7 +675,6 @@ const AppContent: React.FC = () => {
   const [activeIdx, setActiveIdx] = useState(0);
   const [isMuted, setIsMuted] = useState(false);
   const [chatData, setChatData] = useState<any>(null);
-  const [activeTab, setActiveTab] = useState<'For you' | 'Grow with me' | 'Dream World'>('For you');
   const [currentView, setCurrentView] = useState<'discover' | 'chats'>('discover');
   const [choiceModalData, setChoiceModalData] = useState<any>(null);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
@@ -778,13 +777,6 @@ const AppContent: React.FC = () => {
       nextEl.scrollIntoView({ behavior: 'smooth' });
     }
   };
-
-  const filteredCatalog = SERIES_CATALOG.filter(series => {
-    if (activeTab === 'For you') return true;
-    if (activeTab === 'Grow with me') return series.id === 'deb-filmmaker' || series.id === 'startup-boy-anish' || series.id === 'cricket-coaching';
-    if (activeTab === 'Dream World') return series.id === 'heart-beats';
-    return true;
-  });
 
   const handleChatUpdate = (char: string, messages: any[]) => {
     setConversations(prev => {
@@ -927,24 +919,9 @@ const AppContent: React.FC = () => {
         <main className={`flex-1 overflow-y-auto hide-scrollbar ${currentView === 'chats' ? 'pt-0 pb-20' : 'pt-24 pb-28 px-6 animate-slide-up'}`}>
           {currentView === 'discover' ? (
             <div className="flex flex-col gap-6 max-w-lg mx-auto">
-              <div className="flex items-center gap-6 pb-2 border-b border-violet-500/10 overflow-x-auto hide-scrollbar">
-                {(['For you', 'Grow with me', 'Dream World'] as const).map(tab => (
-                  <button
-                    key={tab}
-                    onClick={() => setActiveTab(tab)}
-                    className={`relative pb-3 text-[10px] font-black uppercase tracking-[0.2em] transition-all duration-300 whitespace-nowrap ${activeTab === tab ? 'text-white' : 'text-white/30 hover:text-white/60'}`}
-                  >
-                    {tab}
-                    {activeTab === tab && (
-                      <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-gradient-to-r from-violet-500 to-blue-500 shadow-[0_0_10px_#8b5cf6]" />
-                    )}
-                  </button>
-                ))}
-              </div>
 
               {/* Influencer Cards Section */}
-              {activeTab === 'For you' && (
-                <div className="pt-4">
+              <div className="pt-4">
                   <h2 className="text-xs font-black uppercase tracking-[0.3em] text-white/40 mb-4">Featured Influencers</h2>
                   <div className="grid grid-cols-2 gap-4 mb-8">
                     {getAllInfluencers().map((influencer: InfluencerInfo) => (
@@ -982,47 +959,6 @@ const AppContent: React.FC = () => {
                     ))}
                   </div>
                 </div>
-              )}
-
-              <div className="grid grid-cols-3 gap-6 pt-4">
-                {filteredCatalog.map(series => {
-                  // Get first influencer from series for routing
-                  const firstInfluencerName = series.avatars ? Object.keys(series.avatars)[0] : null;
-                  const firstInfluencerSlug = firstInfluencerName ? getInfluencerSlug(firstInfluencerName) : null;
-                  
-                  // Check if this series has influencers with pages (exclude Arzoo)
-                  const influencersWithPages = series.avatars ? Object.keys(series.avatars).filter(name => name !== 'Arzoo') : [];
-                  
-                  return (
-                  <div 
-                    key={series.id}
-                    onClick={() => {
-                      // Navigate to influencer page if single influencer (and not Arzoo), otherwise show choice modal
-                      if (firstInfluencerSlug && influencersWithPages.length === 1) {
-                        navigate(`/${firstInfluencerSlug}`);
-                      } else {
-                        setChoiceModalData(series);
-                      }
-                    }}
-                    className="flex flex-col items-center gap-3 group cursor-pointer"
-                  >
-                    <div className="relative w-full aspect-square rounded-[1.5rem] overflow-hidden border border-violet-500/20 shadow-2xl transition-all group-hover:border-violet-500/50 group-hover:scale-105 group-hover:shadow-[0_0_30px_rgba(139,92,246,0.2)] active:scale-95">
-                      <img src={series.thumbnail} className="w-full h-full object-cover" />
-                      <div className="absolute inset-0 bg-gradient-to-t from-[#0a0a0f]/80 to-transparent" />
-                      <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                         <div className="w-8 h-8 rounded-full bg-violet-500/30 backdrop-blur-md border border-violet-500/50 flex items-center justify-center">
-                           <svg viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4 text-white ml-0.5"><path d="M8 5v14l11-7z" /></svg>
-                         </div>
-                      </div>
-                    </div>
-                    <div className="text-center px-1">
-                      <p className="text-[10px] font-black uppercase tracking-tight text-white/90 group-hover:text-violet-400 transition-colors truncate w-full">{series.title}</p>
-                      <p className="text-[7px] font-bold uppercase tracking-widest text-white/30 truncate">{series.tagline}</p>
-                    </div>
-                  </div>
-                  );
-                })}
-              </div>
             </div>
           ) : (
             <div className="flex flex-col h-full bg-[#0a0a0f] relative">
