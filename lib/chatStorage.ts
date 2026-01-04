@@ -1,6 +1,15 @@
 import { supabase, isSupabaseConfigured } from './supabase';
 
 // ============================================
+// Constants
+// ============================================
+
+/**
+ * Maximum number of user messages allowed before requiring waitlist
+ */
+export const MAX_USER_MESSAGES = 10;
+
+// ============================================
 // Types
 // ============================================
 
