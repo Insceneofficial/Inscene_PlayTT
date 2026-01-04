@@ -1,7 +1,7 @@
-import { GoogleGenAI } from "@google/genai";
+import OpenAI from "openai";
 import React, { useState, useEffect, useRef } from 'react';
 import { trackChatStart, updateChatMessages, trackChatEnd } from '../lib/analytics';
-import { saveMessage, loadChatHistory, isUserLoggedIn, debugListAllMessages, getUserMessageCount } from '../lib/chatStorage';
+import { saveMessage, loadChatHistory, isUserLoggedIn, debugListAllMessages, getUserMessageCount, MAX_USER_MESSAGES } from '../lib/chatStorage';
 import { getCharacterPrompt } from '../lib/characters';
 
 interface ChatPanelProps {
@@ -46,7 +46,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
   const [isLoadingHistory, setIsLoadingHistory] = useState(true);
   const scrollRef = useRef<HTMLDivElement>(null);
   
-  const conversationHistory = useRef<{ role: 'user' | 'model'; parts: { text: string }[] }[]>([]);
+  const conversationHistory = useRef<{ role: 'user' | 'assistant'; content: string }[]>([]);
   const systemPrompt = useRef<string>('');
   
   // Analytics tracking refs
@@ -275,8 +275,8 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
 
   useEffect(() => {
     conversationHistory.current = messages.map(m => ({
-      role: m.role === 'assistant' ? 'model' : 'user',
-      parts: [{ text: m.content }]
+      role: m.role as 'user' | 'assistant',
+      content: m.content
     }));
     
     if (onMessagesUpdate) {
@@ -315,7 +315,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
     systemPrompt.current = getCharacterPrompt(character, episodeLabel);
   }, [character, episodeLabel]);
 
-  // Generate personalized drop-off reminder using Gemini
+  // Generate personalized drop-off reminder using OpenAI
   const generateDropOffReminder = async () => {
     // Prevent duplicate calls and check limits
     if (isGeneratingReminder.current || reminderCount.current >= MAX_REMINDERS) return;
@@ -324,7 +324,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
     const apiKey = process.env.API_KEY;
     
     try {
-      const ai = new GoogleGenAI({ apiKey });
+      const openai = new OpenAI({ apiKey, dangerouslyAllowBrowser: true });
       
       // Build context from recent conversation
       const currentMessages = messagesRef.current;
@@ -352,16 +352,16 @@ Rules:
 Generate ONLY the follow-up message, nothing else.
 `;
 
-      const response = await ai.models.generateContent({
-        model: 'gemini-3-flash-preview',
-        contents: [{ role: 'user', parts: [{ text: dropOffPrompt }] }],
-        config: { 
-          systemInstruction: systemPrompt.current, 
-          temperature: 0.95 
-        }
+      const response = await openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages: [
+          { role: 'system', content: systemPrompt.current },
+          { role: 'user', content: dropOffPrompt }
+        ],
+        temperature: 0.95
       });
 
-      const reminderText = response.text?.trim();
+      const reminderText = response.choices[0]?.message?.content?.trim();
       if (reminderText) {
         const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
         
@@ -431,7 +431,7 @@ Generate ONLY the follow-up message, nothing else.
     // Check message count limit before sending
     if (isUserLoggedIn()) {
       const messageCount = await getUserMessageCount();
-      if (messageCount >= 10) {
+      if (messageCount >= MAX_USER_MESSAGES) {
         // User has reached limit - show waitlist modal
         if (onWaitlistRequired) {
           onWaitlistRequired();
@@ -458,20 +458,18 @@ Generate ONLY the follow-up message, nothing else.
     }
 
     try {
-      const ai = new GoogleGenAI({ apiKey });
-      const response = await ai.models.generateContent({
-        model: 'gemini-3-flash-preview',
-        contents: [
+      const openai = new OpenAI({ apiKey, dangerouslyAllowBrowser: true });
+      const response = await openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages: [
+          { role: 'system', content: systemPrompt.current },
           ...conversationHistory.current,
-          { role: 'user', parts: [{ text: userText }] }
+          { role: 'user', content: userText }
         ],
-        config: {
-          systemInstruction: systemPrompt.current,
-          temperature: 0.8,
-        },
+        temperature: 0.8,
       });
 
-      const assistantResponse = response.text || "...";
+      const assistantResponse = response.choices[0]?.message?.content || "...";
       
       setMessages(prev => [...prev, { 
         role: 'assistant', 

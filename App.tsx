@@ -7,7 +7,7 @@ import WaitlistModal from './components/WaitlistModal.tsx';
 import UserMenu from './components/UserMenu.tsx';
 import InfluencerPage from './components/InfluencerPage.tsx';
 import { AuthProvider, useAuth } from './lib/auth';
-import { getUserMessageCount } from './lib/chatStorage';
+import { getUserMessageCount, MAX_USER_MESSAGES } from './lib/chatStorage';
 import { Analytics } from "@vercel/analytics/react";
 import { 
   trackViewer, 
@@ -761,7 +761,7 @@ const AppContent: React.FC = () => {
     
     // Check message count limit
     const messageCount = await getUserMessageCount();
-    if (messageCount >= 10) {
+    if (messageCount >= MAX_USER_MESSAGES) {
       // User has reached message limit - show waitlist modal
       setIsWaitlistModalOpen(true);
       return;

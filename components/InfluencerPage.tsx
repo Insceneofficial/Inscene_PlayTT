@@ -6,7 +6,7 @@ import UserMenu from './UserMenu.tsx';
 import AuthModal from './AuthModal.tsx';
 import WaitlistModal from './WaitlistModal.tsx';
 import { useAuth } from '../lib/auth';
-import { getUserMessageCount } from '../lib/chatStorage';
+import { getUserMessageCount, MAX_USER_MESSAGES } from '../lib/chatStorage';
 import { getInfluencerBySlug, getSeriesForInfluencer, setSeriesCatalog } from '../lib/influencerMapping';
 import { getCharacterAvatar } from '../lib/characters';
 import { SERIES_CATALOG } from '../App';
@@ -417,7 +417,7 @@ const InfluencerPage: React.FC = () => {
     }
     
     const messageCount = await getUserMessageCount();
-    if (messageCount >= 10) {
+    if (messageCount >= MAX_USER_MESSAGES) {
       setIsWaitlistModalOpen(true);
       return;
     }
