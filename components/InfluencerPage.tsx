@@ -113,14 +113,26 @@ const ReelItem: React.FC<{
 
   useEffect(() => {
     const video = videoRef.current;
-    if (!video) return;
+    if (!video) {
+      console.log('[Video] useEffect - Video ref not available');
+      return;
+    }
     
     if (isActive) {
+      console.log('[Video] useEffect - Video became active - Episode:', episode.label, {
+        url: episode.url,
+        isMuted: isMuted,
+        readyState: video.readyState,
+        networkState: video.networkState,
+        paused: video.paused
+      });
+      
       setIsEnded(false);
       
       // Only reset video position if this is a different episode
       const isNewEpisode = lastEpisodeIdRef.current !== episode.id;
       if (isNewEpisode) {
+        console.log('[Video] New episode detected, resetting video');
         video.currentTime = 0;
         lastEpisodeIdRef.current = episode.id;
       }
@@ -130,7 +142,10 @@ const ReelItem: React.FC<{
       // iOS fix: Explicitly load the video when it becomes active
       // This is especially important for new episodes
       if (isNewEpisode || !video.readyState || video.readyState < 2) {
+        console.log('[Video] Calling video.load() - isNewEpisode:', isNewEpisode, 'readyState:', video.readyState);
         video.load();
+      } else {
+        console.log('[Video] Video already loaded, readyState:', video.readyState);
       }
       
       // Reset tracking state
@@ -181,24 +196,40 @@ const ReelItem: React.FC<{
       
       // iOS fix: Wait a bit for video to be ready before playing
       const attemptPlay = () => {
+        console.log('[Video] attemptPlay called - Episode:', episode.label, {
+          readyState: video.readyState,
+          networkState: video.networkState,
+          paused: video.paused,
+          muted: video.muted,
+          src: video.src
+        });
         const playPromise = video.play();
         if (playPromise !== undefined) {
           playPromise
             .then(() => {
               // Video started playing successfully
-              console.log('[Video] Play started successfully');
+              console.log('[Video] Play started successfully - Episode:', episode.label);
             })
             .catch((error) => {
-              console.warn('[Video] Play failed:', error);
+              console.warn('[Video] Play failed - Episode:', episode.label, {
+                error: error,
+                errorName: error.name,
+                errorMessage: error.message,
+                readyState: video.readyState,
+                networkState: video.networkState
+              });
               // On iOS, autoplay might fail without user interaction
               // Hide loading after a delay so user can see video and tap to play
               setTimeout(() => {
                 if (video && isActive && video.readyState >= 3) {
+                  console.log('[Video] Fallback: Hiding loading after play failed (readyState >= 3)');
                   // Video is loaded enough to show, just not playing
                   setLoading(false);
                 }
               }, 2000);
             });
+        } else {
+          console.log('[Video] play() returned undefined - Episode:', episode.label);
         }
       };
 
@@ -209,16 +240,19 @@ const ReelItem: React.FC<{
 
       // For iOS, wait for video to be ready
       if (video.readyState >= 2) {
+        console.log('[Video] Video readyState >= 2, attempting play immediately - Episode:', episode.label);
         attemptPlay();
         // Also add fallback timeout for when video is already ready
+        // Safari fix: Clear loading if video has enough data to display (readyState >= 2)
         fallbackTimeout = setTimeout(() => {
-          if (video && isActive && video.readyState >= 3 && video.paused) {
-            console.log('[Video] Fallback: Hiding loading after timeout (readyState >= 2)');
+          if (video && isActive && video.readyState >= 2) {
+            console.log('[Video] Fallback: Hiding loading after timeout (video ready to display) - Episode:', episode.label);
             setLoading(false);
           }
-        }, 3000);
+        }, 2000);
         
         onPlayingHandler = () => {
+          console.log('[Video] Playing handler fired, cleaning up - Episode:', episode.label);
           if (fallbackTimeout) {
             clearTimeout(fallbackTimeout);
             fallbackTimeout = null;
@@ -229,8 +263,10 @@ const ReelItem: React.FC<{
         };
         video.addEventListener('playing', onPlayingHandler);
       } else {
+        console.log('[Video] Video readyState < 2, waiting for canplay event - Episode:', episode.label, 'readyState:', video.readyState);
         // Wait for video to load
         onCanPlayHandler = () => {
+          console.log('[Video] canplay event fired, attempting play - Episode:', episode.label);
           attemptPlay();
           if (onCanPlayHandler) {
             video.removeEventListener('canplay', onCanPlayHandler);
@@ -238,17 +274,19 @@ const ReelItem: React.FC<{
         };
         video.addEventListener('canplay', onCanPlayHandler);
         
-        // Fallback: If video doesn't start playing after 3 seconds, hide loading
-        // This ensures user can see the video and tap to play on iOS
+        // Fallback: If video doesn't start playing after 2 seconds, hide loading
+        // Safari fix: Clear loading if video has enough data to display (readyState >= 2)
+        // This ensures user can see the video and tap to play
         fallbackTimeout = setTimeout(() => {
-          if (video && isActive && video.readyState >= 3 && video.paused) {
-            console.log('[Video] Fallback: Hiding loading after timeout');
+          if (video && isActive && video.readyState >= 2) {
+            console.log('[Video] Fallback: Hiding loading after timeout (video ready to display) - Episode:', episode.label);
             setLoading(false);
           }
-        }, 3000);
+        }, 2000);
         
         // Clean up timeout when video starts playing
         onPlayingHandler = () => {
+          console.log('[Video] Playing handler fired (from canplay path), cleaning up - Episode:', episode.label);
           if (fallbackTimeout) {
             clearTimeout(fallbackTimeout);
             fallbackTimeout = null;
@@ -530,23 +568,152 @@ const ReelItem: React.FC<{
         preload={isActive ? "auto" : "none"}
         className={`w-full h-full object-cover transition-all duration-1000 ${isEnded ? 'scale-105 blur-3xl opacity-40' : 'opacity-100'}`}
         playsInline
+        autoPlay
         muted={isMuted}
-        onEnded={() => {
-          setIsEnded(true);
+        onLoadStart={() => {
+          console.log('[Video] LoadStart - Episode:', episode.label, 'URL:', episode.url);
+          setLoading(true);
         }}
-        onLoadStart={() => setLoading(true)}
-        onError={(e) => {
-          console.error('[Video] Error loading video:', e);
-          setLoading(false);
+        onLoadedMetadata={() => {
+          const video = videoRef.current;
+          console.log('[Video] LoadedMetadata - Episode:', episode.label, {
+            duration: video?.duration,
+            videoWidth: video?.videoWidth,
+            videoHeight: video?.videoHeight,
+            readyState: video?.readyState,
+            networkState: video?.networkState
+          });
         }}
-        onWaiting={() => setLoading(true)}
+        onLoadedData={() => {
+          const video = videoRef.current;
+          console.log('[Video] LoadedData - Episode:', episode.label, {
+            readyState: video?.readyState,
+            networkState: video?.networkState,
+            paused: video?.paused,
+            muted: video?.muted
+          });
+          // Safari fix: Hide loading when video data is loaded, even if autoplay is blocked
+          // This ensures the video is visible so users can interact with it
+          if (video && video.readyState >= 2) {
+            console.log('[Video] LoadedData - Hiding loading spinner (readyState >= 2)');
+            setLoading(false);
+          }
+        }}
+        onCanPlay={() => {
+          const video = videoRef.current;
+          console.log('[Video] CanPlay - Episode:', episode.label, {
+            readyState: video?.readyState,
+            paused: video?.paused
+          });
+        }}
+        onCanPlayThrough={() => {
+          const video = videoRef.current;
+          console.log('[Video] CanPlayThrough - Episode:', episode.label, {
+            readyState: video?.readyState,
+            paused: video?.paused
+          });
+        }}
+        onWaiting={() => {
+          console.log('[Video] Waiting - Episode:', episode.label, 'Buffering...');
+          setLoading(true);
+        }}
         onPlaying={() => {
+          const video = videoRef.current;
+          console.log('[Video] Playing - Episode:', episode.label, {
+            currentTime: video?.currentTime,
+            duration: video?.duration,
+            paused: video?.paused,
+            muted: video?.muted
+          });
           // iOS fix: Only hide loading when video actually starts playing
           setLoading(false);
         }}
+        onPause={() => {
+          const video = videoRef.current;
+          console.log('[Video] Pause - Episode:', episode.label, {
+            currentTime: video?.currentTime,
+            ended: video?.ended
+          });
+          handlePause();
+        }}
+        onEnded={() => {
+          console.log('[Video] Ended - Episode:', episode.label);
+          setIsEnded(true);
+        }}
+        onError={(e) => {
+          const video = videoRef.current;
+          const errorMessages: { [key: number]: string } = {
+            1: 'MEDIA_ERR_ABORTED - The user aborted the loading',
+            2: 'MEDIA_ERR_NETWORK - A network error caused the download to fail',
+            3: 'MEDIA_ERR_DECODE - The video playback was aborted due to a corruption problem or unsupported codec',
+            4: 'MEDIA_ERR_SRC_NOT_SUPPORTED - The video format is not supported by Safari'
+          };
+          
+          // Try to get error immediately
+          if (video && video.error) {
+            const error = video.error;
+            console.error('[Video] Error loading video - Episode:', episode.label, {
+              errorCode: error.code,
+              errorMessage: errorMessages[error.code] || 'Unknown error',
+              videoSrc: episode.url,
+              networkState: video.networkState,
+              readyState: video.readyState,
+              videoWidth: video.videoWidth,
+              videoHeight: video.videoHeight,
+              src: video.src
+            });
+          } else {
+            // Error not immediately available - try again after a short delay
+            setTimeout(() => {
+              if (video) {
+                if (video.error) {
+                  const error = video.error;
+                  console.error('[Video] Error loading video (delayed check) - Episode:', episode.label, {
+                    errorCode: error.code,
+                    errorMessage: errorMessages[error.code] || 'Unknown error',
+                    videoSrc: episode.url,
+                    networkState: video.networkState,
+                    readyState: video.readyState,
+                    videoWidth: video.videoWidth,
+                    videoHeight: video.videoHeight,
+                    src: video.src
+                  });
+                } else {
+                  console.error('[Video] Error loading video (no error property) - Episode:', episode.label, {
+                    videoSrc: episode.url,
+                    networkState: video.networkState,
+                    readyState: video.readyState,
+                    src: video.src,
+                    paused: video.paused,
+                    muted: video.muted
+                  });
+                }
+              }
+            }, 100);
+            
+            // Log immediate state
+            console.error('[Video] Error event fired - Episode:', episode.label, {
+              videoSrc: episode.url,
+              videoExists: !!video,
+              networkState: video?.networkState,
+              readyState: video?.readyState,
+              src: video?.src
+            });
+          }
+          setLoading(false);
+        }}
         onTimeUpdate={handleTimeUpdate}
-        onPause={handlePause}
-        onClick={() => videoRef.current?.paused ? videoRef.current.play() : videoRef.current?.pause()}
+        onClick={() => {
+          const video = videoRef.current;
+          console.log('[Video] Click - Episode:', episode.label, 'Currently paused:', video?.paused);
+          if (video?.paused) {
+            video.play().catch((err) => {
+              console.error('[Video] Play failed on click:', err);
+            });
+          } else {
+            video?.pause();
+          }
+        }}
       />
 
       {loading && !isEnded && (
