@@ -517,7 +517,7 @@ Generate ONLY the follow-up message, nothing else.
       <div className="fixed inset-0 z-[5000] flex flex-col bg-[#0a0a0f] animate-fade-in h-full w-full overflow-hidden">
         {/* Chat Background Image */}
         <div 
-          className="absolute inset-0 opacity-20 pointer-events-none" 
+          className="absolute inset-0 opacity-20 pointer-events-none chat-bg-image" 
           style={{ 
             backgroundImage: `url('/chat_bg.png')`,
             backgroundSize: 'cover',
@@ -590,6 +590,13 @@ Generate ONLY the follow-up message, nothing else.
             <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"></path></svg>
           </button>
         </div>
+        <style>{`
+          @media (max-width: 768px) {
+            .chat-bg-image {
+              background-size: 150% !important;
+            }
+          }
+        `}</style>
       </div>
     );
   }
