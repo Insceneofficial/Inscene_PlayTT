@@ -519,7 +519,7 @@ Generate ONLY the follow-up message, nothing else.
         <div 
           className="absolute inset-0 opacity-20 pointer-events-none" 
           style={{ 
-            backgroundImage: `url('./components/chat_bg.png')`,
+            backgroundImage: `url('/chat_bg.png')`,
             backgroundSize: 'cover',
             backgroundPosition: 'center'
           }}
