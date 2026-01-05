@@ -457,24 +457,40 @@ const ReelItem: React.FC<{
       
       // iOS fix: Wait a bit for video to be ready before playing
       const attemptPlay = () => {
+        console.log('[Video] attemptPlay called - Episode:', episode.label, {
+          readyState: video.readyState,
+          networkState: video.networkState,
+          paused: video.paused,
+          muted: video.muted,
+          src: video.src
+        });
         const playPromise = video.play();
         if (playPromise !== undefined) {
           playPromise
             .then(() => {
               // Video started playing successfully
-              console.log('[Video] Play started successfully');
+              console.log('[Video] Play started successfully - Episode:', episode.label);
             })
             .catch((error) => {
-              console.warn('[Video] Play failed:', error);
+              console.warn('[Video] Play failed - Episode:', episode.label, {
+                error: error,
+                errorName: error.name,
+                errorMessage: error.message,
+                readyState: video.readyState,
+                networkState: video.networkState
+              });
               // On iOS, autoplay might fail without user interaction
               // Hide loading after a delay so user can see video and tap to play
               setTimeout(() => {
                 if (video && isActive && video.readyState >= 3) {
+                  console.log('[Video] Fallback: Hiding loading after play failed (readyState >= 3)');
                   // Video is loaded enough to show, just not playing
                   setLoading(false);
                 }
               }, 2000);
             });
+        } else {
+          console.log('[Video] play() returned undefined - Episode:', episode.label);
         }
       };
 
@@ -485,16 +501,19 @@ const ReelItem: React.FC<{
 
       // For iOS, wait for video to be ready
       if (video.readyState >= 2) {
+        console.log('[Video] Video readyState >= 2, attempting play immediately - Episode:', episode.label);
         attemptPlay();
         // Also add fallback timeout for when video is already ready
+        // Safari fix: Clear loading if video has enough data to display (readyState >= 2)
         fallbackTimeout = setTimeout(() => {
-          if (video && isActive && video.readyState >= 3 && video.paused) {
-            console.log('[Video] Fallback: Hiding loading after timeout (readyState >= 2)');
+          if (video && isActive && video.readyState >= 2) {
+            console.log('[Video] Fallback: Hiding loading after timeout (video ready to display) - Episode:', episode.label);
             setLoading(false);
           }
-        }, 3000);
+        }, 2000);
         
         onPlayingHandler = () => {
+          console.log('[Video] Playing handler fired, cleaning up - Episode:', episode.label);
           if (fallbackTimeout) {
             clearTimeout(fallbackTimeout);
             fallbackTimeout = null;
@@ -505,8 +524,10 @@ const ReelItem: React.FC<{
         };
         video.addEventListener('playing', onPlayingHandler);
       } else {
+        console.log('[Video] Video readyState < 2, waiting for canplay event - Episode:', episode.label, 'readyState:', video.readyState);
         // Wait for video to load
         onCanPlayHandler = () => {
+          console.log('[Video] canplay event fired, attempting play - Episode:', episode.label);
           attemptPlay();
           if (onCanPlayHandler) {
             video.removeEventListener('canplay', onCanPlayHandler);
@@ -514,17 +535,19 @@ const ReelItem: React.FC<{
         };
         video.addEventListener('canplay', onCanPlayHandler);
         
-        // Fallback: If video doesn't start playing after 3 seconds, hide loading
-        // This ensures user can see the video and tap to play on iOS
+        // Fallback: If video doesn't start playing after 2 seconds, hide loading
+        // Safari fix: Clear loading if video has enough data to display (readyState >= 2)
+        // This ensures user can see the video and tap to play
         fallbackTimeout = setTimeout(() => {
-          if (video && isActive && video.readyState >= 3 && video.paused) {
-            console.log('[Video] Fallback: Hiding loading after timeout');
+          if (video && isActive && video.readyState >= 2) {
+            console.log('[Video] Fallback: Hiding loading after timeout (video ready to display) - Episode:', episode.label);
             setLoading(false);
           }
-        }, 3000);
+        }, 2000);
         
         // Clean up timeout when video starts playing
         onPlayingHandler = () => {
+          console.log('[Video] Playing handler fired (from canplay path), cleaning up - Episode:', episode.label);
           if (fallbackTimeout) {
             clearTimeout(fallbackTimeout);
             fallbackTimeout = null;
@@ -640,21 +663,152 @@ const ReelItem: React.FC<{
         preload={isActive ? "auto" : "none"}
         className={`w-full h-full object-cover transition-all duration-1000 ${isEnded ? 'scale-105 blur-3xl opacity-40' : 'opacity-100'}`}
         playsInline
+        autoPlay
         muted={isMuted}
-        onEnded={() => setIsEnded(true)}
-        onLoadStart={() => setLoading(true)}
-        onError={(e) => {
-          console.error('[Video] Error loading video:', e);
-          setLoading(false);
+        onLoadStart={() => {
+          console.log('[Video] LoadStart - Episode:', episode.label, 'URL:', episode.url);
+          setLoading(true);
         }}
-        onWaiting={() => setLoading(true)}
+        onLoadedMetadata={() => {
+          const video = videoRef.current;
+          console.log('[Video] LoadedMetadata - Episode:', episode.label, {
+            duration: video?.duration,
+            videoWidth: video?.videoWidth,
+            videoHeight: video?.videoHeight,
+            readyState: video?.readyState,
+            networkState: video?.networkState
+          });
+        }}
+        onLoadedData={() => {
+          const video = videoRef.current;
+          console.log('[Video] LoadedData - Episode:', episode.label, {
+            readyState: video?.readyState,
+            networkState: video?.networkState,
+            paused: video?.paused,
+            muted: video?.muted
+          });
+          // Safari fix: Hide loading when video data is loaded, even if autoplay is blocked
+          // This ensures the video is visible so users can interact with it
+          if (video && video.readyState >= 2) {
+            console.log('[Video] LoadedData - Hiding loading spinner (readyState >= 2)');
+            setLoading(false);
+          }
+        }}
+        onCanPlay={() => {
+          const video = videoRef.current;
+          console.log('[Video] CanPlay - Episode:', episode.label, {
+            readyState: video?.readyState,
+            paused: video?.paused
+          });
+        }}
+        onCanPlayThrough={() => {
+          const video = videoRef.current;
+          console.log('[Video] CanPlayThrough - Episode:', episode.label, {
+            readyState: video?.readyState,
+            paused: video?.paused
+          });
+        }}
+        onWaiting={() => {
+          console.log('[Video] Waiting - Episode:', episode.label, 'Buffering...');
+          setLoading(true);
+        }}
         onPlaying={() => {
+          const video = videoRef.current;
+          console.log('[Video] Playing - Episode:', episode.label, {
+            currentTime: video?.currentTime,
+            duration: video?.duration,
+            paused: video?.paused,
+            muted: video?.muted
+          });
           // iOS fix: Only hide loading when video actually starts playing
           setLoading(false);
         }}
+        onPause={() => {
+          const video = videoRef.current;
+          console.log('[Video] Pause - Episode:', episode.label, {
+            currentTime: video?.currentTime,
+            ended: video?.ended
+          });
+          handlePause();
+        }}
+        onEnded={() => {
+          console.log('[Video] Ended - Episode:', episode.label);
+          setIsEnded(true);
+        }}
+        onError={(e) => {
+          const video = videoRef.current;
+          const errorMessages: { [key: number]: string } = {
+            1: 'MEDIA_ERR_ABORTED - The user aborted the loading',
+            2: 'MEDIA_ERR_NETWORK - A network error caused the download to fail',
+            3: 'MEDIA_ERR_DECODE - The video playback was aborted due to a corruption problem or unsupported codec',
+            4: 'MEDIA_ERR_SRC_NOT_SUPPORTED - The video format is not supported by Safari'
+          };
+          
+          // Try to get error immediately
+          if (video && video.error) {
+            const error = video.error;
+            console.error('[Video] Error loading video - Episode:', episode.label, {
+              errorCode: error.code,
+              errorMessage: errorMessages[error.code] || 'Unknown error',
+              videoSrc: episode.url,
+              networkState: video.networkState,
+              readyState: video.readyState,
+              videoWidth: video.videoWidth,
+              videoHeight: video.videoHeight,
+              src: video.src
+            });
+          } else {
+            // Error not immediately available - try again after a short delay
+            setTimeout(() => {
+              if (video) {
+                if (video.error) {
+                  const error = video.error;
+                  console.error('[Video] Error loading video (delayed check) - Episode:', episode.label, {
+                    errorCode: error.code,
+                    errorMessage: errorMessages[error.code] || 'Unknown error',
+                    videoSrc: episode.url,
+                    networkState: video.networkState,
+                    readyState: video.readyState,
+                    videoWidth: video.videoWidth,
+                    videoHeight: video.videoHeight,
+                    src: video.src
+                  });
+                } else {
+                  console.error('[Video] Error loading video (no error property) - Episode:', episode.label, {
+                    videoSrc: episode.url,
+                    networkState: video.networkState,
+                    readyState: video.readyState,
+                    src: video.src,
+                    paused: video.paused,
+                    muted: video.muted
+                  });
+                }
+              }
+            }, 100);
+            
+            // Log immediate state
+            console.error('[Video] Error event fired - Episode:', episode.label, {
+              videoSrc: episode.url,
+              videoExists: !!video,
+              networkState: video?.networkState,
+              readyState: video?.readyState,
+              src: video?.src
+            });
+          }
+          setLoading(false);
+        }}
         onTimeUpdate={handleTimeUpdate}
-        onPause={handlePause}
-        onClick={() => videoRef.current?.paused ? videoRef.current.play() : videoRef.current?.pause()}
+        onClick={() => {
+          const video = videoRef.current;
+          console.log('[Video] Click - Episode:', episode.label, 'Currently paused:', video?.paused);
+          if (video?.paused) {
+            video.play().catch((err) => {
+              console.error('[Video] Play failed on click:', err);
+            });
+          } else {
+            video?.pause();
+          }
+        }}
       />
 
       {loading && !isEnded && (
@@ -833,7 +987,7 @@ export const SERIES_CATALOG = [
       { 
         id: 1, 
         label: "Episode 01", 
-        url: "https://github.com/rajatboss1/plivetv/releases/download/Video/Heart.Beats.Episode.2.mp4", 
+        url: "https://rgmeakgorodicnqgrffu.supabase.co/storage/v1/object/public/inscene-videos/Priyank/Heart.Beats.Episode.1.mp4", 
         triggers: [
           { char: 'Priyank', intro: "Hey, itni jaldi kahan ja rahi ho? 😉", hook: "We just met at Lodhi Garden. You are walking away." }, 
           { char: 'Arzoo', intro: "Excuse me? Follow kar rahe ho kya? 🤨", hook: "Catching Priyank following me at Lodhi Garden." }
@@ -842,7 +996,7 @@ export const SERIES_CATALOG = [
       { 
         id: 2, 
         label: "Episode 02", 
-        url: "https://github.com/rajatboss1/plivetv/releases/download/Video/Heart.Beats.Episode.1.mp4", 
+        url: "https://rgmeakgorodicnqgrffu.supabase.co/storage/v1/object/public/inscene-videos/Priyank/Heart.Beats.Episode.2.mp4", 
         triggers: [
           { char: 'Priyank', intro: "Lizard wala joke bura tha kya? 😂", hook: "After the awkward lizard joke during tiffin." }, 
           { char: 'Arzoo', intro: "Seriously? Itna ghatiya joke... 🙄", hook: "Responding to Priyank's weird lizard pickup line." }
@@ -851,7 +1005,7 @@ export const SERIES_CATALOG = [
       { 
         id: 3, 
         label: "Episode 03", 
-        url: "https://github.com/rajatboss1/plivetv/releases/download/Video/Heart.Beats.Episode.3.mp4", 
+        url: "https://rgmeakgorodicnqgrffu.supabase.co/storage/v1/object/public/inscene-videos/Priyank/Heart.Beats.Episode.3.mp4", 
         triggers: [
           { char: 'Priyank', intro: "Wait, main explain kar sakta hoon! 😟", hook: "Trying to stop Arzoo after she sees him with another girl." }, 
           { char: 'Arzoo', intro: "Ab kya explain karoge? Sab dekh liya maine. 😡", hook: "Angry and walking away after a misunderstanding." }
@@ -860,7 +1014,7 @@ export const SERIES_CATALOG = [
       { 
         id: 4, 
         label: "Episode 04", 
-        url: "https://github.com/rajatboss1/plivetv/releases/download/Video/Heart.Beats.Episode.4.mp4", 
+        url: "https://rgmeakgorodicnqgrffu.supabase.co/storage/v1/object/public/inscene-videos/Priyank/Heart.Beats.Episode.4.mp4", 
         triggers: [
           { char: 'Priyank', intro: "Peace offering? ☕️", hook: "Approaching Arzoo in the rain with a hot tea." }, 
           { char: 'Arzoo', intro: "Extra shakkar honi chahiye... 😌", hook: "Softening up after Priyank's sincere effort." }
@@ -882,7 +1036,7 @@ export const SERIES_CATALOG = [
       { 
         id: 1, 
         label: "Phase 1", 
-        url: "https://github.com/Insceneofficial/ai-studio-demo-assets/releases/download/Video/Anish_Ep1.mp4", 
+        url: "https://rgmeakgorodicnqgrffu.supabase.co/storage/v1/object/public/inscene-videos/Anish/Anish_Ep1.mp4", 
         triggers: [
           { char: 'Anish', intro: "Yo! Ready to start something big or just testing the waters? Startup life is brutal bro.", hook: "Validation and readiness phase. Assessing if the user is ready to bootstrap or fundraise." }
         ] 
@@ -890,7 +1044,7 @@ export const SERIES_CATALOG = [
       { 
         id: 2, 
         label: "Phase 2", 
-        url: "https://github.com/Insceneofficial/ai-studio-demo-assets/releases/download/Video/Anish_Ep2.mp4", 
+        url: "https://rgmeakgorodicnqgrffu.supabase.co/storage/v1/object/public/inscene-videos/Anish/Anish_Ep2.mp4", 
         triggers: [
           { char: 'Anish', intro: "Core roles decide everything. What's your real strength? Tech or Sales?", hook: "Mapping responsibilities and finding a co-founder with the right fit." }
         ] 
@@ -898,7 +1052,7 @@ export const SERIES_CATALOG = [
       { 
         id: 3, 
         label: "Phase 3", 
-        url: "https://github.com/Insceneofficial/ai-studio-demo-assets/releases/download/Video/Anish_Ep3.mp4", 
+        url: "https://rgmeakgorodicnqgrffu.supabase.co/storage/v1/object/public/inscene-videos/Anish/Anish_Ep3.mp4", 
         triggers: [
           { char: 'Anish', intro: "Gemini and OpenAI are massive, but we need to find our niche. What's our moat?", hook: "Differentiating from giants. Identifying a defensible advantage in the AI space." }
         ] 
@@ -906,7 +1060,7 @@ export const SERIES_CATALOG = [
       { 
         id: 4, 
         label: "Phase 4", 
-        url: "https://github.com/Insceneofficial/ai-studio-demo-assets/releases/download/Video/Anish_Ep4.mp4", 
+        url: "https://rgmeakgorodicnqgrffu.supabase.co/storage/v1/object/public/inscene-videos/Anish/Anish_Ep4.mp4", 
         triggers: [
           { char: 'Anish', intro: "Idea is cheap, execution is everything. What are we building in the next 14 days?", hook: "Clarifying the core problem and defining immediate next steps." }
         ] 
@@ -914,7 +1068,7 @@ export const SERIES_CATALOG = [
       { 
         id: 5, 
         label: "Phase 5", 
-        url: "https://github.com/Insceneofficial/ai-studio-demo-assets/releases/download/Video/Anish_Ep5.mp4", 
+        url: "https://rgmeakgorodicnqgrffu.supabase.co/storage/v1/object/public/inscene-videos/Anish/Anish_Ep5.mp4", 
         triggers: [
           { char: 'Anish', intro: "Pivot or Patience? Big question. Sometimes you gotta build a lean team first.", hook: "Decision making on pivots and building an early team with limited resources." }
         ] 
@@ -935,7 +1089,7 @@ export const SERIES_CATALOG = [
       { 
         id: 1, 
         label: "Coaching Intro", 
-        url: "https://github.com/Insceneofficial/ai-studio-demo-assets/releases/download/Video/FitMonk.Chirag._Ep0_Demo.mp4", 
+        url: "https://rgmeakgorodicnqgrffu.supabase.co/storage/v1/object/public/inscene-videos/Chirag/FitMonk.Chirag._Ep0_Demo.mp4", 
         triggers: [
           { char: 'Chirag', intro: "Ready to dominate the pitch? Fitness is 70% of the game. What's holding you back?", hook: "Athlete coaching session focused on cricket performance and doubt clearing." }
         ] 
@@ -956,7 +1110,7 @@ export const SERIES_CATALOG = [
       { 
         id: 1, 
         label: "Scene 01", 
-        url: "https://github.com/rajatboss1/DebuTv_videostorange/releases/download/video/Episode1_Debu.mp4", 
+        url: "https://rgmeakgorodicnqgrffu.supabase.co/storage/v1/object/public/inscene-videos/Debu/Episode1_Debu.mp4", 
         triggers: [
           { char: 'Debu', intro: "Welcome. Before we ever touch a camera, we must sharpen the mind. Tell me, what draws you to cinema?", hook: "Assessment of the user's cinematic palate." }
         ] 
@@ -964,7 +1118,7 @@ export const SERIES_CATALOG = [
       { 
         id: 2, 
         label: "Scene 02", 
-        url: "https://github.com/rajatboss1/DebuTv_videostorange/releases/download/video/Episode2_Debu.mp4", 
+        url: "https://rgmeakgorodicnqgrffu.supabase.co/storage/v1/object/public/inscene-videos/Debu/Episode2_Debu.mp4", 
         triggers: [
           { char: 'Debu', intro: "Composition is the skeleton of a shot. How do you frame a soul without losing the context?", hook: "Lesson on the philosophy of framing and composition." }
         ] 
@@ -972,7 +1126,7 @@ export const SERIES_CATALOG = [
       { 
         id: 3, 
         label: "Scene 03", 
-        url: "https://github.com/rajatboss1/DebuTv_videostorange/releases/download/video/Episode3_Debu.mp4", 
+        url: "https://rgmeakgorodicnqgrffu.supabase.co/storage/v1/object/public/inscene-videos/Debu/Episode3_Debu.mp4", 
         triggers: [
           { char: 'Debu', intro: "The edit is where the story is truly born. Do you have the courage to kill your darlings?", hook: "Deep dive into the ruthlessness of the editing process." }
         ] 
