@@ -183,28 +183,81 @@ const ReelItem: React.FC<{
       const attemptPlay = () => {
         const playPromise = video.play();
         if (playPromise !== undefined) {
-          playPromise.catch((error) => {
-            console.warn('[Video] Play failed, will retry:', error);
-            // Retry after a short delay for iOS
-            setTimeout(() => {
-              if (video && isActive) {
-                video.play().catch(() => {});
-              }
-            }, 100);
-          });
+          playPromise
+            .then(() => {
+              // Video started playing successfully
+              console.log('[Video] Play started successfully');
+            })
+            .catch((error) => {
+              console.warn('[Video] Play failed:', error);
+              // On iOS, autoplay might fail without user interaction
+              // Hide loading after a delay so user can see video and tap to play
+              setTimeout(() => {
+                if (video && isActive && video.readyState >= 3) {
+                  // Video is loaded enough to show, just not playing
+                  setLoading(false);
+                }
+              }, 2000);
+            });
         }
       };
+
+      // Store cleanup handlers
+      let fallbackTimeout: ReturnType<typeof setTimeout> | null = null;
+      let onCanPlayHandler: (() => void) | null = null;
+      let onPlayingHandler: (() => void) | null = null;
 
       // For iOS, wait for video to be ready
       if (video.readyState >= 2) {
         attemptPlay();
+        // Also add fallback timeout for when video is already ready
+        fallbackTimeout = setTimeout(() => {
+          if (video && isActive && video.readyState >= 3 && video.paused) {
+            console.log('[Video] Fallback: Hiding loading after timeout (readyState >= 2)');
+            setLoading(false);
+          }
+        }, 3000);
+        
+        onPlayingHandler = () => {
+          if (fallbackTimeout) {
+            clearTimeout(fallbackTimeout);
+            fallbackTimeout = null;
+          }
+          if (onPlayingHandler) {
+            video.removeEventListener('playing', onPlayingHandler);
+          }
+        };
+        video.addEventListener('playing', onPlayingHandler);
       } else {
         // Wait for video to load
-        const onCanPlayHandler = () => {
+        onCanPlayHandler = () => {
           attemptPlay();
-          video.removeEventListener('canplay', onCanPlayHandler);
+          if (onCanPlayHandler) {
+            video.removeEventListener('canplay', onCanPlayHandler);
+          }
         };
         video.addEventListener('canplay', onCanPlayHandler);
+        
+        // Fallback: If video doesn't start playing after 3 seconds, hide loading
+        // This ensures user can see the video and tap to play on iOS
+        fallbackTimeout = setTimeout(() => {
+          if (video && isActive && video.readyState >= 3 && video.paused) {
+            console.log('[Video] Fallback: Hiding loading after timeout');
+            setLoading(false);
+          }
+        }, 3000);
+        
+        // Clean up timeout when video starts playing
+        onPlayingHandler = () => {
+          if (fallbackTimeout) {
+            clearTimeout(fallbackTimeout);
+            fallbackTimeout = null;
+          }
+          if (onPlayingHandler) {
+            video.removeEventListener('playing', onPlayingHandler);
+          }
+        };
+        video.addEventListener('playing', onPlayingHandler);
       }
 
       return () => {
@@ -212,6 +265,16 @@ const ReelItem: React.FC<{
         if (progressIntervalRef.current) {
           clearInterval(progressIntervalRef.current);
           progressIntervalRef.current = null;
+        }
+        // Cleanup video event listeners and timeout
+        if (fallbackTimeout) {
+          clearTimeout(fallbackTimeout);
+        }
+        if (onCanPlayHandler && video) {
+          video.removeEventListener('canplay', onCanPlayHandler);
+        }
+        if (onPlayingHandler && video) {
+          video.removeEventListener('playing', onPlayingHandler);
         }
       };
     } else {
@@ -472,33 +535,19 @@ const ReelItem: React.FC<{
           setIsEnded(true);
         }}
         onLoadStart={() => setLoading(true)}
-        onCanPlay={() => setLoading(false)}
-        onLoadedData={() => setLoading(false)}
-        onLoadedMetadata={() => {
-          // iOS fix: Ensure video is ready to play
-          setLoading(false);
-        }}
         onError={(e) => {
           console.error('[Video] Error loading video:', e);
           setLoading(false);
         }}
         onWaiting={() => setLoading(true)}
-        onPlaying={() => setLoading(false)}
+        onPlaying={() => {
+          // iOS fix: Only hide loading when video actually starts playing
+          setLoading(false);
+        }}
         onTimeUpdate={handleTimeUpdate}
         onPause={handlePause}
         onClick={() => videoRef.current?.paused ? videoRef.current.play() : videoRef.current?.pause()}
       />
-
-
-        {loading && !isEnded && (
-          <div className="absolute inset-0 flex items-center justify-center bg-[#0a0a0f]/60 backdrop-blur-md z-10">
-            <div className="flex flex-col items-center gap-3">
-              <div className="w-10 h-10 border-2 border-violet-500/20 border-t-violet-500 rounded-full animate-spin shadow-[0_0_20px_rgba(139,92,246,0.3)]" />
-              <p className="text-[9px] font-black tracking-[0.4em] uppercase text-white/40">Loading Scene...</p>
-            </div>
-          </div>
-        )}
-
 
       {loading && !isEnded && (
         <div className="absolute inset-0 flex items-center justify-center bg-[#0a0a0f]/60 backdrop-blur-md z-10">
