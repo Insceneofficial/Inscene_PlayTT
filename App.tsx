@@ -113,6 +113,15 @@ const ReelItem: React.FC<{
   useEffect(() => {
     console.log('[ReelItem] Component mounted/updated - isActive:', isActive, 'isEnded:', isEnded);
   });
+
+  // iOS fix: Set webkit-playsinline attribute for older iOS versions
+  useEffect(() => {
+    const video = videoRef.current;
+    if (video) {
+      video.setAttribute('webkit-playsinline', 'true');
+      video.setAttribute('playsinline', 'true');
+    }
+  }, []);
   
   // Analytics tracking refs
   const analyticsRecordId = useRef<string | null>(null);
@@ -389,6 +398,12 @@ const ReelItem: React.FC<{
       
       video.preload = "auto";
       
+      // iOS fix: Explicitly load the video when it becomes active
+      // This is especially important for new episodes
+      if (isNewEpisode || !video.readyState || video.readyState < 2) {
+        video.load();
+      }
+      
       // Reset tracking state
       seekCountRef.current = 0;
       pauseCountRef.current = 0;
@@ -440,9 +455,32 @@ const ReelItem: React.FC<{
         }
       }, 10000);
       
-      const playPromise = video.play();
-      if (playPromise !== undefined) {
-        playPromise.catch(() => {});
+      // iOS fix: Wait a bit for video to be ready before playing
+      const attemptPlay = () => {
+        const playPromise = video.play();
+        if (playPromise !== undefined) {
+          playPromise.catch((error) => {
+            console.warn('[Video] Play failed, will retry:', error);
+            // Retry after a short delay for iOS
+            setTimeout(() => {
+              if (video && isActive) {
+                video.play().catch(() => {});
+              }
+            }, 100);
+          });
+        }
+      };
+
+      // For iOS, wait for video to be ready
+      if (video.readyState >= 2) {
+        attemptPlay();
+      } else {
+        // Wait for video to load
+        const onCanPlayHandler = () => {
+          attemptPlay();
+          video.removeEventListener('canplay', onCanPlayHandler);
+        };
+        video.addEventListener('canplay', onCanPlayHandler);
       }
 
       // Handle page unload/visibility change
@@ -543,6 +581,17 @@ const ReelItem: React.FC<{
         onEnded={() => setIsEnded(true)}
         onLoadStart={() => setLoading(true)}
         onCanPlay={() => setLoading(false)}
+        onLoadedData={() => setLoading(false)}
+        onLoadedMetadata={() => {
+          // iOS fix: Ensure video is ready to play
+          setLoading(false);
+        }}
+        onError={(e) => {
+          console.error('[Video] Error loading video:', e);
+          setLoading(false);
+        }}
+        onWaiting={() => setLoading(true)}
+        onPlaying={() => setLoading(false)}
         onTimeUpdate={handleTimeUpdate}
         onPause={handlePause}
         onClick={() => videoRef.current?.paused ? videoRef.current.play() : videoRef.current?.pause()}
