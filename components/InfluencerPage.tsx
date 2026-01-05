@@ -89,6 +89,8 @@ const ReelItem: React.FC<{
   const sessionStartTime = React.useRef<number | null>(null);
   const hasTriggeredNextScroll = React.useRef(false);
   const lastEpisodeIdRef = React.useRef<string | number | null>(null);
+  const playAttemptedRef = React.useRef(false);
+  const userInteractionRef = React.useRef(false);
 
   // iOS fix: Set webkit-playsinline attribute for older iOS versions
   React.useEffect(() => {
@@ -96,8 +98,39 @@ const ReelItem: React.FC<{
     if (video) {
       video.setAttribute('webkit-playsinline', 'true');
       video.setAttribute('playsinline', 'true');
+      // Ensure muted for autoplay on iOS
+      if (isMuted) {
+        video.muted = true;
+      }
     }
-  }, []);
+  }, [isMuted]);
+
+  // Track user interactions for iOS autoplay
+  React.useEffect(() => {
+    const handleUserInteraction = () => {
+      userInteractionRef.current = true;
+      // Try to play video if it's active and ready
+      if (isActive && videoRef.current && videoRef.current.paused) {
+        const video = videoRef.current;
+        if (video.readyState >= 2) {
+          video.play().catch((err) => {
+            console.warn('[Video] Play failed on user interaction:', err);
+          });
+        }
+      }
+    };
+
+    // Listen for any user interaction
+    document.addEventListener('touchstart', handleUserInteraction, { passive: true, once: true });
+    document.addEventListener('touchend', handleUserInteraction, { passive: true, once: true });
+    document.addEventListener('scroll', handleUserInteraction, { passive: true, once: true });
+
+    return () => {
+      document.removeEventListener('touchstart', handleUserInteraction);
+      document.removeEventListener('touchend', handleUserInteraction);
+      document.removeEventListener('scroll', handleUserInteraction);
+    };
+  }, [isActive]);
 
   // Pause video when chat opens, resume when chat closes
   React.useEffect(() => {
@@ -179,32 +212,81 @@ const ReelItem: React.FC<{
         }
       }, 10000);
       
-      // iOS fix: Wait a bit for video to be ready before playing
-      const attemptPlay = () => {
-        const playPromise = video.play();
-        if (playPromise !== undefined) {
-          playPromise.catch((error) => {
-            console.warn('[Video] Play failed, will retry:', error);
-            // Retry after a short delay for iOS
-            setTimeout(() => {
-              if (video && isActive) {
+      // Reset play attempt flag for new episode
+      if (isNewEpisode) {
+        playAttemptedRef.current = false;
+      }
+
+      // iOS fix: More robust play attempt with user interaction handling
+      const attemptPlay = async () => {
+        if (playAttemptedRef.current && !userInteractionRef.current) {
+          // iOS requires user interaction - wait for it
+          console.log('[Video] Waiting for user interaction before playing (iOS requirement)');
+          return;
+        }
+
+        try {
+          // Ensure video is muted for autoplay
+          if (isMuted && !video.muted) {
+            video.muted = true;
+          }
+
+          // Check if video is ready
+          if (video.readyState < 2) {
+            console.log('[Video] Video not ready, readyState:', video.readyState);
+            return;
+          }
+
+          playAttemptedRef.current = true;
+          const playPromise = video.play();
+          
+          if (playPromise !== undefined) {
+            await playPromise;
+            console.log('[Video] Playback started successfully');
+            userInteractionRef.current = true; // Mark that we have interaction
+          }
+        } catch (error: any) {
+          console.warn('[Video] Play failed:', error?.name, error?.message);
+          
+          // If it's a NotAllowedError, we need user interaction
+          if (error?.name === 'NotAllowedError' || error?.name === 'NotSupportedError') {
+            console.log('[Video] Autoplay blocked - will play on next user interaction');
+            // Set up a one-time play on next user interaction
+            const playOnInteraction = () => {
+              if (video && isActive && video.paused) {
                 video.play().catch(() => {});
               }
-            }, 100);
-          });
+              document.removeEventListener('touchstart', playOnInteraction);
+              document.removeEventListener('touchend', playOnInteraction);
+              document.removeEventListener('click', playOnInteraction);
+            };
+            document.addEventListener('touchstart', playOnInteraction, { passive: true, once: true });
+            document.addEventListener('touchend', playOnInteraction, { passive: true, once: true });
+            document.addEventListener('click', playOnInteraction, { once: true });
+          } else {
+            // Other errors - retry after delay
+            setTimeout(() => {
+              if (video && isActive && video.paused) {
+                attemptPlay();
+              }
+            }, 300);
+          }
         }
       };
 
-      // For iOS, wait for video to be ready
+      // Try to play when video is ready
       if (video.readyState >= 2) {
-        attemptPlay();
+        // Small delay to ensure everything is set up
+        setTimeout(() => attemptPlay(), 100);
       } else {
         // Wait for video to load
         const onCanPlayHandler = () => {
-          attemptPlay();
+          setTimeout(() => attemptPlay(), 100);
           video.removeEventListener('canplay', onCanPlayHandler);
+          video.removeEventListener('loadeddata', onCanPlayHandler);
         };
         video.addEventListener('canplay', onCanPlayHandler);
+        video.addEventListener('loadeddata', onCanPlayHandler);
       }
 
       return () => {
@@ -473,10 +555,23 @@ const ReelItem: React.FC<{
         }}
         onLoadStart={() => setLoading(true)}
         onCanPlay={() => setLoading(false)}
-        onLoadedData={() => setLoading(false)}
+        onLoadedData={() => {
+          setLoading(false);
+          // iOS: Try to play when data is loaded
+          if (isActive && videoRef.current && videoRef.current.paused && userInteractionRef.current) {
+            videoRef.current.play().catch(() => {});
+          }
+        }}
         onLoadedMetadata={() => {
           // iOS fix: Ensure video is ready to play
           setLoading(false);
+        }}
+        onCanPlayThrough={() => {
+          setLoading(false);
+          // iOS: Video is fully ready, try to play if we have user interaction
+          if (isActive && videoRef.current && videoRef.current.paused && userInteractionRef.current) {
+            videoRef.current.play().catch(() => {});
+          }
         }}
         onError={(e) => {
           console.error('[Video] Error loading video:', e);
@@ -486,7 +581,27 @@ const ReelItem: React.FC<{
         onPlaying={() => setLoading(false)}
         onTimeUpdate={handleTimeUpdate}
         onPause={handlePause}
-        onClick={() => videoRef.current?.paused ? videoRef.current.play() : videoRef.current?.pause()}
+        onClick={(e) => {
+          e.preventDefault();
+          userInteractionRef.current = true; // Mark user interaction
+          if (videoRef.current) {
+            if (videoRef.current.paused) {
+              videoRef.current.play().catch((err) => {
+                console.warn('[Video] Click play failed:', err);
+              });
+            } else {
+              videoRef.current.pause();
+            }
+          }
+        }}
+        onTouchStart={(e) => {
+          // Mark user interaction on touch
+          userInteractionRef.current = true;
+          // Try to play if paused
+          if (videoRef.current && videoRef.current.paused && isActive) {
+            videoRef.current.play().catch(() => {});
+          }
+        }}
       />
 
 
