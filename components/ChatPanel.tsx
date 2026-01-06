@@ -73,6 +73,11 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
   const isGeneratingReminder = useRef<boolean>(false);
   const MAX_REMINDERS = 2;
   
+  // Goal check-in reminder system refs
+  const goalCheckInTimeoutId = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastCheckInTime = useRef<number>(0);
+  const CHECK_IN_INTERVAL = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
+  
   // Get random delay between 10 seconds and 2 minutes
   const getRandomDelay = () => {
     const minMs = 30 * 1000;      // 30 seconds
@@ -473,11 +478,99 @@ Generate ONLY the follow-up message, nothing else.
     }, delay);
   };
 
+  // Generate goal check-in reminder
+  const generateGoalCheckIn = async () => {
+    if (!isUserLoggedIn() || !currentGoal || isTyping) return;
+    
+    const apiKey = process.env.API_KEY;
+    if (!apiKey) return;
+
+    try {
+      const openai = new OpenAI({ apiKey, dangerouslyAllowBrowser: true });
+      
+      // Create a check-in message based on goal context
+      const checkInPrompt = `The user has a goal: "${currentGoal.goal_text}"
+Current milestone: ${currentGoal.milestones[currentGoal.current_milestone_index]?.title || 'Not set'}
+Current status: ${currentGoal.current_status}
+
+Send a brief, friendly check-in message asking about their progress. Keep it short (1-2 sentences max), natural, and in your character's voice. Ask what they've done recently toward their goal.`;
+
+      const response = await openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages: [
+          { role: 'system', content: systemPrompt.current },
+          ...conversationHistory.current,
+          { role: 'user', content: checkInPrompt }
+        ],
+        temperature: 0.8,
+      });
+
+      const rawCheckIn = response.choices[0]?.message?.content?.trim();
+      if (rawCheckIn) {
+        const formattedCheckIn = formatLLMResponse(rawCheckIn);
+        const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        
+        setMessages(prev => [...prev, {
+          role: 'assistant',
+          content: formattedCheckIn,
+          time: now
+        }]);
+        
+        if (isUserLoggedIn()) {
+          saveMessage(character, 'assistant', formattedCheckIn, seriesId, episodeId);
+        }
+        
+        lastCheckInTime.current = Date.now();
+        console.log('[GoalCheckIn] Sent check-in reminder');
+      }
+    } catch (error) {
+      console.error('[GoalCheckIn] Check-in generation error:', error);
+    }
+  };
+
+  // Schedule goal check-in reminders
+  const scheduleGoalCheckIn = () => {
+    if (!currentGoal) {
+      // Clear timer if no goal
+      if (goalCheckInTimeoutId.current) {
+        clearTimeout(goalCheckInTimeoutId.current);
+        goalCheckInTimeoutId.current = null;
+      }
+      return;
+    }
+    
+    // Clear any existing timer
+    if (goalCheckInTimeoutId.current) {
+      clearTimeout(goalCheckInTimeoutId.current);
+      goalCheckInTimeoutId.current = null;
+    }
+    
+    // Calculate time until next check-in (24 hours from last check-in or now)
+    const timeSinceLastCheckIn = Date.now() - lastCheckInTime.current;
+    const delay = Math.max(0, CHECK_IN_INTERVAL - timeSinceLastCheckIn);
+    
+    // If it's been more than 24 hours, send immediately (with small delay to avoid spam)
+    const actualDelay = delay < 1000 ? 5000 : delay;
+    
+    console.log(`[GoalCheckIn] Next check-in scheduled in ${Math.round(actualDelay / 1000 / 60)} minutes`);
+    
+    goalCheckInTimeoutId.current = setTimeout(() => {
+      generateGoalCheckIn();
+      // Schedule next check-in
+      scheduleGoalCheckIn();
+    }, actualDelay);
+  };
+
   // Initialize drop-off reminder system after history loads
   useEffect(() => {
     if (!isLoadingHistory) {
       // Start the reminder timer once chat is ready
       scheduleNextReminder();
+      
+      // Start goal check-in if goal exists
+      if (currentGoal) {
+        scheduleGoalCheckIn();
+      }
     }
     
     // Cleanup on unmount
@@ -486,8 +579,12 @@ Generate ONLY the follow-up message, nothing else.
         clearTimeout(reminderTimeoutId.current);
         reminderTimeoutId.current = null;
       }
+      if (goalCheckInTimeoutId.current) {
+        clearTimeout(goalCheckInTimeoutId.current);
+        goalCheckInTimeoutId.current = null;
+      }
     };
-  }, [isLoadingHistory]);
+  }, [isLoadingHistory, currentGoal]);
 
   const handleSend = async () => {
     if (!inputValue.trim() || isTyping) return;
@@ -527,8 +624,9 @@ Generate ONLY the follow-up message, nothing else.
         // Check for status check query
         if (isStatusCheckQuery(userText) && currentGoal) {
           const statusReport = formatGoalStatusReport(currentGoal);
-          // formatLLMResponse will detect this is structured and preserve formatting
-          const formattedReport = formatLLMResponse(statusReport);
+          // Don't format goal status reports - they're already formatted with emojis
+          // formatLLMResponse would remove emojis, so we skip it
+          const formattedReport = statusReport;
           
           setMessages(prev => [...prev, { 
             role: 'assistant', 
@@ -596,6 +694,8 @@ Generate ONLY the follow-up message, nothing else.
             const savedGoal = await saveGoal(character, goalText, milestones);
             if (savedGoal) {
               setCurrentGoal(savedGoal);
+              // Schedule check-in for new goal
+              scheduleGoalCheckIn();
               // Update system prompt with new goal context
               const currentMilestone = savedGoal.milestones[savedGoal.current_milestone_index];
               goalContextRef.current = `User's Current Goal: ${savedGoal.goal_text}
@@ -633,6 +733,8 @@ Milestones: ${savedGoal.milestones.map((m, i) => `${i + 1}. ${m.title} (${m.stat
           const updatedGoal = await getCurrentGoal(character);
           if (updatedGoal) {
             setCurrentGoal(updatedGoal);
+            // Reschedule check-in after status update
+            scheduleGoalCheckIn();
             // Update goal context and system prompt
             const currentMilestone = updatedGoal.milestones[updatedGoal.current_milestone_index];
             goalContextRef.current = `User's Current Goal: ${updatedGoal.goal_text}
