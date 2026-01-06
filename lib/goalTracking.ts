@@ -212,6 +212,7 @@ export const recordCheckIn = async (characterName: string): Promise<boolean> => 
 
 /**
  * Format goal status report for display
+ * Uses TYPE 1 structured formatting with proper line breaks
  */
 export const formatGoalStatusReport = (goal: UserGoal): string => {
   if (!goal) return '';
@@ -219,24 +220,41 @@ export const formatGoalStatusReport = (goal: UserGoal): string => {
   const currentMilestone = goal.milestones[goal.current_milestone_index];
   const milestoneText = currentMilestone ? currentMilestone.title : 'Not set';
 
-  let report = `Goal: ${goal.goal_text}\n\n`;
-  report += `Current Status: ${goal.current_status}\n`;
-  report += `Current Milestone: ${milestoneText}\n\n`;
-
-  if (goal.progress_summary) {
-    report += `Progress Summary:\n${goal.progress_summary}\n\n`;
+  // Build structured report with proper line breaks (matching exact format from requirements)
+  let report = `Here's your goal status\n\n`;
+  
+  report += `Goal:\n${goal.goal_text}\n\n`;
+  
+  report += `Current Status:\n`;
+  report += `• Progress: ${goal.current_status}\n`;
+  report += `• Current Milestone: ${milestoneText}\n`;
+  
+  // Add key blocker - always show this field
+  if (goal.current_status === 'Stuck') {
+    report += `• Key blocker: Needs clarification\n`;
+  } else if (goal.progress_summary) {
+    // If we have progress summary, we might not need key blocker, but show it anyway
+    report += `• Key blocker: None reported\n`;
+  } else {
+    report += `• Key blocker: None reported\n`;
   }
+  
+  report += `\nNext Step:\n`;
 
   // Determine next action
   if (goal.current_status === 'Stuck') {
-    report += `Suggestion:\nLet's simplify. What is ONE small action you can do today?`;
+    report += `Let's simplify. What is ONE small action you can do today?`;
   } else if (goal.current_status === 'Completed' && goal.current_milestone_index < goal.milestones.length - 1) {
     const nextMilestone = goal.milestones[goal.current_milestone_index + 1];
-    report += `What's next:\nMove to ${nextMilestone.title}.\nShall we update your focus to Milestone #${goal.current_milestone_index + 2}?`;
+    report += `Move to ${nextMilestone.title}. Shall we update your focus to Milestone #${goal.current_milestone_index + 2}?`;
   } else if (goal.current_status === 'In Progress' && goal.current_milestone_index < goal.milestones.length - 1) {
     const nextMilestone = goal.milestones[goal.current_milestone_index + 1];
-    report += `Suggested Next Action:\nStart working on ${nextMilestone.title} to move to the next milestone.`;
+    report += `Start working on ${nextMilestone.title} to move to the next milestone.`;
+  } else {
+    report += `Continue working on ${milestoneText}.`;
   }
+
+  report += `\n\nWhat would you like to do next?`;
 
   return report;
 };

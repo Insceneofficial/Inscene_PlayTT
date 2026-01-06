@@ -518,6 +518,7 @@ Generate ONLY the follow-up message, nothing else.
         // Check for status check query
         if (isStatusCheckQuery(userText) && currentGoal) {
           const statusReport = formatGoalStatusReport(currentGoal);
+          // formatLLMResponse will detect this is structured and preserve formatting
           const formattedReport = formatLLMResponse(statusReport);
           
           setMessages(prev => [...prev, { 
