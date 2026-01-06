@@ -189,24 +189,38 @@ export const saveMessages = async (
 
 /**
  * Load chat history for a specific character
+ * Returns messages and the prompt version used (if available)
  */
 export const loadChatHistory = async (
   characterName: string
-): Promise<ChatMessage[]> => {
+): Promise<{ messages: ChatMessage[]; promptVersion: string | null }> => {
   if (!isSupabaseConfigured()) {
     console.log('ChatStorage: Supabase not configured');
-    return [];
+    return { messages: [], promptVersion: null };
   }
   
   const googleUserId = getGoogleUserId();
   if (!googleUserId) {
     console.log('ChatStorage: No Google user ID found');
-    return [];
+    return { messages: [], promptVersion: null };
   }
   
   console.log('ChatStorage: Loading history for', characterName, 'user:', googleUserId);
   
   try {
+    // First, try to get the prompt version from the most recent chat session
+    const { data: sessionData } = await supabase
+      .from('chat_sessions')
+      .select('prompt_version')
+      .eq('google_user_id', googleUserId)
+      .eq('character_name', characterName)
+      .order('started_at', { ascending: false })
+      .limit(1)
+      .single();
+    
+    const promptVersion = sessionData?.prompt_version || null;
+    
+    // Load messages
     const { data, error } = await supabase
       .from('chat_messages')
       .select('id, role, content, sent_at')
@@ -214,20 +228,22 @@ export const loadChatHistory = async (
       .eq('character_name', characterName)
       .order('sent_at', { ascending: true });
     
-    console.log('ChatStorage: Query result', { data, error });
+    console.log('ChatStorage: Query result', { data, error, promptVersion });
     
     if (error) throw error;
     
-    return (data || []).map(msg => ({
+    const messages = (data || []).map(msg => ({
       id: msg.id,
       role: msg.role as 'user' | 'assistant',
       content: msg.content,
       time: new Date(msg.sent_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       sent_at: msg.sent_at
     }));
+    
+    return { messages, promptVersion };
   } catch (error) {
     console.warn('ChatStorage: Failed to load chat history', error);
-    return [];
+    return { messages: [], promptVersion: null };
   }
 };
 

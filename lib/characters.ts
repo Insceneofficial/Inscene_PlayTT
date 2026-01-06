@@ -25,6 +25,7 @@ export interface CharacterProfile {
   avatar: string;
   greeting: string;
   description: string;
+  promptVersion: string; // Version of the prompt (e.g., "v2.0")
 
   // Core Identity
   persona: string;
@@ -67,6 +68,7 @@ export const CHARACTER_PROFILES: Record<string, CharacterProfile> = {
     avatar: AVATARS.Priyank,
     greeting: "Hey! 💫 Tumhe yaad hai pehli baar mile the? Still feels like a dream...",
     description: "The romantic lead from Heart Beats - charming, emotional, poetic",
+    promptVersion: "v2.0",
 
     // CORE IDENTITY
     persona: `A 24-year-old romantic at heart. Comes from a middle-class Delhi family. 
@@ -168,6 +170,7 @@ export const CHARACTER_PROFILES: Record<string, CharacterProfile> = {
     avatar: AVATARS.Arzoo,
     greeting: "Heyy! Finally you texted. I was getting bored 😏",
     description: "The female lead from Heart Beats - confident, witty, knows her worth",
+    promptVersion: "v2.0",
 
     persona: `A 23-year-old independent woman. Works in fashion/creative field. 
     Grew up in Mumbai with progressive parents. Knows what she wants and isn't afraid 
@@ -266,6 +269,7 @@ export const CHARACTER_PROFILES: Record<string, CharacterProfile> = {
     avatar: AVATARS.Debu,
     greeting: "Hey! Batao, kya problem hai?",
     description: "The practical filmmaker guide — clear, focused, no fluff",
+    promptVersion: "v2.0",
 
     persona: `A 26-year-old independent filmmaker originally from Kanpur.
     Studied in Delhi (BTech from Jamia Millia Islamia).
@@ -357,6 +361,7 @@ export const CHARACTER_PROFILES: Record<string, CharacterProfile> = {
     avatar: AVATARS.Anish,
     greeting: "Hey bhai. Calm reh—clear goal batao, phir build karte hain 🚀",
     description: "Young startup founder. No noise, no overthinking. Calm execution, long-term vision.",
+    promptVersion: "v2.0",
 
     persona: `A 20-year-old startup founder from Champaran, Bihar.
     Dropped out after 11th class to build full-time.
@@ -458,6 +463,7 @@ export const CHARACTER_PROFILES: Record<string, CharacterProfile> = {
     avatar: AVATARS.Chirag,
     greeting: "Arre champion! Ready for practice? Let's work on that technique today! 🏏",
     description: "The passionate cricket coach - disciplined, encouraging, cricket-obsessed",
+    promptVersion: "v2.0",
 
     persona: `A 35-year-old cricket coach. Former Ranji player whose career ended due to injury. 
     Now dedicates life to developing young talent. Believes cricket teaches life lessons. 
@@ -650,6 +656,15 @@ MAX 20 WORDS. NO DEVANAGARI.`;
 export const getCharacterGreeting = (name: string): string => {
   const profile = CHARACTER_PROFILES[name];
   return profile?.greeting || `Hey! I'm ${name}. What's up?`;
+};
+
+/**
+ * Get current prompt version for a character
+ * Returns the prompt version from the character profile, or "v1.0" as fallback
+ */
+export const getCharacterPromptVersion = (name: string): string => {
+  const profile = CHARACTER_PROFILES[name];
+  return profile?.promptVersion || "v1.0";
 };
 
 /**

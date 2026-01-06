@@ -18,7 +18,7 @@ import {
   trackPageView
 } from './lib/analytics';
 import { loadAllChatHistories } from './lib/chatStorage';
-import { AVATARS, getCharacterAvatar, getAllCharacterNames, CHARACTER_PROFILES } from './lib/characters';
+import { AVATARS, getCharacterAvatar, getAllCharacterNames, CHARACTER_PROFILES, getCharacterGreeting } from './lib/characters';
 import { setSeriesCatalog, getAllInfluencers, getInfluencerSlug, InfluencerInfo } from './lib/influencerMapping';
 
 // Re-export for backward compatibility with existing code
@@ -1847,7 +1847,7 @@ const AppContent: React.FC = () => {
         <ChatPanel 
           character={chatData.char} 
           episodeLabel={chatData.episodeLabel || selectedSeries?.episodes[activeIdx]?.label || "Inscene History"}
-          instantGreeting={chatData.intro || ""}
+          instantGreeting={chatData.intro || getCharacterGreeting(chatData.char) || ""}
           initialHook={chatData.hook || "Continuing conversation"}
           avatar={chatData.avatar || (selectedSeries?.avatars ? selectedSeries.avatars[chatData.char] : (chatData.char === 'Debu' ? DEBU_AVATAR : chatData.char === 'Priyank' ? PRIYANK_AVATAR : chatData.char === 'Arzoo' ? ARZOO_AVATAR : chatData.char === 'Anish' ? ANISH_AVATAR : CHIRAG_AVATAR))}
           onClose={() => {

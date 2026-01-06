@@ -2,7 +2,7 @@ import OpenAI from "openai";
 import React, { useState, useEffect, useRef } from 'react';
 import { trackChatStart, updateChatMessages, trackChatEnd } from '../lib/analytics';
 import { saveMessage, loadChatHistory, isUserLoggedIn, debugListAllMessages, getUserMessageCount, MAX_USER_MESSAGES, hasUnlimitedMessages } from '../lib/chatStorage';
-import { getCharacterPrompt } from '../lib/characters';
+import { getCharacterPrompt, getCharacterPromptVersion } from '../lib/characters';
 
 interface ChatPanelProps {
   character: string;
@@ -97,12 +97,29 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
       await debugListAllMessages();
       
       if (isLoggedIn) {
-        // Load saved chat history from Supabase
-        const savedMessages = await loadChatHistory(character);
-        console.log('ChatPanel: Loaded messages:', savedMessages.length, savedMessages);
+        // Get current prompt version for this character
+        const currentPromptVersion = getCharacterPromptVersion(character);
         
-        if (savedMessages.length > 0) {
-          // User has existing chat history - restore it
+        // Load saved chat history from Supabase (now returns messages and promptVersion)
+        const { messages: savedMessages, promptVersion: storedPromptVersion } = await loadChatHistory(character);
+        console.log('ChatPanel: Loaded messages:', savedMessages.length, 'stored version:', storedPromptVersion, 'current version:', currentPromptVersion);
+        
+        // Check if prompt version has changed
+        const promptVersionMismatch = storedPromptVersion && storedPromptVersion !== currentPromptVersion;
+        
+        if (promptVersionMismatch) {
+          // Prompt version changed - start a new session with latest prompt
+          console.log('ChatPanel: Prompt version mismatch detected. Starting new session with version:', currentPromptVersion);
+          setMessages([{
+            role: 'assistant',
+            content: instantGreeting,
+            time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+          }]);
+          // Save the greeting message for new session
+          saveMessage(character, 'assistant', instantGreeting, seriesId, episodeId);
+          initialMessagesSaved.current = true;
+        } else if (savedMessages.length > 0) {
+          // User has existing chat history with matching prompt version - restore it
           setMessages(savedMessages.map(m => ({
             role: m.role,
             content: m.content,
@@ -222,6 +239,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
     hasEndedSession.current = false; // Reset ended flag for new session
     
     // Start new session tracking
+    const currentPromptVersion = getCharacterPromptVersion(character);
     const startPromise = trackChatStart({
       characterName: character,
       seriesId,
@@ -229,7 +247,8 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
       episodeId,
       episodeLabel,
       isWhatsAppStyle: isWhatsApp,
-      entryPoint
+      entryPoint,
+      promptVersion: currentPromptVersion
     });
     
     trackChatStartPromise.current = startPromise;

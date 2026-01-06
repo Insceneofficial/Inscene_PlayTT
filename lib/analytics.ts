@@ -317,6 +317,7 @@ interface ChatSessionData {
   episodeLabel?: string;
   isWhatsAppStyle: boolean;
   entryPoint: 'video_sidebar' | 'video_end_screen' | 'choice_modal' | 'chat_history';
+  promptVersion?: string; // Prompt version used for this session
 }
 
 /**
@@ -345,6 +346,7 @@ export const trackChatStart = async (data: ChatSessionData): Promise<string | nu
         episode_label: data.episodeLabel,
         is_whatsapp_style: data.isWhatsAppStyle,
         entry_point: data.entryPoint,
+        prompt_version: data.promptVersion || null,
         started_at: new Date().toISOString()
       });
     
