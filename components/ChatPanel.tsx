@@ -139,13 +139,22 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
           })));
         } else {
           // No history - start with greeting
+          // If no goal exists, modify greeting to include goal discovery nudge
+          let greetingMessage = instantGreeting;
+          if (!currentGoal && isUserLoggedIn()) {
+            // Add goal discovery nudge to greeting if no goal exists
+            // The system prompt will handle this, but we can also append a gentle nudge
+            // Actually, let the system prompt handle it through the greeting
+            greetingMessage = instantGreeting;
+          }
+          
           setMessages([{
             role: 'assistant',
-            content: instantGreeting,
+            content: greetingMessage,
             time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
           }]);
           // Save the greeting message
-          saveMessage(character, 'assistant', instantGreeting, seriesId, episodeId);
+          saveMessage(character, 'assistant', greetingMessage, seriesId, episodeId);
           initialMessagesSaved.current = true;
         }
       } else {
@@ -535,11 +544,11 @@ Generate ONLY the follow-up message, nothing else.
           return;
         }
 
-        // Check if this is a goal-related query that might need goal creation
-        if (isGoalRelatedQuery(userText) && !currentGoal) {
-          // Add goal tracking context to prompt
-          const goalPrompt = getGoalTrackingSystemPrompt(character);
-          systemPrompt.current = getCharacterPrompt(character, episodeLabel, goalPrompt);
+        // If no goal exists, always include goal discovery nudging in system prompt
+        // The buildSystemPrompt function will add goal discovery instructions when goalContext is empty
+        if (!currentGoal) {
+          // Refresh system prompt to ensure goal discovery nudging is included
+          systemPrompt.current = getCharacterPrompt(character, episodeLabel, '');
         }
       }
 
