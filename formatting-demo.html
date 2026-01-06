@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Formatting Demo - Before & After</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        .container {
+            max-width: 900px;
+            width: 100%;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            overflow: hidden;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        
+        .header h1 {
+            font-size: 28px;
+            margin-bottom: 10px;
+        }
+        
+        .header p {
+            opacity: 0.9;
+            font-size: 16px;
+        }
+        
+        .demo-section {
+            padding: 30px;
+        }
+        
+        .demo-box {
+            margin: 20px 0;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+        
+        .demo-label {
+            background: #f8f9fa;
+            padding: 12px 20px;
+            font-weight: 600;
+            font-size: 14px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: #495057;
+            border-bottom: 2px solid #e9ecef;
+        }
+        
+        .demo-label.before {
+            background: #fff3cd;
+            color: #856404;
+        }
+        
+        .demo-label.after {
+            background: #d1ecf1;
+            color: #0c5460;
+        }
+        
+        .message-bubble {
+            background: #2d3748;
+            color: #e2e8f0;
+            padding: 20px;
+            font-size: 15px;
+            line-height: 1.8;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }
+        
+        .message-bubble.before {
+            background: #2d3748;
+            color: #cbd5e0;
+        }
+        
+        .message-bubble.after {
+            background: #2d3748;
+            color: #e2e8f0;
+        }
+        
+        .comparison {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin: 30px 0;
+        }
+        
+        @media (max-width: 768px) {
+            .comparison {
+                grid-template-columns: 1fr;
+            }
+        }
+        
+        .badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+            margin-left: 10px;
+        }
+        
+        .badge.bad {
+            background: #fee;
+            color: #c33;
+        }
+        
+        .badge.good {
+            background: #efe;
+            color: #3c3;
+        }
+        
+        .arrow {
+            text-align: center;
+            font-size: 40px;
+            color: #667eea;
+            margin: 20px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📱 Chat Message Formatting Demo</h1>
+            <p>See how structured messages appear in the chat interface</p>
+        </div>
+        
+        <div class="demo-section">
+            <h2 style="margin-bottom: 20px; color: #2d3748;">Before (Single Line - Hard to Read)</h2>
+            
+            <div class="demo-box">
+                <div class="demo-label before">❌ Before Formatting</div>
+                <div class="message-bubble before">Here's your goal status: Goal: Onboard 3 influencers for Inscene Current Status: Progress: In Progress. Current Milestone: Identifying target influencers Key Blocker: None reported Next Step: Call 2 more influencers. What would you like to do next?</div>
+            </div>
+            
+            <div class="arrow">⬇️</div>
+            
+            <h2 style="margin: 30px 0 20px 0; color: #2d3748;">After (Properly Formatted - Easy to Read)</h2>
+            
+            <div class="demo-box">
+                <div class="demo-label after">✅ After Formatting</div>
+                <div class="message-bubble after">Here's your goal status
+
+Goal:
+Onboard 3 influencers for Inscene
+
+Current Status:
+• Progress: In Progress
+• Current Milestone: Identifying target influencers
+• Key blocker: None reported
+
+Next Step:
+Call 2 more influencers.
+
+What would you like to do next?</div>
+            </div>
+            
+            <div style="margin-top: 40px; padding: 20px; background: #f8f9fa; border-radius: 12px;">
+                <h3 style="color: #2d3748; margin-bottom: 15px;">✨ Key Improvements:</h3>
+                <ul style="color: #495057; line-height: 2;">
+                    <li>✅ Each section is on its own line</li>
+                    <li>✅ Proper spacing between sections</li>
+                    <li>✅ Bullet points are clearly formatted</li>
+                    <li>✅ Easy to scan and read quickly</li>
+                    <li>✅ Professional, structured appearance</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
+

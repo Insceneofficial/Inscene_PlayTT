@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Formatting Verification - Exact Chat UI</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: #0a0a0f;
+            min-height: 100vh;
+            padding: 40px 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        .chat-container {
+            max-width: 600px;
+            width: 100%;
+            background: #0f0f1a;
+            border-radius: 20px;
+            padding: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+        }
+        
+        .header {
+            text-align: center;
+            color: #a78bfa;
+            margin-bottom: 30px;
+            padding-bottom: 20px;
+            border-bottom: 1px solid rgba(139, 92, 246, 0.2);
+        }
+        
+        .header h1 {
+            font-size: 24px;
+            margin-bottom: 10px;
+        }
+        
+        .header p {
+            color: #a78bfa;
+            opacity: 0.7;
+            font-size: 14px;
+        }
+        
+        .messages-area {
+            max-height: 600px;
+            overflow-y: auto;
+            padding: 20px 0;
+        }
+        
+        .message {
+            margin-bottom: 16px;
+            display: flex;
+        }
+        
+        .message.assistant {
+            justify-content: flex-start;
+        }
+        
+        .message.user {
+            justify-content: flex-end;
+        }
+        
+        .message-bubble {
+            max-width: 85%;
+            padding: 12px 16px;
+            border-radius: 18px;
+            font-size: 14.5px;
+            position: relative;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        }
+        
+        .message.assistant .message-bubble {
+            background: #1a1a24;
+            border: 1px solid rgba(139, 92, 246, 0.1);
+            color: rgba(255, 255, 255, 0.9);
+            border-top-left-radius: 4px;
+        }
+        
+        .message.user .message-bubble {
+            background: linear-gradient(135deg, #7c3aed 0%, #2563eb 100%);
+            color: white;
+            border-top-right-radius: 4px;
+        }
+        
+        .message-content {
+            line-height: 1.6;
+            word-break: break-words;
+            /* CRITICAL: This preserves line breaks */
+            white-space: pre-wrap;
+        }
+        
+        .message-time {
+            font-size: 10px;
+            text-transform: uppercase;
+            margin-top: 8px;
+            text-align: right;
+            opacity: 0.6;
+        }
+        
+        .test-label {
+            background: rgba(139, 92, 246, 0.1);
+            color: #a78bfa;
+            padding: 8px 12px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-size: 12px;
+            text-align: center;
+            border: 1px solid rgba(139, 92, 246, 0.2);
+        }
+        
+        .comparison {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-top: 40px;
+        }
+        
+        @media (max-width: 768px) {
+            .comparison {
+                grid-template-columns: 1fr;
+            }
+        }
+        
+        .comparison-box {
+            background: #1a1a24;
+            border: 1px solid rgba(139, 92, 246, 0.2);
+            border-radius: 12px;
+            padding: 20px;
+        }
+        
+        .comparison-box h3 {
+            color: #a78bfa;
+            margin-bottom: 15px;
+            font-size: 16px;
+        }
+        
+        .comparison-content {
+            background: #0f0f1a;
+            padding: 15px;
+            border-radius: 8px;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            line-height: 1.8;
+            white-space: pre-wrap;
+            color: #e0e0e0;
+        }
+        
+        .bad {
+            border-color: rgba(239, 68, 68, 0.3);
+        }
+        
+        .bad h3 {
+            color: #f87171;
+        }
+        
+        .good {
+            border-color: rgba(34, 197, 94, 0.3);
+        }
+        
+        .good h3 {
+            color: #4ade80;
+        }
+    </style>
+</head>
+<body>
+    <div class="chat-container">
+        <div class="header">
+            <h1>📱 Chat UI Formatting Test</h1>
+            <p>This shows exactly how messages appear in your chat interface</p>
+        </div>
+        
+        <div class="test-label">
+            ✅ WITH whitespace-pre-wrap (Current Fix)
+        </div>
+        
+        <div class="messages-area">
+            <div class="message assistant">
+                <div class="message-bubble">
+                    <div class="message-content">Here's your goal status
+
+Goal:
+Onboard 3 influencers for Inscene
+
+Current Status:
+• Progress: In Progress
+• Current Milestone: Identifying target influencers
+• Key blocker: None reported
+
+Next Step:
+Call 2 more influencers.
+
+What would you like to do next?</div>
+                    <div class="message-time">16:32</div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="comparison">
+            <div class="comparison-box bad">
+                <h3>❌ WITHOUT whitespace-pre-wrap</h3>
+                <div class="comparison-content">Here's your goal status: Goal: Onboard 3 influencers for Inscene Current Status: Progress: In Progress. Current Milestone: Identifying target influencers Key Blocker: None reported Next Step: Call 2 more influencers. What would you like to do next?</div>
+            </div>
+            
+            <div class="comparison-box good">
+                <h3>✅ WITH whitespace-pre-wrap</h3>
+                <div class="comparison-content">Here's your goal status
+
+Goal:
+Onboard 3 influencers for Inscene
+
+Current Status:
+• Progress: In Progress
+• Current Milestone: Identifying target influencers
+• Key blocker: None reported
+
+Next Step:
+Call 2 more influencers.
+
+What would you like to do next?</div>
+            </div>
+        </div>
+        
+        <div style="margin-top: 30px; padding: 20px; background: rgba(34, 197, 94, 0.1); border: 1px solid rgba(34, 197, 94, 0.3); border-radius: 12px;">
+            <h3 style="color: #4ade80; margin-bottom: 15px; font-size: 16px;">✅ Fix Applied:</h3>
+            <p style="color: #a0a0a0; line-height: 1.8; font-size: 14px;">
+                Added <code style="background: rgba(139, 92, 246, 0.2); padding: 2px 6px; border-radius: 4px; color: #a78bfa;">whitespace-pre-wrap</code> CSS class to the message content span in <code style="background: rgba(139, 92, 246, 0.2); padding: 2px 6px; border-radius: 4px; color: #a78bfa;">ChatPanel.tsx</code>. This ensures line breaks from <code style="background: rgba(139, 92, 246, 0.2); padding: 2px 6px; border-radius: 4px; color: #a78bfa;">formatLLMResponse()</code> are preserved in the UI.
+            </p>
+        </div>
+    </div>
+</body>
+</html>
+

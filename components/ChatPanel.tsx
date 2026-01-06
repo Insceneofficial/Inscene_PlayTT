@@ -708,7 +708,7 @@ You can help track progress, update status, and suggest next actions.`;
                   ? 'bg-gradient-to-br from-violet-600 to-blue-600 rounded-tr-sm text-white' 
                   : 'bg-[#1a1a24] border border-violet-500/10 rounded-tl-sm text-white/90'
               }`}>
-                <span className="leading-relaxed break-words">{m.content}</span>
+                <span className="leading-relaxed break-words whitespace-pre-wrap">{m.content}</span>
                 <div className="flex items-center justify-end gap-1 mt-1 -mb-0.5">
                   <span className={`text-[10px] leading-none uppercase ${m.role === 'user' ? 'text-white/60' : 'text-violet-400/50'}`}>{m.time}</span>
                   {m.role === 'user' && (

@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Format LLM Response Test</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #1a1a1a;
+            color: #e0e0e0;
+        }
+        .test-case {
+            background: #2a2a2a;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+            border: 1px solid #444;
+        }
+        .test-case h3 {
+            margin-top: 0;
+            color: #4a9eff;
+        }
+        .input, .output {
+            background: #1a1a1a;
+            border: 1px solid #444;
+            border-radius: 4px;
+            padding: 15px;
+            margin: 10px 0;
+            white-space: pre-wrap;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            line-height: 1.6;
+        }
+        .input {
+            color: #ff6b6b;
+        }
+        .output {
+            color: #51cf66;
+        }
+        .label {
+            font-weight: bold;
+            margin-bottom: 5px;
+            color: #999;
+        }
+        .status {
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+        .status.pass {
+            background: #2d5016;
+            color: #51cf66;
+        }
+        .status.fail {
+            background: #5a1a1a;
+            color: #ff6b6b;
+        }
+        button {
+            background: #4a9eff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 10px 5px;
+        }
+        button:hover {
+            background: #3a8eef;
+        }
+    </style>
+</head>
+<body>
+    <h1>🧪 Format LLM Response Test</h1>
+    <p>This page tests the <code>formatLLMResponse</code> function to ensure structured messages are properly formatted.</p>
+    
+    <button onclick="runAllTests()">Run All Tests</button>
+    <button onclick="testCustomInput()">Test Custom Input</button>
+    
+    <div id="results"></div>
+
+    <script type="module">
+        // Import the formatLLMResponse function
+        // Note: This will only work if you're running this through the dev server
+        // For standalone testing, we'll include the function inline
+        
+        // Copy of the formatLLMResponse function (simplified for browser)
+        function formatLLMResponse(text) {
+            if (!text) return text;
+
+            const isStructuredMessage = (text) => {
+                const structuredPatterns = [
+                    /Here's your (goal|current|status)/i,
+                    /Goal:/i,
+                    /Current Status:/i,
+                    /Progress:/i,
+                    /Next Step:/i,
+                    /Milestone:/i,
+                    /Key blocker:/i,
+                    /Progress Summary:/i
+                ];
+                return structuredPatterns.some(pattern => pattern.test(text));
+            };
+
+            const isStructured = isStructuredMessage(text);
+            let formatted = text;
+
+            // Remove emojis
+            formatted = formatted.replace(/[\u{1F600}-\u{1F64F}]/gu, '');
+            formatted = formatted.replace(/[\u{1F300}-\u{1F5FF}]/gu, '');
+            formatted = formatted.replace(/[\u{1F680}-\u{1F6FF}]/gu, '');
+            formatted = formatted.replace(/[\u{1F1E0}-\u{1F1FF}]/gu, '');
+            formatted = formatted.replace(/[\u{2600}-\u{26FF}]/gu, '');
+            formatted = formatted.replace(/[\u{2700}-\u{27BF}]/gu, '');
+            formatted = formatted.replace(/[\u{1F900}-\u{1F9FF}]/gu, '');
+            formatted = formatted.replace(/[\u{1FA00}-\u{1FA6F}]/gu, '');
+            formatted = formatted.replace(/[\u{1FA70}-\u{1FAFF}]/gu, '');
+            formatted = formatted.replace(/[\u{FE00}-\u{FE0F}]/gu, '');
+            formatted = formatted.replace(/[\u{200D}]/gu, '');
+            formatted = formatted.replace(/[\u{200C}]/gu, '');
+            formatted = formatted.replace(/[\u{FE0F}]/gu, '');
+
+            // Remove markdown
+            formatted = formatted.replace(/\*\*(.+?)\*\*/g, '$1');
+            formatted = formatted.replace(/\*(.+?)\*/g, '$1');
+            formatted = formatted.replace(/_(.+?)_/g, '$1');
+            formatted = formatted.replace(/`(.+?)`/g, '$1');
+            formatted = formatted.replace(/^#+\s+/gm, '');
+            formatted = formatted.replace(/\[([^\]]+)\]\([^\)]+\)/g, '$1');
+
+            if (isStructured) {
+                // Fix "Here's your goal status:" prefix
+                formatted = formatted.replace(/Here's your goal status:\s*/gi, 'Here\'s your goal status\n\n');
+                
+                // Break up "Goal:" section
+                formatted = formatted.replace(/Goal:\s*([^\n]+?)(?=\s*Current Status:|$)/gi, (match, content) => {
+                    const trimmed = content.trim().replace(/\.\s*$/, '');
+                    const statusIndex = trimmed.indexOf('Current Status:');
+                    const goalText = statusIndex > 0 ? trimmed.substring(0, statusIndex).trim() : trimmed;
+                    return `Goal:\n${goalText}`;
+                });
+                
+                // Handle "Current Status:" with nested items
+                formatted = formatted.replace(/Current Status:\s*([^\n]+?)(?=\s*Next Step:|$)/gi, (match, content) => {
+                    if (!content.includes('\n')) {
+                        const items = [];
+                        
+                        const progressMatch = content.match(/Progress:\s*([^\.]+?)(?=\s*(?:Current Milestone|Key blocker|Progress Summary|Next Step)|\.|$)/i);
+                        if (progressMatch) {
+                            items.push({ label: 'Progress', value: progressMatch[1].trim().replace(/\.\s*$/, '') });
+                        }
+                        
+                        const milestoneMatch = content.match(/Current Milestone:\s*([^\.]+?)(?=\s*(?:Key blocker|Progress Summary|Next Step)|\.|$)/i);
+                        if (milestoneMatch) {
+                            items.push({ label: 'Current Milestone', value: milestoneMatch[1].trim().replace(/\.\s*$/, '') });
+                        }
+                        
+                        const blockerMatch = content.match(/Key Blocker:\s*([^\.]+?)(?=\s*(?:Progress Summary|Next Step)|\.|$)/i);
+                        if (blockerMatch) {
+                            items.push({ label: 'Key blocker', value: blockerMatch[1].trim().replace(/\.\s*$/, '') });
+                        }
+                        
+                        const summaryMatch = content.match(/Progress Summary:\s*([^\.]+?)(?=\s*Next Step:|\.|$)/i);
+                        if (summaryMatch) {
+                            items.push({ label: 'Progress Summary', value: summaryMatch[1].trim().replace(/\.\s*$/, '') });
+                        }
+                        
+                        if (items.length > 0) {
+                            return `Current Status:\n${items.map(item => `• ${item.label}: ${item.value}`).join('\n')}`;
+                        }
+                    }
+                    return `Current Status:\n${content}`;
+                });
+                
+                // Break up "Next Step:" section
+                formatted = formatted.replace(/Next Step:\s*([^\n]+?)(?=\s*What would you like|$)/gi, (match, content) => {
+                    const trimmed = content.trim().replace(/\.\s*$/, '');
+                    const questionIndex = trimmed.indexOf('What would you like');
+                    const nextStepText = questionIndex > 0 ? trimmed.substring(0, questionIndex).trim() : trimmed;
+                    return `Next Step:\n${nextStepText}`;
+                });
+                
+                // Ensure "What would you like" is on new line
+                formatted = formatted.replace(/([^\n])(What would you like)/gi, '$1\n\n$2');
+                
+                // Ensure major sections are separated
+                formatted = formatted.replace(/([^\n])\n(Goal|Current Status|Next Step)/gi, '$1\n\n$2');
+                
+                // Clean up excessive newlines
+                formatted = formatted.replace(/\n{4,}/g, '\n\n\n');
+                
+                // Clean up whitespace
+                formatted = formatted.split('\n').map(line => {
+                    if (line.trim() === '') return '';
+                    return line.trim();
+                }).join('\n');
+                
+                formatted = formatted.trim();
+                
+                return formatted;
+            }
+
+            // For conversational messages
+            formatted = formatted.replace(/\n{3,}/g, '\n\n');
+            formatted = formatted.split('\n').map(line => line.trim()).join('\n');
+            formatted = formatted.trim();
+            formatted = formatted.replace(/\s{3,}/g, ' ');
+            formatted = formatted.replace(/\n{3,}/g, '\n\n');
+
+            return formatted.trim();
+        }
+
+        window.formatLLMResponse = formatLLMResponse;
+
+        const testCases = [
+            {
+                name: "Single-line structured message (the problem case)",
+                input: `Here's your goal status: Goal: Onboard 3 influencers for Inscene Current Status: Progress: In Progress. Current Milestone: Identifying target influencers Key Blocker: None reported Next Step: Call 2 more influencers. What would you like to do next?`
+            },
+            {
+                name: "Another single-line variant",
+                input: `Goal: Become a professional cricketer Current Status: Progress: In Progress. Current Milestone: Build daily fitness + stamina routine Key Blocker: None reported Next Step: Start playing at least 1 local match per week.`
+            },
+            {
+                name: "Already formatted (should preserve)",
+                input: `Here's your goal status
+
+Goal:
+Become a professional cricketer
+
+Current Status:
+• Progress: In Progress
+• Current Milestone: Build daily fitness + stamina routine
+• Key blocker: None reported
+
+Next Step:
+Start playing at least 1 local match per week.
+
+What would you like to do next?`
+            }
+        ];
+
+        window.runAllTests = function() {
+            const resultsDiv = document.getElementById('results');
+            resultsDiv.innerHTML = '';
+
+            testCases.forEach((testCase, index) => {
+                const output = formatLLMResponse(testCase.input);
+                const hasLineBreaks = output.includes('\n');
+                const hasGoalSection = output.includes('Goal:');
+                const hasCurrentStatus = output.includes('Current Status:');
+                const hasNextStep = output.includes('Next Step:');
+                const passed = hasLineBreaks && hasGoalSection && hasCurrentStatus && hasNextStep;
+
+                const testDiv = document.createElement('div');
+                testDiv.className = 'test-case';
+                testDiv.innerHTML = `
+                    <h3>Test ${index + 1}: ${testCase.name}</h3>
+                    <div class="label">INPUT:</div>
+                    <div class="input">${escapeHtml(testCase.input)}</div>
+                    <div class="label">OUTPUT:</div>
+                    <div class="output">${escapeHtml(output)}</div>
+                    <div class="status ${passed ? 'pass' : 'fail'}">
+                        ${passed ? '✅ PASSED' : '❌ FAILED'} - 
+                        Line breaks: ${hasLineBreaks ? '✓' : '✗'} | 
+                        Goal: ${hasGoalSection ? '✓' : '✗'} | 
+                        Current Status: ${hasCurrentStatus ? '✓' : '✗'} | 
+                        Next Step: ${hasNextStep ? '✓' : '✗'}
+                    </div>
+                `;
+                resultsDiv.appendChild(testDiv);
+            });
+        };
+
+        window.testCustomInput = function() {
+            const input = prompt('Enter text to test:');
+            if (input) {
+                const output = formatLLMResponse(input);
+                const resultsDiv = document.getElementById('results');
+                resultsDiv.innerHTML = `
+                    <div class="test-case">
+                        <h3>Custom Test</h3>
+                        <div class="label">INPUT:</div>
+                        <div class="input">${escapeHtml(input)}</div>
+                        <div class="label">OUTPUT:</div>
+                        <div class="output">${escapeHtml(output)}</div>
+                    </div>
+                `;
+            }
+        };
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // Auto-run tests on load
+        window.addEventListener('load', () => {
+            setTimeout(runAllTests, 100);
+        });
+    </script>
+</body>
+</html>
+
