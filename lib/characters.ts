@@ -331,8 +331,9 @@ export const CHARACTER_PROFILES: Record<string, CharacterProfile> = {
     },
 
     languageRules: [
-      "Clean Hinglish",
-      "NO Devanagari script - Roman letters only",
+      "Use Hinglish (Roman Hindi) - natural mix of Hindi and English written in Roman letters",
+      "NEVER use Devanagari script (क, ख, etc.) - ONLY Roman letters (ka, kha, etc.)",
+      "Write Hindi words in Roman script: 'kya', 'hai', 'batao', 'problem', etc.",
       "No fatherly terms",
       "Short, direct responses",
       "MAX 25-30 words per message",
@@ -433,7 +434,9 @@ export const CHARACTER_PROFILES: Record<string, CharacterProfile> = {
     },
 
     languageRules: [
-      "Hinglish in Roman script only",
+      "Use Hinglish (Roman Hindi) - natural mix of Hindi and English written in Roman letters",
+      "NEVER use Devanagari script (क, ख, etc.) - ONLY Roman letters (ka, kha, etc.)",
+      "Write Hindi words in Roman script: 'kya', 'hai', 'batao', 'build', etc.",
       "Short, crisp sentences",
       "MAX 20–25 words per reply",
       "Use 'bhai' naturally",
@@ -561,8 +564,8 @@ export const CHARACTER_PROFILES: Record<string, CharacterProfile> = {
 // Prompt Builder - Converts Profile to System Prompt
 // ============================================
 
-export const buildSystemPrompt = (profile: CharacterProfile): string => {
-  return `# Character: ${profile.name}
+export const buildSystemPrompt = (profile: CharacterProfile, goalContext?: string): string => {
+  let prompt = `# Character: ${profile.name}
 
 ## Who You Are
 ${profile.persona}
@@ -600,9 +603,22 @@ ${profile.decisionHeuristics.map(h => `- ${h}`).join('\n')}
 
 ## Signature Phrases (USE SPARINGLY - max 1 per 10 messages, only when it fits perfectly)
 These are phrases you MIGHT say occasionally, not every message:
-${profile.catchphrases.slice(0, 3).map(c => `- "${c}"`).join('\n')}
+${profile.catchphrases.slice(0, 3).map(c => `- "${c}"`).join('\n')}`;
 
----
+  // Add goal tracking context if provided
+  if (goalContext) {
+    prompt += `\n\n## GOAL TRACKING CONTEXT
+${goalContext}
+
+You are helping the user track their goal. Use the goal tracking workflow:
+1. If no goal exists and user mentions an aspiration, ask about their goal
+2. Break goals into 3-5 milestones
+3. Track progress using status labels: Not Started, In Progress, Stuck, Completed
+4. Provide status reports when asked
+5. Suggest next actions based on current milestone`;
+  }
+
+  prompt += `\n\n---
 CRITICAL CONVERSATION RULES:
 1. You are having a REAL conversation. Pay close attention to what the user just said.
 2. Respond DIRECTLY to their message - reference their words, answer their questions.
@@ -621,6 +637,8 @@ EMOJI RULES (IMPORTANT):
 - When in doubt, skip the emoji. Text alone is often more authentic.
 
 Stay in character as ${profile.name}. Keep responses conversational and brief (WhatsApp-style chat).`;
+
+  return prompt;
 };
 
 // ============================================
@@ -637,11 +655,11 @@ export const getCharacter = (name: string): CharacterProfile | null => {
 /**
  * Get character prompt for AI (built from profile)
  */
-export const getCharacterPrompt = (name: string, episodeLabel?: string): string => {
+export const getCharacterPrompt = (name: string, episodeLabel?: string, goalContext?: string): string => {
   const profile = CHARACTER_PROFILES[name];
   
   if (profile) {
-    return buildSystemPrompt(profile);
+    return buildSystemPrompt(profile, goalContext);
   }
   
   // Fallback for unknown characters

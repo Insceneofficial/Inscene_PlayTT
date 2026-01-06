@@ -3,6 +3,9 @@ import React, { useState, useEffect, useRef } from 'react';
 import { trackChatStart, updateChatMessages, trackChatEnd } from '../lib/analytics';
 import { saveMessage, loadChatHistory, isUserLoggedIn, debugListAllMessages, getUserMessageCount, MAX_USER_MESSAGES, hasUnlimitedMessages } from '../lib/chatStorage';
 import { getCharacterPrompt, getCharacterPromptVersion } from '../lib/characters';
+import { formatLLMResponse } from '../lib/formatLLMResponse';
+import { getCurrentGoal, saveGoal, updateGoalStatus, formatGoalStatusReport, UserGoal } from '../lib/goalTracking';
+import { generateMilestones, isGoalRelatedQuery, isGoalDeclaration, isStatusCheckQuery, getGoalTrackingSystemPrompt } from '../lib/goalTrackingPrompts';
 
 interface ChatPanelProps {
   character: string;
@@ -44,10 +47,12 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
   const [inputValue, setInputValue] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const [isLoadingHistory, setIsLoadingHistory] = useState(true);
+  const [currentGoal, setCurrentGoal] = useState<UserGoal | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   
   const conversationHistory = useRef<{ role: 'user' | 'assistant'; content: string }[]>([]);
   const systemPrompt = useRef<string>('');
+  const goalContextRef = useRef<string>('');
   
   // Analytics tracking refs
   const analyticsRecordId = useRef<string | null>(null);
@@ -329,10 +334,39 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
     }
   }, [messages, isTyping]);
 
+  // Load current goal on mount and when character changes
   useEffect(() => {
-    // Get system prompt from centralized character config
-    systemPrompt.current = getCharacterPrompt(character, episodeLabel);
-  }, [character, episodeLabel]);
+    const loadGoal = async () => {
+      if (isUserLoggedIn()) {
+        const goal = await getCurrentGoal(character);
+        setCurrentGoal(goal);
+      } else {
+        setCurrentGoal(null);
+      }
+    };
+    
+    loadGoal();
+  }, [character]);
+
+  // Update system prompt when goal or character changes
+  useEffect(() => {
+    if (currentGoal) {
+      // Build goal context for system prompt
+      const currentMilestone = currentGoal.milestones[currentGoal.current_milestone_index];
+      goalContextRef.current = `User's Current Goal: ${currentGoal.goal_text}
+Current Status: ${currentGoal.current_status}
+Current Milestone: ${currentMilestone ? currentMilestone.title : 'Not set'}
+Milestones: ${currentGoal.milestones.map((m, i) => `${i + 1}. ${m.title} (${m.status})`).join('\n')}
+${currentGoal.progress_summary ? `Progress Summary: ${currentGoal.progress_summary}` : ''}
+
+You can help track progress, update status, and suggest next actions.`;
+    } else {
+      goalContextRef.current = '';
+    }
+    
+    // Update system prompt with goal context
+    systemPrompt.current = getCharacterPrompt(character, episodeLabel, goalContextRef.current || undefined);
+  }, [character, episodeLabel, currentGoal]);
 
   // Generate personalized drop-off reminder using OpenAI
   const generateDropOffReminder = async () => {
@@ -380,23 +414,25 @@ Generate ONLY the follow-up message, nothing else.
         temperature: 0.95
       });
 
-      const reminderText = response.choices[0]?.message?.content?.trim();
-      if (reminderText) {
+      const rawReminderText = response.choices[0]?.message?.content?.trim();
+      if (rawReminderText) {
+        // Format the reminder: remove markdown, format lists, etc.
+        const formattedReminder = formatLLMResponse(rawReminderText);
         const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
         
         setMessages(prev => [...prev, {
           role: 'assistant',
-          content: reminderText,
+          content: formattedReminder,
           time: now
         }]);
         
-        // Save to Supabase if logged in
+        // Save formatted reminder to Supabase if logged in
         if (isUserLoggedIn()) {
-          saveMessage(character, 'assistant', reminderText, seriesId, episodeId);
+          saveMessage(character, 'assistant', formattedReminder, seriesId, episodeId);
         }
         
         reminderCount.current += 1;
-        console.log(`[DropOff] Sent reminder ${reminderCount.current}/${MAX_REMINDERS}: "${reminderText}"`);
+        console.log(`[DropOff] Sent reminder ${reminderCount.current}/${MAX_REMINDERS}: "${formattedReminder}"`);
         
         // Schedule next reminder if we haven't hit the limit
         if (reminderCount.current < MAX_REMINDERS) {
@@ -477,6 +513,35 @@ Generate ONLY the follow-up message, nothing else.
     }
 
     try {
+      // Handle goal-related queries
+      if (isUserLoggedIn()) {
+        // Check for status check query
+        if (isStatusCheckQuery(userText) && currentGoal) {
+          const statusReport = formatGoalStatusReport(currentGoal);
+          const formattedReport = formatLLMResponse(statusReport);
+          
+          setMessages(prev => [...prev, { 
+            role: 'assistant', 
+            content: formattedReport, 
+            time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) 
+          }]);
+          
+          saveMessage(character, 'assistant', formattedReport, seriesId, episodeId);
+          setIsTyping(false);
+          if (onTypingStatusChangeRef.current) {
+            onTypingStatusChangeRef.current(false);
+          }
+          return;
+        }
+
+        // Check if this is a goal-related query that might need goal creation
+        if (isGoalRelatedQuery(userText) && !currentGoal) {
+          // Add goal tracking context to prompt
+          const goalPrompt = getGoalTrackingSystemPrompt(character);
+          systemPrompt.current = getCharacterPrompt(character, episodeLabel, goalPrompt);
+        }
+      }
+
       const openai = new OpenAI({ apiKey, dangerouslyAllowBrowser: true });
       const response = await openai.chat.completions.create({
         model: 'gpt-4o-mini',
@@ -488,17 +553,88 @@ Generate ONLY the follow-up message, nothing else.
         temperature: 0.8,
       });
 
-      const assistantResponse = response.choices[0]?.message?.content || "...";
+      const rawResponse = response.choices[0]?.message?.content || "...";
+      // Format the response: remove markdown, format lists, etc.
+      const formattedResponse = formatLLMResponse(rawResponse);
       
       setMessages(prev => [...prev, { 
         role: 'assistant', 
-        content: assistantResponse, 
+        content: formattedResponse, 
         time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) 
       }]);
       
-      // Save assistant response to Supabase
+      // Save formatted response to Supabase
       if (isUserLoggedIn()) {
-        saveMessage(character, 'assistant', assistantResponse, seriesId, episodeId);
+        saveMessage(character, 'assistant', formattedResponse, seriesId, episodeId);
+      }
+
+      // Post-process: Check if AI response contains milestone breakdown
+      // Pattern: "1. milestone 2. milestone" or "Step 1: milestone"
+      if (isUserLoggedIn() && !currentGoal && isGoalRelatedQuery(userText)) {
+        const milestonePattern = /(\d+\.\s+[^\n]+|Step\s+\d+[:\-]\s+[^\n]+)/gi;
+        const matches = formattedResponse.match(milestonePattern);
+        
+        if (matches && matches.length >= 3) {
+          // AI has provided milestones, try to extract and save goal
+          // Extract goal text from conversation context
+          const goalText = userText.match(/(?:want to|trying to|working on|goal is|plan to|aim to|aspire to|dream of)\s+(.+)/i)?.[1] || userText;
+          
+          // Generate milestones using LLM
+          const milestones = await generateMilestones(goalText, apiKey);
+          
+          if (milestones.length > 0) {
+            const savedGoal = await saveGoal(character, goalText, milestones);
+            if (savedGoal) {
+              setCurrentGoal(savedGoal);
+              // Update system prompt with new goal context
+              const currentMilestone = savedGoal.milestones[savedGoal.current_milestone_index];
+              goalContextRef.current = `User's Current Goal: ${savedGoal.goal_text}
+Current Status: ${savedGoal.current_status}
+Current Milestone: ${currentMilestone ? currentMilestone.title : 'Not set'}
+Milestones: ${savedGoal.milestones.map((m, i) => `${i + 1}. ${m.title} (${m.status})`).join('\n')}`;
+              systemPrompt.current = getCharacterPrompt(character, episodeLabel, goalContextRef.current);
+            }
+          }
+        }
+      }
+
+      // Check if response indicates status update
+      if (currentGoal && isGoalRelatedQuery(userText)) {
+        // Try to detect status from user message
+        const lowerText = userText.toLowerCase();
+        let newStatus: 'Not Started' | 'In Progress' | 'Stuck' | 'Completed' | null = null;
+        let milestoneIndex = currentGoal.current_milestone_index;
+
+        if (lowerText.includes('stuck') || lowerText.includes('confused') || lowerText.includes('not sure')) {
+          newStatus = 'Stuck';
+        } else if (lowerText.includes('completed') || lowerText.includes('finished') || lowerText.includes('done')) {
+          newStatus = 'Completed';
+          // Move to next milestone if completed
+          if (milestoneIndex < currentGoal.milestones.length - 1) {
+            milestoneIndex += 1;
+          }
+        } else if (lowerText.includes('working on') || lowerText.includes('doing') || lowerText.includes('training') || lowerText.includes('practicing')) {
+          newStatus = 'In Progress';
+        }
+
+        if (newStatus) {
+          await updateGoalStatus(character, newStatus, milestoneIndex, formattedResponse.substring(0, 200));
+          // Reload goal to get updated version
+          const updatedGoal = await getCurrentGoal(character);
+          if (updatedGoal) {
+            setCurrentGoal(updatedGoal);
+            // Update goal context and system prompt
+            const currentMilestone = updatedGoal.milestones[updatedGoal.current_milestone_index];
+            goalContextRef.current = `User's Current Goal: ${updatedGoal.goal_text}
+Current Status: ${updatedGoal.current_status}
+Current Milestone: ${currentMilestone ? currentMilestone.title : 'Not set'}
+Milestones: ${updatedGoal.milestones.map((m, i) => `${i + 1}. ${m.title} (${m.status})`).join('\n')}
+${updatedGoal.progress_summary ? `Progress Summary: ${updatedGoal.progress_summary}` : ''}
+
+You can help track progress, update status, and suggest next actions.`;
+            systemPrompt.current = getCharacterPrompt(character, episodeLabel, goalContextRef.current);
+          }
+        }
       }
     } catch (error) {
       console.error("AI Error:", error);

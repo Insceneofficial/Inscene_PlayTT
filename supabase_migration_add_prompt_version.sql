@@ -23,3 +23,5 @@ COMMENT ON COLUMN chat_sessions.prompt_version IS 'Version of the character prom
 -- - New sessions always use the latest prompt version
 -- ============================================
 
+
+
