@@ -18,8 +18,10 @@ import {
   trackPageView
 } from './lib/analytics';
 import { loadAllChatHistories } from './lib/chatStorage';
+import { getAllUserGoals, UserGoal } from './lib/goalTracking';
 import { AVATARS, getCharacterAvatar, getAllCharacterNames, CHARACTER_PROFILES, getCharacterGreeting } from './lib/characters';
 import { setSeriesCatalog, getAllInfluencers, getInfluencerSlug, InfluencerInfo } from './lib/influencerMapping';
+import GoalTracker from './components/GoalTracker';
 
 // Re-export for backward compatibility with existing code
 const PRIYANK_AVATAR = AVATARS.Priyank;
@@ -1153,7 +1155,7 @@ const AppContent: React.FC = () => {
   const [activeIdx, setActiveIdx] = useState(0);
   const [isMuted, setIsMuted] = useState(false);
   const [chatData, setChatData] = useState<any>(null);
-  const [currentView, setCurrentView] = useState<'discover' | 'chats'>('discover');
+  const [currentView, setCurrentView] = useState<'discover' | 'chats' | 'goals'>('discover');
   const [choiceModalData, setChoiceModalData] = useState<any>(null);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [isWaitlistModalOpen, setIsWaitlistModalOpen] = useState(false);
@@ -1163,6 +1165,8 @@ const AppContent: React.FC = () => {
   const [unseenCounts, setUnseenCounts] = useState<Record<string, number>>({});
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearchActive, setIsSearchActive] = useState(false);
+  const [allGoals, setAllGoals] = useState<UserGoal[]>([]);
+  const [selectedGoalCharacter, setSelectedGoalCharacter] = useState<string | null>(null);
   const [isHeaderUIHidden, setIsHeaderUIHidden] = useState(false);
   const headerInactivityTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const headerActivityHandlerRef = useRef<((event?: Event) => void) | null>(null);
@@ -1179,6 +1183,13 @@ const AppContent: React.FC = () => {
     trackViewer();
     trackPageView({ viewType: 'app_open' });
   }, []);
+
+  // Load all goals when view changes to goals
+  useEffect(() => {
+    if (currentView === 'goals' && isAuthenticated) {
+      getAllUserGoals().then(setAllGoals);
+    }
+  }, [currentView, isAuthenticated]);
 
   // Load chat histories when user logs in
   useEffect(() => {
@@ -1457,7 +1468,7 @@ const AppContent: React.FC = () => {
 
   return (
     <div className="flex flex-col min-h-[100dvh] h-[100dvh] text-white overflow-hidden" style={{ background: CHARCOAL_GRADIENT }}>
-      <header className={`fixed top-0 left-0 right-0 z-[1000] px-6 py-6 transition-all duration-500 ${selectedSeries ? 'bg-gradient-to-b from-[#0a0a0f]/90 to-transparent' : 'bg-transparent'} ${currentView === 'chats' ? 'hidden' : ''}`}>
+      <header className={`fixed top-0 left-0 right-0 z-[1000] px-6 py-6 transition-all duration-500 ${selectedSeries ? 'bg-gradient-to-b from-[#0a0a0f]/90 to-transparent' : 'bg-transparent'} ${currentView === 'chats' || currentView === 'goals' ? 'hidden' : ''}`}>
         <div className="flex justify-between items-center max-w-4xl mx-auto">
           {selectedSeries ? (
             <>
@@ -1513,7 +1524,7 @@ const AppContent: React.FC = () => {
       </header>
 
       {!selectedSeries && (
-        <main className={`flex-1 overflow-y-auto hide-scrollbar ${currentView === 'chats' ? 'pt-0 pb-20' : 'pt-24 pb-28 px-6 animate-slide-up'}`}>
+        <main className={`flex-1 overflow-y-auto hide-scrollbar ${currentView === 'chats' || currentView === 'goals' ? 'pt-0 pb-20' : 'pt-24 pb-28 px-6 animate-slide-up'}`}>
           {currentView === 'discover' ? (
             <div className="flex flex-col gap-6 max-w-lg mx-auto">
 
@@ -1548,7 +1559,7 @@ const AppContent: React.FC = () => {
                   </div>
                 </div>
             </div>
-          ) : (
+          ) : currentView === 'chats' ? (
             <div className="flex flex-col h-full bg-[#0a0a0f] relative">
               {/* Dark Theme Chat Header */}
               <div className="bg-gradient-to-r from-[#1a1a24] to-[#121218] text-white pt-10 px-6 pb-4 shadow-lg border-b border-violet-500/10">
@@ -1690,7 +1701,92 @@ const AppContent: React.FC = () => {
                 })()}
               </div>
             </div>
-          )}
+          ) : currentView === 'goals' ? (
+            <div className="flex flex-col h-full bg-[#0a0a0f]">
+              <div className="bg-gradient-to-r from-[#1a1a24] to-[#121218] text-white pt-10 px-6 pb-4 shadow-lg border-b border-violet-500/10">
+                <h1 className="text-2xl font-bold tracking-wide">My Goals</h1>
+              </div>
+              <div className="flex-1 overflow-y-auto pt-6 px-6">
+                {selectedGoalCharacter ? (
+                  <div>
+                    <button
+                      onClick={() => setSelectedGoalCharacter(null)}
+                      className="mb-4 text-violet-400 hover:text-violet-300 flex items-center gap-2"
+                    >
+                      <svg viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
+                        <path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z" />
+                      </svg>
+                      Back to All Goals
+                    </button>
+                    <GoalTracker
+                      characterName={selectedGoalCharacter}
+                      onOpenChat={() => {
+                        const char = selectedGoalCharacter;
+                        handleChatInit({
+                          char,
+                          avatar: getCharacterAvatar(char),
+                          isFromHistory: false,
+                          isWhatsApp: true,
+                          entryPoint: 'goal_tracker'
+                        });
+                      }}
+                    />
+                  </div>
+                ) : (
+                  <div className="space-y-4 max-w-2xl mx-auto">
+                    {allGoals.length === 0 ? (
+                      <div className="flex flex-col items-center justify-center py-20 text-center">
+                        <div className="text-6xl mb-4">🎯</div>
+                        <h3 className="text-2xl font-bold text-white mb-2">No Goals Yet</h3>
+                        <p className="text-white/60 mb-6 max-w-md">
+                          Start tracking your progress by setting a goal with any influencer.
+                        </p>
+                        <button
+                          onClick={() => setCurrentView('discover')}
+                          className="px-6 py-3 bg-violet-500 hover:bg-violet-600 rounded-full font-medium text-white transition-colors"
+                        >
+                          Explore Influencers
+                        </button>
+                      </div>
+                    ) : (
+                      allGoals.map((goal) => (
+                        <div
+                          key={goal.id}
+                          onClick={() => setSelectedGoalCharacter(goal.character_name)}
+                          className="bg-white/5 rounded-2xl p-6 border border-white/10 hover:border-violet-500/30 cursor-pointer transition-all"
+                        >
+                          <div className="flex items-start gap-4">
+                            <img
+                              src={getCharacterAvatar(goal.character_name)}
+                              alt={goal.character_name}
+                              className="w-16 h-16 rounded-full"
+                            />
+                            <div className="flex-1">
+                              <div className="flex items-center justify-between mb-2">
+                                <h3 className="text-xl font-bold text-white">{goal.character_name}</h3>
+                                <span className={`text-sm px-3 py-1 rounded-full ${
+                                  goal.current_status === 'Completed' ? 'bg-green-500/20 text-green-400' :
+                                  goal.current_status === 'In Progress' ? 'bg-violet-500/20 text-violet-400' :
+                                  goal.current_status === 'Stuck' ? 'bg-orange-500/20 text-orange-400' :
+                                  'bg-white/10 text-white/60'
+                                }`}>
+                                  {goal.current_status}
+                                </span>
+                              </div>
+                              <p className="text-white/80 mb-3">{goal.goal_text}</p>
+                              <div className="text-sm text-white/60">
+                                Milestone {goal.current_milestone_index + 1} of {goal.milestones.length}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : null}
         </main>
       )}
 

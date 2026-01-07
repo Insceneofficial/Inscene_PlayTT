@@ -72,3 +72,5 @@ console.log(`✓ Has Current Status section: ${hasCurrentStatus}`);
 console.log(`✓ Has Next Step section: ${hasNextStep}`);
 console.log(`\n${hasLineBreaks && hasGoalSection && hasCurrentStatus && hasNextStep ? '✅ ALL TESTS PASSED' : '❌ SOME TESTS FAILED'}`);
 
+
+

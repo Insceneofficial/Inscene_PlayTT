@@ -46,3 +46,5 @@ COMMENT ON COLUMN user_goals.current_status IS 'Overall goal status: Not Started
 -- - Status can only be one of the 4 defined values
 -- ============================================
 
+
+

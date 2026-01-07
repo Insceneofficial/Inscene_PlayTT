@@ -127,3 +127,5 @@ This creates the `user_goals` table with:
 
 The system is fully integrated and ready to use. Just run the database migration and test!
 
+
+

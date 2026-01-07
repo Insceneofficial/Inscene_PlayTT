@@ -6,6 +6,7 @@ import UserMenu from './UserMenu.tsx';
 import AuthModal from './AuthModal.tsx';
 import WaitlistModal from './WaitlistModal.tsx';
 import ChatWidget from './ChatWidget.tsx';
+import GoalTracker from './GoalTracker.tsx';
 import { useAuth } from '../lib/auth';
 import { getUserMessageCount, MAX_USER_MESSAGES, hasUnlimitedMessages } from '../lib/chatStorage';
 import { getInfluencerBySlug, getSeriesForInfluencer, setSeriesCatalog } from '../lib/influencerMapping';
@@ -861,6 +862,7 @@ const InfluencerPage: React.FC = () => {
   const [chatData, setChatData] = useState<any>(null);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [isWaitlistModalOpen, setIsWaitlistModalOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState<'videos' | 'goals'>('videos');
   const [isCloseButtonHidden, setIsCloseButtonHidden] = useState(false);
   const closeButtonInactivityTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const closeButtonActivityHandlerRef = React.useRef<((event?: Event) => void) | null>(null);
@@ -1117,8 +1119,35 @@ const InfluencerPage: React.FC = () => {
           </div>
         </div>
 
-        {/* Video Grid */}
-        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+        {/* Tab Navigation */}
+        <div className="flex gap-4 mb-8 border-b border-white/10">
+          <button
+            onClick={() => setActiveTab('videos')}
+            className={`px-6 py-3 font-medium transition-colors ${
+              activeTab === 'videos'
+                ? 'text-violet-400 border-b-2 border-violet-400'
+                : 'text-white/60 hover:text-white/80'
+            }`}
+          >
+            Videos
+          </button>
+          <button
+            onClick={() => setActiveTab('goals')}
+            className={`px-6 py-3 font-medium transition-colors ${
+              activeTab === 'goals'
+                ? 'text-violet-400 border-b-2 border-violet-400'
+                : 'text-white/60 hover:text-white/80'
+            }`}
+          >
+            Goal Tracker
+          </button>
+        </div>
+
+        {/* Tab Content */}
+        {activeTab === 'videos' && (
+          <>
+            {/* Video Grid */}
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
           {influencerEpisodes.map((ep: any) => {
             const thumbnailUrl = series.thumbnail; // Using series thumbnail as fallback
             return (
@@ -1163,10 +1192,33 @@ const InfluencerPage: React.FC = () => {
           })}
         </div>
 
-        {influencerEpisodes.length === 0 && (
-          <div className="text-center py-20 text-white/40">
-            <p className="text-lg">No videos available for {influencer.name}</p>
-          </div>
+            {influencerEpisodes.length === 0 && (
+              <div className="text-center py-20 text-white/40">
+                <p className="text-lg">No videos available for {influencer.name}</p>
+              </div>
+            )}
+          </>
+        )}
+
+        {activeTab === 'goals' && influencer && (
+          <GoalTracker
+            characterName={influencer.name}
+            onOpenChat={() => {
+              const firstTrigger = influencerEpisodes[0]?.triggers?.find((t: any) => t.char === influencer?.name);
+              if (firstTrigger) {
+                handleChatInit({
+                  char: firstTrigger.char,
+                  intro: firstTrigger.intro,
+                  hook: firstTrigger.hook,
+                  isFromHistory: false,
+                  isWhatsApp: true,
+                  entryPoint: 'goal_tracker',
+                  seriesId: series.id,
+                  seriesTitle: series.title
+                });
+              }
+            }}
+          />
         )}
       </main>
 

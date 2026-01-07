@@ -6,6 +6,7 @@ import { getCharacterPrompt, getCharacterPromptVersion } from '../lib/characters
 import { formatLLMResponse } from '../lib/formatLLMResponse';
 import { getCurrentGoal, saveGoal, updateGoalStatus, formatGoalStatusReport, UserGoal } from '../lib/goalTracking';
 import { generateMilestones, isGoalRelatedQuery, isGoalDeclaration, isStatusCheckQuery, getGoalTrackingSystemPrompt } from '../lib/goalTrackingPrompts';
+import { recordCheckIn as recordGamificationCheckIn, recordActivity, checkAndAwardBadges } from '../lib/gamification';
 
 interface ChatPanelProps {
   character: string;
@@ -518,6 +519,12 @@ Send a brief, friendly check-in message asking about their progress. Keep it sho
         
         if (isUserLoggedIn()) {
           saveMessage(character, 'assistant', formattedCheckIn, seriesId, episodeId);
+          // Record check-in in gamification system
+          if (currentGoal) {
+            await recordGamificationCheckIn(character, currentGoal.id);
+            // Check for new badges
+            await checkAndAwardBadges(character, currentGoal.id);
+          }
         }
         
         lastCheckInTime.current = Date.now();
@@ -694,6 +701,11 @@ Send a brief, friendly check-in message asking about their progress. Keep it sho
             const savedGoal = await saveGoal(character, goalText, milestones);
             if (savedGoal) {
               setCurrentGoal(savedGoal);
+              
+              // Award first_goal badge
+              const { awardBadge } = await import('../lib/gamification');
+              await awardBadge(character, 'first_goal', savedGoal.id);
+              
               // Schedule check-in for new goal
               scheduleGoalCheckIn();
               // Update system prompt with new goal context
@@ -733,6 +745,20 @@ Milestones: ${savedGoal.milestones.map((m, i) => `${i + 1}. ${m.title} (${m.stat
           const updatedGoal = await getCurrentGoal(character);
           if (updatedGoal) {
             setCurrentGoal(updatedGoal);
+            
+            // Record gamification activity
+            if (newStatus === 'Completed') {
+              await recordActivity(character, 'milestone_completed', updatedGoal.id, {
+                milestone_index: milestoneIndex,
+              });
+              // Check for badges (e.g., milestone_master, goal_completed)
+              await checkAndAwardBadges(character, updatedGoal.id);
+            } else if (newStatus === 'In Progress') {
+              await recordActivity(character, 'milestone_started', updatedGoal.id, {
+                milestone_index: milestoneIndex,
+              });
+            }
+            
             // Reschedule check-in after status update
             scheduleGoalCheckIn();
             // Update goal context and system prompt

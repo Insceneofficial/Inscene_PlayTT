@@ -174,6 +174,31 @@ export const updateGoalStatus = async (
       .eq('id', goal.id);
 
     if (error) throw error;
+    
+    // Trigger gamification events
+    try {
+      const { recordActivity, awardBadge } = await import('./gamification');
+      
+      // Check if goal is completed (all milestones done)
+      if (status === 'Completed' && milestoneIndex >= goal.milestones.length - 1) {
+        await recordActivity(characterName, 'goal_completed', goal.id);
+        await awardBadge(characterName, 'goal_completed', goal.id);
+      }
+      
+      // Check if first milestone completed
+      if (status === 'Completed' && milestoneIndex === 0) {
+        await awardBadge(characterName, 'first_milestone', goal.id);
+      }
+      
+      // Check if all milestones completed
+      if (status === 'Completed' && milestoneIndex >= goal.milestones.length - 1) {
+        await awardBadge(characterName, 'milestone_master', goal.id);
+      }
+    } catch (gamificationError) {
+      console.warn('GoalTracking: Failed to trigger gamification events', gamificationError);
+      // Don't fail the update if gamification fails
+    }
+    
     return true;
   } catch (error) {
     console.warn('GoalTracking: Failed to update goal status', error);
@@ -263,5 +288,29 @@ export const formatGoalStatusReport = (goal: UserGoal): string => {
   }
 
   return report;
+};
+
+/**
+ * Get all user goals across all characters
+ */
+export const getAllUserGoals = async (): Promise<UserGoal[]> => {
+  if (!isSupabaseConfigured()) return [];
+  
+  const googleUserId = getGoogleUserId();
+  if (!googleUserId) return [];
+
+  try {
+    const { data, error } = await supabase
+      .from('user_goals')
+      .select('*')
+      .eq('google_user_id', googleUserId)
+      .order('updated_at', { ascending: false });
+
+    if (error) throw error;
+    return data || [];
+  } catch (error) {
+    console.warn('GoalTracking: Failed to get all user goals', error);
+    return [];
+  }
 };
 
