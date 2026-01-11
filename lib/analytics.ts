@@ -1,4 +1,5 @@
 import { supabase, isSupabaseConfigured } from './supabase';
+import { recordActivity, recordVideoCompletion } from './streaksAndPoints';
 
 // ============================================
 // ID Generation - Persistent Viewer & Session
@@ -167,6 +168,20 @@ export const trackVideoStart = async (data: VideoSessionData): Promise<string | 
       .single();
     
     if (error) throw error;
+    
+    // Record streak activity for watching video
+    // Extract creator from series (first character in the series)
+    if (googleUserId && data.seriesId) {
+      // Map series to creator - we'll get this from the series context
+      recordActivity(data.seriesId, 'video', { 
+        videoWatchSeconds: 0 
+      }).then(result => {
+        console.log('[Video Streaks] Activity recorded:', result);
+      }).catch(err => {
+        console.warn('[Video Streaks] Failed to record activity:', err);
+      });
+    }
+    
     return result?.id || null;
   } catch (error) {
     console.warn('Analytics: Failed to start video session', error);
@@ -213,7 +228,8 @@ export const trackVideoEnd = async (
   watchDurationSeconds: number,
   videoDurationSeconds: number,
   isCompleted: boolean,
-  unmutedDuringWatch?: boolean
+  unmutedDuringWatch?: boolean,
+  creatorId?: string
 ): Promise<void> => {
   if (!isSupabaseConfigured() || !recordId) {
     console.warn('[Analytics] trackVideoEnd called without recordId or Supabase not configured');
@@ -298,6 +314,18 @@ export const trackVideoEnd = async (
       });
       if (!data || data.length === 0) {
         console.error('[Analytics] ⚠️ UPDATE returned no rows despite record existing - possible RLS issue');
+      }
+      
+      // Award completion points if video was completed (90%+)
+      const googleUserId = getGoogleUserId();
+      if (googleUserId && (isCompleted || completionPercentage >= 90) && creatorId) {
+        recordVideoCompletion(creatorId).then(points => {
+          if (points > 0) {
+            console.log('[Video Points] Awarded', points, 'points for completing video');
+          }
+        }).catch(err => {
+          console.warn('[Video Points] Failed to award completion points:', err);
+        });
       }
     }
   } catch (error) {
@@ -512,5 +540,105 @@ export const trackPageView = async (data: PageViewData): Promise<void> => {
       });
   } catch (error) {
     console.warn('Analytics: Failed to track page view', error);
+  }
+};
+
+// ============================================
+// Video Progress Tracking (for UI display)
+// ============================================
+
+export interface EpisodeWatchStatus {
+  episodeId: number;
+  isCompleted: boolean;
+  completionPercentage: number;
+  watchedAt: string | null;
+}
+
+export interface SeriesProgress {
+  seriesId: string;
+  totalEpisodes: number;
+  completedEpisodes: number;
+  episodeStatuses: EpisodeWatchStatus[];
+  overallProgress: number;
+}
+
+/**
+ * Get watched episode status for a series
+ */
+export const getSeriesProgress = async (
+  seriesId: string,
+  episodeIds: number[]
+): Promise<SeriesProgress> => {
+  const defaultProgress: SeriesProgress = {
+    seriesId,
+    totalEpisodes: episodeIds.length,
+    completedEpisodes: 0,
+    episodeStatuses: episodeIds.map(id => ({
+      episodeId: id,
+      isCompleted: false,
+      completionPercentage: 0,
+      watchedAt: null
+    })),
+    overallProgress: 0
+  };
+  
+  if (!isSupabaseConfigured()) return defaultProgress;
+  
+  const googleUserId = getGoogleUserId();
+  if (!googleUserId) return defaultProgress;
+  
+  try {
+    // Get best watch session for each episode
+    const { data, error } = await supabase
+      .from('video_sessions')
+      .select('episode_id, is_completed, completion_percentage, ended_at')
+      .eq('google_user_id', googleUserId)
+      .eq('series_id', seriesId)
+      .in('episode_id', episodeIds)
+      .order('completion_percentage', { ascending: false });
+    
+    if (error) throw error;
+    
+    // Build a map of best progress per episode
+    const episodeProgressMap = new Map<number, { isCompleted: boolean; completionPercentage: number; watchedAt: string | null }>();
+    
+    (data || []).forEach(session => {
+      const existing = episodeProgressMap.get(session.episode_id);
+      // Keep the best progress (highest completion %)
+      if (!existing || (session.completion_percentage || 0) > existing.completionPercentage) {
+        episodeProgressMap.set(session.episode_id, {
+          isCompleted: session.is_completed || (session.completion_percentage >= 90),
+          completionPercentage: session.completion_percentage || 0,
+          watchedAt: session.ended_at
+        });
+      }
+    });
+    
+    // Build episode statuses
+    const episodeStatuses: EpisodeWatchStatus[] = episodeIds.map(id => {
+      const progress = episodeProgressMap.get(id);
+      return {
+        episodeId: id,
+        isCompleted: progress?.isCompleted || false,
+        completionPercentage: progress?.completionPercentage || 0,
+        watchedAt: progress?.watchedAt || null
+      };
+    });
+    
+    const completedEpisodes = episodeStatuses.filter(e => e.isCompleted).length;
+    const overallProgress = episodeIds.length > 0 
+      ? Math.round((completedEpisodes / episodeIds.length) * 100) 
+      : 0;
+    
+    return {
+      seriesId,
+      totalEpisodes: episodeIds.length,
+      completedEpisodes,
+      episodeStatuses,
+      overallProgress
+    };
+  } catch (error) {
+    console.warn('Analytics: Failed to get series progress', error);
+    return defaultProgress;
   }
 };

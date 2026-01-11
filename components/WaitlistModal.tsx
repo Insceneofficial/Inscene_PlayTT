@@ -36,59 +36,72 @@ const WaitlistModal: React.FC<WaitlistModalProps> = ({ isOpen, onClose }) => {
   };
 
   return (
-    <div className="fixed inset-0 z-[7000] flex items-center justify-center p-6 bg-[#0a0a0f]/90 backdrop-blur-sm animate-fade-in">
-      <div className="relative w-full max-w-md bg-[#121218]/95 backdrop-blur-[60px] border border-violet-500/20 rounded-[3.5rem] overflow-hidden shadow-[0_30px_100px_rgba(139,92,246,0.2)] p-8 animate-slide-up">
+    <div className="fixed inset-0 z-[7000] flex items-center justify-center p-6 bg-black/30 backdrop-blur-md animate-fade-in">
+      <div className="relative w-full max-w-sm bg-white rounded-2xl overflow-hidden shadow-xl p-8 animate-slide-up">
         {/* Close Button */}
         <button 
           onClick={onClose} 
-          className="absolute top-6 right-6 w-10 h-10 rounded-full bg-[#1a1a24]/80 hover:bg-violet-500/20 border border-violet-500/20 flex items-center justify-center transition-all active:scale-90"
+          className="absolute top-5 right-5 w-8 h-8 rounded-lg bg-black/[0.04] hover:bg-black/[0.08] flex items-center justify-center transition-all active:scale-95"
         >
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-5 h-5 text-white/50">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4 text-[#8A8A8A]">
             <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
           </svg>
         </button>
 
-        <div className="flex flex-col items-center gap-6 mt-4">
+        <div className="flex flex-col items-center gap-5 mt-2">
           {isSuccess ? (
             <>
-              <div className="w-20 h-20 rounded-full bg-gradient-to-r from-violet-500 to-blue-500 flex items-center justify-center">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor" className="w-10 h-10 text-white">
+              <div className="w-16 h-16 rounded-2xl bg-[#4A7C59] flex items-center justify-center">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-8 h-8 text-white">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
                 </svg>
               </div>
               <div className="text-center">
-                <h3 className="text-2xl font-black italic uppercase tracking-tighter text-white mb-2">You're on the list!</h3>
-                <p className="text-violet-400/60 text-sm">We'll notify you when premium is available.</p>
+                <h3 className="text-xl font-semibold text-[#1A1A1A] mb-1">You're on the list</h3>
+                <p className="text-[#8A8A8A] text-[14px]">We'll notify you when premium is available.</p>
               </div>
             </>
           ) : (
             <>
-              <div className="w-20 h-20 rounded-full bg-gradient-to-r from-violet-500/20 to-blue-500/20 border-2 border-violet-500/30 flex items-center justify-center">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-10 h-10 text-violet-400">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+              <div className="w-16 h-16 rounded-2xl bg-[#C9A227]/10 flex items-center justify-center">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-8 h-8 text-[#C9A227]">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 00-2.456 2.456zM16.894 20.567L16.5 21.75l-.394-1.183a2.25 2.25 0 00-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 001.423-1.423l.394-1.183.394 1.183a2.25 2.25 0 001.423 1.423l1.183.394-1.183.394a2.25 2.25 0 00-1.423 1.423z" />
                 </svg>
               </div>
               <div className="text-center">
-                <h3 className="text-2xl font-black italic uppercase tracking-tighter text-white mb-2">Message Limit Reached</h3>
-                <p className="text-violet-400/60 text-sm mb-6">
-                  You've used your 10 free messages. Join the waitlist to get early access to premium and unlimited messaging!
+                <h3 className="text-xl font-semibold text-[#1A1A1A] mb-1">Message limit reached</h3>
+                <p className="text-[#8A8A8A] text-[14px] mb-6 max-w-[280px]">
+                  You've used your free messages. Join the waitlist to unlock unlimited access.
                 </p>
               </div>
               
               <button
                 onClick={handleJoinWaitlist}
                 disabled={isSubmitting}
-                className="w-full py-5 rounded-[2rem] bg-gradient-to-r from-violet-500 to-blue-500 text-white font-black uppercase tracking-widest text-[10px] shadow-[0_10px_30px_rgba(139,92,246,0.3)] active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full py-3.5 rounded-xl bg-[#4A7C59] text-white font-semibold text-[15px] hover:bg-[#3D6549] active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {isSubmitting ? 'Joining...' : 'Join Premium Waitlist'}
+                {isSubmitting ? 'Joining...' : 'Join Waitlist'}
+              </button>
+              
+              <button
+                onClick={onClose}
+                className="w-full py-3 rounded-xl bg-transparent text-[#8A8A8A] font-medium text-[14px] hover:text-[#4A4A4A] transition-all"
+              >
+                Maybe later
               </button>
             </>
           )}
         </div>
       </div>
+      
+      <style>{`
+        @keyframes slideUp { from { transform: translateY(16px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        .animate-slide-up { animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        .animate-fade-in { animation: fadeIn 0.2s ease-out forwards; }
+      `}</style>
     </div>
   );
 };
 
 export default WaitlistModal;
-
