@@ -1060,9 +1060,19 @@ Keep it brief and friendly.`
   return (
     <div className="fixed inset-0 z-[5000] flex items-end justify-center p-4 md:p-8 animate-fade-in pointer-events-none">
       <div 
-        className="w-full max-w-lg border border-black/[0.06] rounded-2xl overflow-hidden flex flex-col shadow-xl pointer-events-auto h-[80vh] max-h-[750px] mb-20 md:mb-0 transition-all duration-500 transform translate-y-0 bg-white"
+        className="w-full max-w-lg border border-black/[0.06] rounded-2xl overflow-hidden flex flex-col shadow-xl pointer-events-auto h-[80vh] max-h-[750px] mb-20 md:mb-0 transition-all duration-500 transform translate-y-0 bg-[#FAF9F6] relative"
       >
-        <div className="px-5 py-4 flex justify-between items-center border-b border-black/[0.06] bg-white">
+        {/* Subtle background pattern */}
+        <div 
+          className="absolute inset-0 opacity-[0.03] pointer-events-none z-0" 
+          style={{ 
+            backgroundImage: `url('/chat_bg.png')`,
+            backgroundSize: 'cover',
+            backgroundPosition: 'center'
+          }}
+        />
+
+        <div className="relative z-10 px-5 py-4 flex justify-between items-center border-b border-black/[0.06] bg-white/90 backdrop-blur-sm">
           <div className="flex items-center gap-3">
             <div className="relative w-11 h-11 rounded-full overflow-hidden">
               <img src={avatar} alt={character} className="w-full h-full object-cover" />
@@ -1078,7 +1088,7 @@ Keep it brief and friendly.`
           </button>
         </div>
 
-        <div ref={scrollRef} className="flex-1 overflow-y-auto p-5 space-y-3 hide-scrollbar bg-[#FAF9F6]">
+        <div ref={scrollRef} className="relative z-10 flex-1 overflow-y-auto p-5 space-y-3 hide-scrollbar">
           {messages.map((m, i) => (
             <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'} animate-slide-up`}>
               <div className={`max-w-[80%] px-4 py-2.5 rounded-2xl text-[15px] ${
@@ -1112,7 +1122,7 @@ Keep it brief and friendly.`
 
         {/* Quick Action Buttons - Minimal */}
         {isUserLoggedIn() && (
-          <div className="px-5 pb-2 pt-2 flex items-center gap-2 overflow-x-auto hide-scrollbar bg-white border-t border-black/[0.06]">
+          <div className="relative z-10 px-5 pb-2 pt-2 flex items-center gap-2 overflow-x-auto hide-scrollbar bg-white/90 backdrop-blur-sm border-t border-black/[0.06]">
             <button
               onClick={() => handleQuickAction('my_goal')}
               className="flex-shrink-0 px-3.5 py-2 rounded-lg text-[12px] font-medium bg-black/[0.04] text-[#4A4A4A] hover:bg-black/[0.08] transition-all"
@@ -1143,7 +1153,7 @@ Keep it brief and friendly.`
           </div>
         )}
 
-        <div className="p-5 pt-2 pb-6 bg-white">
+        <div className="relative z-10 p-5 pt-2 pb-6 bg-white/90 backdrop-blur-sm">
           <div className="relative group flex items-center gap-3">
             <input 
               type="text" value={inputValue} onChange={(e) => setInputValue(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleSend()} placeholder={`Reply to ${character}...`}
