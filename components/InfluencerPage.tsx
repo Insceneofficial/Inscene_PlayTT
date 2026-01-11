@@ -986,6 +986,13 @@ const InfluencerPage: React.FC = () => {
     s.avatars && s.avatars[influencer.name]
   ) : [];
   
+  // Auto-select the first series to skip series selection page
+  useEffect(() => {
+    if (influencerSeries.length > 0 && !selectedSeries) {
+      setSelectedSeries(influencerSeries[0]);
+    }
+  }, [influencerSeries.length]);
+  
   // Use selectedSeries if available, otherwise null
   const series = selectedSeries;
 
@@ -1218,25 +1225,13 @@ const InfluencerPage: React.FC = () => {
     <div className="flex flex-col min-h-[100dvh] h-[100dvh] overflow-y-auto" style={{ background: CREAM_BG, color: '#1A1A1A' }}>
       <header className="fixed top-0 left-0 right-0 z-[1000] px-6 py-4 transition-all duration-500 bg-[#FAF9F6]/80 backdrop-blur-xl border-b border-black/[0.06]">
         <div className="flex justify-between items-center max-w-6xl mx-auto">
-          {selectedSeries ? (
-            // Back to series selection
-            <div className="flex items-center gap-3 cursor-pointer group active:scale-[0.98] transition-transform" onClick={() => setSelectedSeries(null)}>
-              <div className="w-9 h-9 rounded-xl bg-black/[0.04] flex items-center justify-center hover:bg-black/[0.08] transition-colors">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5 text-[#4A4A4A]">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
-                </svg>
-              </div>
-              <span className="text-[#8A8A8A] text-sm font-medium">Back</span>
+          {/* Home button */}
+          <div className="flex items-center gap-3 cursor-pointer group active:scale-[0.98] transition-transform" onClick={() => navigate('/')}>
+            <div className="w-9 h-9 rounded-xl bg-[#4A7C59] flex items-center justify-center">
+              <Logo size={20} isPulsing={false} />
             </div>
-          ) : (
-            // Home button
-            <div className="flex items-center gap-3 cursor-pointer group active:scale-[0.98] transition-transform" onClick={() => navigate('/')}>
-              <div className="w-9 h-9 rounded-xl bg-[#4A7C59] flex items-center justify-center">
-                <Logo size={20} isPulsing={false} />
-              </div>
-              <span className="text-[#8A8A8A] text-sm font-medium">Home</span>
-            </div>
-          )}
+            <span className="text-[#8A8A8A] text-sm font-medium">Home</span>
+          </div>
           <div className="flex items-center gap-2">
             <UserMenu onSignInClick={() => setIsAuthModalOpen(true)} />
           </div>
@@ -1313,76 +1308,9 @@ const InfluencerPage: React.FC = () => {
           </div>
         </div>
 
-        {/* SERIES SELECTION VIEW */}
-        {!selectedSeries && (
-          <>
-            <h2 className="text-[13px] font-semibold tracking-wide text-[#8A8A8A] mb-4 uppercase">
-              {influencerSeries.length === 1 ? 'Series' : 'Select a Series'}
-            </h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {influencerSeries.map((s: any) => {
-                const episodeCount = s.episodes?.filter((ep: any) => 
-                  ep.triggers?.some((t: any) => t.char === influencer.name)
-                ).length || 0;
-                
-                return (
-                  <div
-                    key={s.id}
-                    onClick={() => setSelectedSeries(s)}
-                    className="group cursor-pointer bg-white rounded-2xl overflow-hidden border border-black/[0.06] shadow-sm transition-all hover:shadow-lg hover:-translate-y-1 active:scale-[0.98]"
-                  >
-                    {/* Thumbnail */}
-                    <div className="relative aspect-video bg-[#F5F3EE] overflow-hidden">
-                      {s.thumbnail && (
-                        <img 
-                          src={s.thumbnail} 
-                          alt={s.title} 
-                          className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-                        />
-                      )}
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent" />
-                      
-                      {/* Play icon */}
-                      <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-300">
-                        <div className="w-14 h-14 rounded-full bg-white/95 backdrop-blur-sm flex items-center justify-center shadow-xl transform scale-90 group-hover:scale-100 transition-transform">
-                          <svg viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6 text-[#1A1A1A] ml-1">
-                            <path d="M8 5v14l11-7z" />
-                          </svg>
-                        </div>
-                      </div>
-                      
-                      {/* Episode count badge */}
-                      <div className="absolute bottom-3 right-3 bg-black/60 backdrop-blur-sm text-white text-[11px] font-medium px-2.5 py-1 rounded-lg">
-                        {episodeCount} {episodeCount === 1 ? 'episode' : 'episodes'}
-                      </div>
-                    </div>
-                    
-                    {/* Content */}
-                    <div className="p-4">
-                      <h3 className="text-[16px] font-semibold text-[#1A1A1A] mb-1 tracking-tight">{s.title}</h3>
-                      <p className="text-[13px] text-[#8A8A8A]">{s.tagline}</p>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-
-            {influencerSeries.length === 0 && (
-              <div className="text-center py-16 text-[#8A8A8A]">
-                <p className="text-[15px]">No series available yet</p>
-              </div>
-            )}
-          </>
-        )}
-
-        {/* EPISODES VIEW (when series is selected) */}
+        {/* EPISODES VIEW */}
         {selectedSeries && (
           <>
-            <div className="mb-6">
-              <h2 className="text-xl font-semibold text-[#1A1A1A] tracking-tight mb-1">{selectedSeries.title}</h2>
-              <p className="text-[13px] text-[#8A8A8A]">{selectedSeries.tagline}</p>
-            </div>
-            
             {/* Series Progress & Goals */}
             <SeriesProgressCard
               seriesId={selectedSeries.id}
