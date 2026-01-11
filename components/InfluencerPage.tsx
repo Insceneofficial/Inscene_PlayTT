@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import Logo from './Logo.tsx';
 import ChatPanel from './ChatPanel.tsx';
@@ -6,32 +6,134 @@ import UserMenu from './UserMenu.tsx';
 import AuthModal from './AuthModal.tsx';
 import WaitlistModal from './WaitlistModal.tsx';
 import ChatWidget from './ChatWidget.tsx';
+import LeaderboardModal from './LeaderboardModal.tsx';
+import StreakWidget from './StreakWidget.tsx';
+import SeriesProgressCard from './SeriesProgressCard.tsx';
+import GoalsModal from './GoalsModal.tsx';
 import { useAuth } from '../lib/auth';
 import { getUserMessageCount, MAX_USER_MESSAGES, hasUnlimitedMessages } from '../lib/chatStorage';
 import { getInfluencerBySlug, getSeriesForInfluencer, setSeriesCatalog } from '../lib/influencerMapping';
 import { getCharacterAvatar } from '../lib/characters';
 import { SERIES_CATALOG } from '../App';
-import { trackPageView, trackVideoStart, updateVideoProgress, trackVideoEnd } from '../lib/analytics';
+import { trackPageView, trackVideoStart, updateVideoProgress, trackVideoEnd, getSeriesProgress, SeriesProgress } from '../lib/analytics';
 
-// Character Avatar Component
-const CharacterDP: React.FC<{ src: string, name: string, theme: 'blue' | 'pink' | 'purple' | 'cyan' | 'green', size?: string, isOnline?: boolean }> = ({ src, name, theme, size = "w-16 h-16", isOnline = true }) => {
-  const [error, setError] = useState(false);
-  const borderColor = 
-    theme === 'blue' ? 'border-blue-500' : 
-    theme === 'pink' ? 'border-pink-500' : 
-    theme === 'purple' ? 'border-violet-500' : 
-    theme === 'cyan' ? 'border-cyan-400' :
-    'border-emerald-400';
-  const bgColor = 
-    theme === 'blue' ? 'bg-blue-600/30' : 
-    theme === 'pink' ? 'bg-pink-600/30' : 
-    theme === 'purple' ? 'bg-violet-600/30' : 
-    theme === 'cyan' ? 'bg-cyan-600/30' :
-    'bg-emerald-600/30';
+/**
+ * VIDEO END SCREEN - Auto-redirects to chat after countdown
+ */
+const VideoEndScreen: React.FC<{
+  episode: any;
+  series: any;
+  influencerName: string;
+  onEnterStory: (char: string, intro: string, hook: string, entryPoint: string) => void;
+  onNextEpisode: () => void;
+}> = ({ episode, series, influencerName, onEnterStory, onNextEpisode }) => {
+  const [countdown, setCountdown] = useState(5);
+  const [userInteracted, setUserInteracted] = useState(false);
+  const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Get the trigger for this influencer
+  const primaryTrigger = episode.triggers?.find((t: any) => t.char === influencerName) || episode.triggers?.[0];
+
+  useEffect(() => {
+    console.log('[VideoEndScreen] Mounted - starting countdown, primaryTrigger:', primaryTrigger?.char);
+    
+    // Start countdown for auto-redirect
+    countdownRef.current = setInterval(() => {
+      setCountdown(prev => {
+        if (prev <= 1) {
+          // Auto-redirect to chat
+          if (!userInteracted && primaryTrigger) {
+            console.log('[VideoEndScreen] Countdown finished - auto-redirecting to chat with:', primaryTrigger.char);
+            onEnterStory(primaryTrigger.char, primaryTrigger.intro, primaryTrigger.hook, 'video_end_screen');
+          }
+          return 0;
+        }
+        console.log('[VideoEndScreen] Countdown:', prev - 1);
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => {
+      console.log('[VideoEndScreen] Cleanup - clearing interval');
+      if (countdownRef.current) {
+        clearInterval(countdownRef.current);
+      }
+    };
+  }, [userInteracted, primaryTrigger, onEnterStory]);
+
+  const handleManualChat = (t: any) => {
+    setUserInteracted(true);
+    if (countdownRef.current) {
+      clearInterval(countdownRef.current);
+    }
+    onEnterStory(t.char, t.intro, t.hook, 'video_end_screen');
+  };
+
+  const handleNextEpisode = () => {
+    setUserInteracted(true);
+    if (countdownRef.current) {
+      clearInterval(countdownRef.current);
+    }
+    onNextEpisode();
+  };
+
+  const influencerTriggers = episode.triggers?.filter((t: any) => t.char === influencerName) || [];
 
   return (
-    <div className={`relative ${size} rounded-full flex items-center justify-center p-0.5 border-2 shadow-2xl transition-all duration-300 group-hover:scale-105 ${borderColor} ${bgColor}`}>
-      {isOnline && <div className="absolute bottom-0 right-0 w-4 h-4 bg-emerald-500 border-2 border-[#0a0a0f] rounded-full animate-pulse shadow-[0_0_12px_#10b981] z-30" />}
+    <div className="absolute inset-0 z-[100] flex flex-col items-center justify-center p-8 bg-black/60 backdrop-blur-xl animate-fade-in pointer-events-auto">
+      <h3 className="text-2xl font-semibold text-white mb-3 tracking-tight">Continue your journey</h3>
+      
+      {/* Auto-redirect countdown */}
+      <div className="flex items-center gap-3 mb-8">
+        <p className="text-white/60 text-sm">
+          Connecting to {primaryTrigger?.char || 'coach'} in
+        </p>
+        <div className="w-9 h-9 rounded-lg bg-white/10 backdrop-blur-sm flex items-center justify-center">
+          <span className="text-white font-semibold text-lg">{countdown}</span>
+        </div>
+      </div>
+      
+      <div className="flex flex-col gap-3 mb-10 w-full max-w-[280px]">
+        {influencerTriggers.length > 0 ? (
+          influencerTriggers.map((t: any, idx: number) => (
+            <ChatWidget
+              key={idx}
+              characterName={t.char}
+              avatar={series.avatars[t.char]}
+              onClick={() => handleManualChat(t)}
+              isOnline={true}
+            />
+          ))
+        ) : (
+          episode.triggers?.map((t: any, idx: number) => (
+            <ChatWidget
+              key={idx}
+              characterName={t.char}
+              avatar={series.avatars[t.char]}
+              onClick={() => handleManualChat(t)}
+              isOnline={true}
+            />
+          ))
+        )}
+      </div>
+
+      <button onClick={handleNextEpisode} className="flex flex-col items-center gap-2 group">
+        <div className="w-12 h-12 rounded-xl bg-white/10 backdrop-blur-sm text-white flex items-center justify-center hover:bg-white/20 active:scale-95 transition-all">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 13.5L12 21m0 0l-7.5-7.5M12 21V3" /></svg>
+        </div>
+        <span className="text-[13px] text-white/50 group-hover:text-white/80 transition-colors">Next</span>
+      </button>
+    </div>
+  );
+};
+
+// Character Avatar Component - Refined minimal style
+const CharacterDP: React.FC<{ src: string, name: string, theme: 'blue' | 'pink' | 'purple' | 'cyan' | 'green', size?: string, isOnline?: boolean, isDark?: boolean }> = ({ src, name, theme, size = "w-16 h-16", isOnline = true, isDark = false }) => {
+  const [error, setError] = useState(false);
+
+  return (
+    <div className={`relative ${size} rounded-full flex items-center justify-center overflow-hidden shadow-lg transition-all duration-300`}>
+      {isOnline && <div className={`absolute bottom-0 right-0 w-3 h-3 bg-[#4A7C59] border-2 ${isDark ? 'border-[#0a0a0f]' : 'border-white'} rounded-full z-30`} />}
       <div className="w-full h-full rounded-full overflow-hidden flex items-center justify-center">
         {!error ? (
           <img 
@@ -41,7 +143,7 @@ const CharacterDP: React.FC<{ src: string, name: string, theme: 'blue' | 'pink' 
             onError={() => setError(true)}
           />
         ) : (
-          <span className="text-xl font-black text-white">{name[0]}</span>
+          <span className={`text-xl font-semibold ${isDark ? 'text-white' : 'text-[#1A1A1A]'}`}>{name[0]}</span>
         )}
       </div>
     </div>
@@ -60,7 +162,8 @@ const ReelItem: React.FC<{
   onEnterStory: (char: string, intro: string, hook: string, entryPoint: string) => void;
   onNextEpisode: () => void;
   isChatOpen?: boolean;
-}> = ({ episode, series, influencerName, influencerTheme, isActive, isMuted, toggleMute, onEnterStory, onNextEpisode, isChatOpen = false }) => {
+  showEndScreen?: boolean;
+}> = ({ episode, series, influencerName, influencerTheme, isActive, isMuted, toggleMute, onEnterStory, onNextEpisode, isChatOpen = false, showEndScreen = true }) => {
   console.log('[InfluencerPage ReelItem] Component rendering - isActive:', isActive, 'episode:', episode?.label);
   
   const videoRef = React.useRef<HTMLVideoElement>(null);
@@ -367,7 +470,7 @@ const ReelItem: React.FC<{
   }, []);
 
   useEffect(() => {
-    // Only trigger auto-scroll if video ended AND is currently active AND we haven't already triggered it
+    // When video ends, mark for end screen display and end analytics session
     if (isEnded && isActive && !hasTriggeredNextScroll.current) {
       hasTriggeredNextScroll.current = true; // Mark as triggered to prevent multiple calls
       
@@ -376,17 +479,11 @@ const ReelItem: React.FC<{
         endVideoSession(true);
       }
       
-      // Auto-scroll to next video immediately when video ends
-      const timeoutId = setTimeout(() => {
-        // Double-check we're still active before scrolling
-        if (isActive) {
-          onNextEpisode();
-        }
-      }, 500); // Short delay to ensure smooth transition
-      
-      return () => clearTimeout(timeoutId);
+      // NOTE: We no longer auto-scroll to next episode
+      // Instead, the VideoEndScreen will handle auto-redirect to chat
+      console.log('[InfluencerPage ReelItem] Video ended - showing end screen with chat redirect');
     }
-  }, [isEnded, isActive, onNextEpisode]);
+  }, [isEnded, isActive]);
 
   // Inactivity detection - hide UI after 5 seconds of inactivity
   useEffect(() => {
@@ -717,10 +814,10 @@ const ReelItem: React.FC<{
       />
 
       {loading && !isEnded && (
-        <div className="absolute inset-0 flex items-center justify-center bg-[#0a0a0f]/60 backdrop-blur-md z-10">
+        <div className="absolute inset-0 flex items-center justify-center bg-black/40 backdrop-blur-sm z-10">
           <div className="flex flex-col items-center gap-3">
-            <div className="w-10 h-10 border-2 border-violet-500/20 border-t-violet-500 rounded-full animate-spin shadow-[0_0_20px_rgba(139,92,246,0.3)]" />
-            <p className="text-[9px] font-black tracking-[0.4em] uppercase text-white/40">Loading Scene...</p>
+            <div className="w-10 h-10 border-2 border-white/20 border-t-white rounded-full animate-spin" />
+            <p className="text-sm text-white/60">Loading...</p>
           </div>
         </div>
       )}
@@ -728,14 +825,11 @@ const ReelItem: React.FC<{
       {!isEnded && (
         <>
           <div className={`absolute bottom-24 left-6 pointer-events-none z-50 transition-opacity duration-500 ${isUIHidden ? 'opacity-0' : 'opacity-100'}`}>
-            <div className="flex items-center gap-2 mb-2">
-              <div className="h-[2px] w-6 bg-violet-500 rounded-full shadow-[0_0_8px_#8b5cf6]" />
-              <span className="text-[10px] font-black tracking-[0.3em] uppercase text-white/90 drop-shadow-md">{episode.label}</span>
-            </div>
-            <p className="text-white text-xs font-medium opacity-60 max-w-[200px] leading-tight drop-shadow-lg">{series.reelHint || 'Roleplay with the characters to change their destiny'}</p>
+            <span className="text-[13px] font-medium text-white/90 drop-shadow-md">{episode.label}</span>
+            <p className="text-white text-[12px] opacity-50 max-w-[200px] leading-tight mt-1">{series.reelHint || 'Chat with the coach to learn more'}</p>
           </div>
 
-          <div className="absolute right-4 bottom-24 flex flex-col items-end gap-4 z-[100] pointer-events-auto max-w-[280px]">
+          <div className="absolute right-4 bottom-24 flex flex-col items-end gap-3 z-[100] pointer-events-auto max-w-[280px]">
             <button 
               onClick={(e) => { 
                 e.stopPropagation(); 
@@ -748,9 +842,9 @@ const ReelItem: React.FC<{
                 }
                 toggleMute(); 
               }}
-              className={`flex flex-col items-center gap-1.5 active:scale-90 transition-all group mb-2 transition-opacity duration-500 ${isUIHidden ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}
+              className={`flex flex-col items-center gap-1.5 active:scale-95 transition-all group mb-2 transition-opacity duration-500 ${isUIHidden ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}
             >
-              <div className="w-12 h-12 rounded-full bg-[#1a1a24]/80 backdrop-blur-xl border border-violet-500/20 flex items-center justify-center text-white shadow-2xl transition-all group-hover:bg-violet-500/20 group-hover:border-violet-500/40">
+              <div className="w-11 h-11 rounded-xl bg-white/10 backdrop-blur-sm flex items-center justify-center text-white transition-all hover:bg-white/20">
                 {isMuted ? (
                   <svg viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5"><path d="M13.5 4.06c0-1.336-1.616-2.005-2.56-1.06l-4.5 4.5H4.508c-1.141 0-2.318.664-2.66 1.905A9.76 9.76 0 0 0 1.5 12c0 .898.121 1.768.35 2.595.341 1.24 1.518 1.905 2.659 1.905h1.93l4.5 4.5c.945.945 2.561.276 2.561-1.06V4.06ZM18.535 7.465a.75.75 0 0 1 1.06 0L22.12 10l-2.525 2.525a.75.75 0 1 1-1.06-1.06L20 10l-1.465-1.465a.75.75 0 0 1 0-1.06Z" /></svg>
                 ) : (
@@ -768,36 +862,34 @@ const ReelItem: React.FC<{
                   onEnterStory(t.char, t.intro, t.hook, 'video_sidebar'); 
                 }}
                 className="w-full animate-slide-up-side cursor-pointer"
-                style={{ animationDelay: `${idx * 150}ms` }}
+                style={{ animationDelay: `${idx * 100}ms` }}
               >
-                <div className="relative group animate-chat-pulse">
+                <div className="relative group">
                   {/* Speech Bubble */}
                   {isActive && !isEnded && (
-                    <div className="absolute top-1/2 -translate-y-1/2 right-full z-50 transition-all duration-500 ease-in-out pointer-events-none" style={{ opacity: 1 }}>
-                      <div className={`relative bg-violet-500/80 backdrop-blur-sm rounded-[18px] px-3.5 py-2 shadow-lg transition-all duration-500 ease-in-out ${isUIHidden ? 'max-w-[240px]' : 'max-w-[60px]'}`}>
-                        <div className="text-white text-[12px] font-medium leading-tight transition-all duration-500 ease-in-out whitespace-nowrap flex items-center gap-0.5">
-                          {isUIHidden ? 'Talk to me now!' : (
+                    <div className="absolute top-1/2 -translate-y-1/2 right-full z-50 transition-all duration-500 ease-in-out pointer-events-none mr-2" style={{ opacity: 1 }}>
+                      <div className={`relative bg-white/95 backdrop-blur-sm rounded-xl px-3 py-2 shadow-lg transition-all duration-500 ease-in-out ${isUIHidden ? 'max-w-[180px]' : 'max-w-[50px]'}`}>
+                        <div className="text-[#1A1A1A] text-[12px] font-medium leading-tight transition-all duration-500 ease-in-out whitespace-nowrap flex items-center gap-0.5">
+                          {isUIHidden ? 'Chat now' : (
                             <>
-                              <span className="inline-block dot-bounce-1">.</span>
-                              <span className="inline-block dot-bounce-2">.</span>
-                              <span className="inline-block dot-bounce-3">.</span>
+                              <span className="inline-block dot-bounce-1 text-[#4A7C59]">.</span>
+                              <span className="inline-block dot-bounce-2 text-[#4A7C59]">.</span>
+                              <span className="inline-block dot-bounce-3 text-[#4A7C59]">.</span>
                             </>
                           )}
                         </div>
-                        {/* Tail pointing right from the bubble toward the icon - center aligned with DP */}
-                        <div className="absolute top-1/2 -translate-y-1/2 right-0 translate-x-full w-0 h-0 border-l-[8px] border-t-[6px] border-b-[6px] border-l-violet-500/80 border-t-transparent border-b-transparent transition-all duration-500"></div>
+                        {/* Tail pointing right */}
+                        <div className="absolute top-1/2 -translate-y-1/2 right-0 translate-x-full w-0 h-0 border-l-[6px] border-t-[5px] border-b-[5px] border-l-white/95 border-t-transparent border-b-transparent"></div>
                       </div>
                     </div>
                   )}
-                   <div className="absolute inset-0 rounded-full blur-xl bg-gradient-to-r from-violet-500/60 to-blue-500/60 animate-pulse-glow" />
-                   <div className="absolute inset-[-4px] rounded-full border-2 border-violet-400/50 animate-ring-pulse" />
-                   <div className={`absolute inset-0 rounded-full blur-xl opacity-0 group-hover:opacity-60 transition-opacity ${influencerTheme === 'blue' ? 'bg-blue-500' : influencerTheme === 'cyan' ? 'bg-cyan-400' : influencerTheme === 'green' ? 'bg-emerald-400' : 'bg-violet-500'}`} />
                    <CharacterDP 
                     src={series.avatars[influencerName]} 
                     name={influencerName} 
-                    theme="purple"
-                    size="w-14 h-14"
-                    isOnline={false}
+                    theme="green"
+                    size="w-12 h-12"
+                    isOnline={true}
+                    isDark={true}
                    />
                 </div>
               </div>
@@ -809,9 +901,9 @@ const ReelItem: React.FC<{
 
       {!isEnded && (
         <div className={`absolute bottom-0 left-0 right-0 z-[70] pt-20 group/scrubber transition-all pointer-events-none transition-opacity duration-500 ${isUIHidden ? 'opacity-0' : 'opacity-100'}`}>
-          <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-[#0a0a0f]/90 to-transparent h-24 pointer-events-none" />
-          <div className={`relative px-6 pb-6 transition-all duration-300 ${isScrubbing ? 'translate-y-[-10px]' : 'translate-y-0'}`}>
-            <div className="relative h-6 flex items-center">
+          <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent h-20 pointer-events-none" />
+          <div className={`relative px-5 pb-5 transition-all duration-300 ${isScrubbing ? 'translate-y-[-8px]' : 'translate-y-0'}`}>
+            <div className="relative h-5 flex items-center">
               <input 
                 type="range" 
                 min="0" 
@@ -832,35 +924,52 @@ const ReelItem: React.FC<{
                 className="scrub-range w-full h-1 bg-white/20 rounded-full appearance-none cursor-pointer pointer-events-auto z-10" 
               />
               <div 
-                className={`absolute left-0 top-1/2 -translate-y-1/2 h-1 bg-gradient-to-r from-violet-500 to-blue-500 rounded-full transition-all duration-75 pointer-events-none ${isScrubbing ? 'shadow-[0_0_15px_#8b5cf6]' : ''}`} 
+                className="absolute left-0 top-1/2 -translate-y-1/2 h-1 bg-white rounded-full transition-all duration-75 pointer-events-none" 
                 style={{ width: `${progress}%` }} 
               />
             </div>
-            <div className={`mt-1.5 flex justify-between items-center transition-all duration-500 ${isScrubbing ? 'opacity-100' : 'opacity-40'}`}>
-              <div className="text-[9px] font-black text-white tracking-[0.2em] uppercase tabular-nums">
-                <span className="text-violet-400">{formatTime(currentTime)}</span> / {formatTime(duration)}
+            <div className={`mt-1.5 flex justify-between items-center transition-all duration-500 ${isScrubbing ? 'opacity-100' : 'opacity-50'}`}>
+              <div className="text-[11px] text-white tabular-nums">
+                {formatTime(currentTime)} / {formatTime(duration)}
               </div>
-              <div className="text-[8px] font-black text-white/40 tracking-[0.3em] uppercase">Inscene Rhythm Engine</div>
             </div>
           </div>
         </div>
+      )}
+
+      {/* Video End Screen with auto-redirect to chat */}
+      {isEnded && showEndScreen && (
+        <VideoEndScreen
+          episode={episode}
+          series={series}
+          influencerName={influencerName}
+          onEnterStory={onEnterStory}
+          onNextEpisode={onNextEpisode}
+        />
       )}
     </div>
   );
 };
 
-const CHARCOAL_GRADIENT = 'linear-gradient(135deg, #0a0a0f 0%, #121218 50%, #0a0a0f 100%)';
+// Premium cream background for main page
+const CREAM_BG = '#FAF9F6';
+const SAGE_GREEN = '#4A7C59';
 
 const InfluencerPage: React.FC = () => {
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
   const { user, isAuthenticated } = useAuth();
+  const [selectedSeries, setSelectedSeries] = useState<any>(null);
   const [selectedEpisodeIndex, setSelectedEpisodeIndex] = useState<number | null>(null);
   const [activeIdx, setActiveIdx] = useState(0);
   const [isMuted, setIsMuted] = useState(false);
   const [chatData, setChatData] = useState<any>(null);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [isWaitlistModalOpen, setIsWaitlistModalOpen] = useState(false);
+  const [isLeaderboardOpen, setIsLeaderboardOpen] = useState(false);
+  const [isGoalsModalOpen, setIsGoalsModalOpen] = useState(false);
+  const [selectedGoal, setSelectedGoal] = useState<any>(null);
+  const [episodeProgress, setEpisodeProgress] = useState<SeriesProgress | null>(null);
   const [isCloseButtonHidden, setIsCloseButtonHidden] = useState(false);
   const closeButtonInactivityTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const closeButtonActivityHandlerRef = React.useRef<((event?: Event) => void) | null>(null);
@@ -871,7 +980,14 @@ const InfluencerPage: React.FC = () => {
   setSeriesCatalog(SERIES_CATALOG);
 
   const influencer = slug ? getInfluencerBySlug(slug) : null;
-  const series = slug ? getSeriesForInfluencer(slug) : null;
+  
+  // Get all series that contain this influencer
+  const influencerSeries = influencer ? SERIES_CATALOG.filter((s: any) => 
+    s.avatars && s.avatars[influencer.name]
+  ) : [];
+  
+  // Use selectedSeries if available, otherwise null
+  const series = selectedSeries;
 
   // Track page view
   useEffect(() => {
@@ -964,10 +1080,52 @@ const InfluencerPage: React.FC = () => {
     };
   }, [selectedEpisodeIndex, chatData]);
 
-  // Filter episodes to only show those with this influencer
-  const influencerEpisodes = series?.episodes?.filter((ep: any) => 
-    ep.triggers?.some((t: any) => t.char === influencer?.name)
-  ) || [];
+  // Filter episodes to only show those with this influencer (memoized to prevent re-renders)
+  const influencerEpisodes = useMemo(() => {
+    return series?.episodes?.filter((ep: any) => 
+      ep.triggers?.some((t: any) => t.char === influencer?.name)
+    ) || [];
+  }, [series?.episodes, influencer?.name]);
+  
+  // Memoize episode IDs to prevent SeriesProgressCard re-renders
+  const episodeIds = useMemo(() => {
+    return influencerEpisodes.map((ep: any) => ep.id);
+  }, [influencerEpisodes]);
+
+  // Track if episode progress has been loaded for current series
+  const episodeProgressLoadedRef = useRef<string | null>(null);
+  
+  // Reset progress loading ref when series changes
+  useEffect(() => {
+    if (!selectedSeries) {
+      episodeProgressLoadedRef.current = null;
+      setEpisodeProgress(null);
+    }
+  }, [selectedSeries]);
+  
+  // Load episode progress when series is selected
+  useEffect(() => {
+    const loadProgress = async () => {
+      if (!selectedSeries || !isAuthenticated || episodeIds.length === 0) {
+        return;
+      }
+      
+      // Skip if already loaded for this series
+      if (episodeProgressLoadedRef.current === selectedSeries.id) {
+        return;
+      }
+      
+      try {
+        const progress = await getSeriesProgress(selectedSeries.id, episodeIds);
+        setEpisodeProgress(progress);
+        episodeProgressLoadedRef.current = selectedSeries.id;
+      } catch (error) {
+        console.error('[InfluencerPage] Failed to load episode progress:', error);
+      }
+    };
+    
+    loadProgress();
+  }, [selectedSeries?.id, isAuthenticated, episodeIds]);
 
   // Handler to scroll to next episode with debounce to prevent multiple rapid calls
   const nextEpisodeTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1045,11 +1203,11 @@ const InfluencerPage: React.FC = () => {
     setChatData(chatDataConfig);
   };
 
-  if (!influencer || !series) {
+  if (!influencer) {
     return (
-      <div className="flex flex-col min-h-[100dvh] h-[100dvh] text-white overflow-hidden items-center justify-center" style={{ background: CHARCOAL_GRADIENT }}>
-        <h1 className="text-2xl font-black mb-4">Influencer not found</h1>
-        <button onClick={() => navigate('/')} className="px-6 py-3 bg-violet-500 rounded-full">
+      <div className="flex flex-col min-h-[100dvh] h-[100dvh] overflow-hidden items-center justify-center" style={{ background: CREAM_BG, color: '#1A1A1A' }}>
+        <h1 className="text-xl font-semibold mb-4">Page not found</h1>
+        <button onClick={() => navigate('/')} className="px-5 py-2.5 bg-[#4A7C59] text-white rounded-xl font-medium hover:bg-[#3D6549] transition-all">
           Go Home
         </button>
       </div>
@@ -1057,121 +1215,276 @@ const InfluencerPage: React.FC = () => {
   }
 
   return (
-    <div className="flex flex-col min-h-[100dvh] h-[100dvh] text-white overflow-y-auto" style={{ background: CHARCOAL_GRADIENT }}>
-      <header className="fixed top-0 left-0 right-0 z-[1000] px-6 py-6 transition-all duration-500 bg-gradient-to-b from-[#0a0a0f]/90 to-transparent">
+    <div className="flex flex-col min-h-[100dvh] h-[100dvh] overflow-y-auto" style={{ background: CREAM_BG, color: '#1A1A1A' }}>
+      <header className="fixed top-0 left-0 right-0 z-[1000] px-6 py-4 transition-all duration-500 bg-[#FAF9F6]/80 backdrop-blur-xl border-b border-black/[0.06]">
         <div className="flex justify-between items-center max-w-6xl mx-auto">
-          <div className="flex items-center gap-3 cursor-pointer group active:scale-95 transition-transform" onClick={() => navigate('/')}>
-            <Logo size={28} isPulsing={false} />
-            <span className="text-white/60 text-sm font-medium">Home</span>
-          </div>
-          <div className="flex items-center gap-3">
+          {selectedSeries ? (
+            // Back to series selection
+            <div className="flex items-center gap-3 cursor-pointer group active:scale-[0.98] transition-transform" onClick={() => setSelectedSeries(null)}>
+              <div className="w-9 h-9 rounded-xl bg-black/[0.04] flex items-center justify-center hover:bg-black/[0.08] transition-colors">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5 text-[#4A4A4A]">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
+                </svg>
+              </div>
+              <span className="text-[#8A8A8A] text-sm font-medium">Back</span>
+            </div>
+          ) : (
+            // Home button
+            <div className="flex items-center gap-3 cursor-pointer group active:scale-[0.98] transition-transform" onClick={() => navigate('/')}>
+              <div className="w-9 h-9 rounded-xl bg-[#4A7C59] flex items-center justify-center">
+                <Logo size={20} isPulsing={false} />
+              </div>
+              <span className="text-[#8A8A8A] text-sm font-medium">Home</span>
+            </div>
+          )}
+          <div className="flex items-center gap-2">
             <UserMenu onSignInClick={() => setIsAuthModalOpen(true)} />
           </div>
         </div>
       </header>
 
-      <main className="pt-32 pb-20 px-6 max-w-6xl mx-auto w-full">
+      <main className="pt-28 pb-20 px-6 max-w-6xl mx-auto w-full">
         {/* Influencer Header */}
-        <div className="flex flex-col md:flex-row items-center md:items-start gap-6 mb-12">
+        <div className="flex flex-col md:flex-row items-center md:items-start gap-6 mb-10">
           <CharacterDP 
             src={influencer.avatar} 
             name={influencer.name} 
-            theme="purple"
-            size="w-32 h-32"
-            isOnline={false}
+            theme="green"
+            size="w-24 h-24"
+            isOnline={true}
           />
           <div className="flex-1 text-center md:text-left">
-            <div className="flex flex-col md:flex-row md:items-start md:gap-8 gap-4">
-              <div className="flex-1">
-                <h1 className="text-5xl font-black italic uppercase tracking-tighter mb-2">{influencer.name}</h1>
-                <p className="text-violet-400/80 text-lg font-medium mb-4">{series.title}</p>
-                <p className="text-white/60 text-sm max-w-2xl">{influencer.description}</p>
+            <h1 className="text-2xl md:text-3xl font-semibold tracking-tight mb-1">{influencer.name}</h1>
+            <p className="text-[#8A8A8A] text-[14px] max-w-xl leading-relaxed mb-4">{influencer.description}</p>
+            
+            {/* Streak Widget - Shows user's progress */}
+            {isAuthenticated && (
+              <div className="mb-4 max-w-sm">
+                <StreakWidget
+                  creatorId={influencer.name}
+                  creatorName={influencer.name}
+                  onOpenLeaderboard={() => setIsLeaderboardOpen(true)}
+                  compact={false}
+                />
               </div>
-              {(() => {
-                // Get the first trigger for this influencer from any episode
-                const firstTrigger = influencerEpisodes[0]?.triggers?.find((t: any) => t.char === influencer?.name);
-                
-                if (!firstTrigger) return null;
+            )}
+            
+            {/* Leaderboard Button for non-authenticated users */}
+            {!isAuthenticated && (
+              <button
+                onClick={() => setIsAuthModalOpen(true)}
+                className="mb-4 flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-[#4A7C59]/10 to-[#C9A227]/10 rounded-xl border border-black/[0.06] text-[#4A4A4A] hover:border-[#4A7C59]/30 transition-all"
+              >
+                <span className="text-lg">🏆</span>
+                <span className="text-[14px] font-medium">View Leaderboard</span>
+              </button>
+            )}
+            
+            {/* Chat Widget - Always visible */}
+            {(() => {
+              const firstSeries = influencerSeries[0];
+              const firstEp = firstSeries?.episodes?.find((ep: any) => 
+                ep.triggers?.some((t: any) => t.char === influencer.name)
+              );
+              const firstTrigger = firstEp?.triggers?.find((t: any) => t.char === influencer.name);
+              
+              if (!firstTrigger) return null;
+              
+              return (
+                <div className="max-w-sm">
+                  <ChatWidget
+                    characterName={influencer.name}
+                    avatar={influencer.avatar}
+                    onClick={() => handleChatInit({
+                      char: firstTrigger.char,
+                      intro: firstTrigger.intro,
+                      hook: firstTrigger.hook,
+                      isFromHistory: false,
+                      isWhatsApp: true,
+                      entryPoint: 'influencer_page',
+                      seriesId: firstSeries.id,
+                      seriesTitle: firstSeries.title
+                    })}
+                    isOnline={true}
+                  />
+                </div>
+              );
+            })()}
+          </div>
+        </div>
+
+        {/* SERIES SELECTION VIEW */}
+        {!selectedSeries && (
+          <>
+            <h2 className="text-[13px] font-semibold tracking-wide text-[#8A8A8A] mb-4 uppercase">
+              {influencerSeries.length === 1 ? 'Series' : 'Select a Series'}
+            </h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {influencerSeries.map((s: any) => {
+                const episodeCount = s.episodes?.filter((ep: any) => 
+                  ep.triggers?.some((t: any) => t.char === influencer.name)
+                ).length || 0;
                 
                 return (
-                  <div className="max-w-md w-full md:w-auto">
-                    <ChatWidget
-                      characterName={influencer.name}
-                      avatar={influencer.avatar}
-                      onClick={() => handleChatInit({
-                        char: firstTrigger.char,
-                        intro: firstTrigger.intro,
-                        hook: firstTrigger.hook,
-                        isFromHistory: false,
-                        isWhatsApp: true,
-                        entryPoint: 'influencer_page',
-                        seriesId: series.id,
-                        seriesTitle: series.title
-                      })}
-                      isOnline={true}
-                    />
+                  <div
+                    key={s.id}
+                    onClick={() => setSelectedSeries(s)}
+                    className="group cursor-pointer bg-white rounded-2xl overflow-hidden border border-black/[0.06] shadow-sm transition-all hover:shadow-lg hover:-translate-y-1 active:scale-[0.98]"
+                  >
+                    {/* Thumbnail */}
+                    <div className="relative aspect-video bg-[#F5F3EE] overflow-hidden">
+                      {s.thumbnail && (
+                        <img 
+                          src={s.thumbnail} 
+                          alt={s.title} 
+                          className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                        />
+                      )}
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent" />
+                      
+                      {/* Play icon */}
+                      <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-300">
+                        <div className="w-14 h-14 rounded-full bg-white/95 backdrop-blur-sm flex items-center justify-center shadow-xl transform scale-90 group-hover:scale-100 transition-transform">
+                          <svg viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6 text-[#1A1A1A] ml-1">
+                            <path d="M8 5v14l11-7z" />
+                          </svg>
+                        </div>
+                      </div>
+                      
+                      {/* Episode count badge */}
+                      <div className="absolute bottom-3 right-3 bg-black/60 backdrop-blur-sm text-white text-[11px] font-medium px-2.5 py-1 rounded-lg">
+                        {episodeCount} {episodeCount === 1 ? 'episode' : 'episodes'}
+                      </div>
+                    </div>
+                    
+                    {/* Content */}
+                    <div className="p-4">
+                      <h3 className="text-[16px] font-semibold text-[#1A1A1A] mb-1 tracking-tight">{s.title}</h3>
+                      <p className="text-[13px] text-[#8A8A8A]">{s.tagline}</p>
+                    </div>
                   </div>
                 );
-              })()}
+              })}
             </div>
-          </div>
-        </div>
 
-        {/* Video Grid */}
-        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
-          {influencerEpisodes.map((ep: any) => {
-            const thumbnailUrl = series.thumbnail; // Using series thumbnail as fallback
-            return (
-              <div
-                key={ep.id}
-                onClick={() => {
-                  const index = influencerEpisodes.findIndex(e => e.id === ep.id);
-                  setSelectedEpisodeIndex(index);
-                }}
-                className="group cursor-pointer relative aspect-[9/16] rounded-[1.5rem] overflow-hidden border border-violet-500/20 shadow-2xl transition-all hover:border-violet-500/50 hover:scale-[1.02] hover:shadow-[0_0_30px_rgba(139,92,246,0.2)] active:scale-95 bg-[#1a1a24]"
-              >
-                {/* Video thumbnail or placeholder */}
-                <div className="absolute inset-0 bg-gradient-to-br from-violet-500/20 to-blue-500/20 flex items-center justify-center">
-                  {thumbnailUrl && (
-                    <img 
-                      src={thumbnailUrl} 
-                      alt={ep.label} 
-                      className="w-full h-full object-cover opacity-50"
-                    />
-                  )}
-                </div>
-                
-                {/* Play overlay */}
-                <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-[#0a0a0f]/40">
-                  <div className="w-8 h-8 rounded-full bg-violet-500/80 backdrop-blur-md border border-violet-500/50 flex items-center justify-center shadow-[0_0_15px_rgba(139,92,246,0.5)]">
-                    <svg viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4 text-white ml-0.5">
-                      <path d="M8 5v14l11-7z" />
-                    </svg>
-                  </div>
-                </div>
-
-                {/* Episode label */}
-                <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-[#0a0a0f]/90 to-transparent">
-                  <div className="flex items-center gap-2 mb-1">
-                    <div className="h-[2px] w-6 bg-violet-500 rounded-full shadow-[0_0_8px_#8b5cf6]" />
-                    <span className="text-[10px] font-black tracking-[0.3em] uppercase text-white/90">{ep.label}</span>
-                  </div>
-                  <p className="text-white/60 text-xs font-medium line-clamp-2">{series.reelHint || 'Click to watch'}</p>
-                </div>
+            {influencerSeries.length === 0 && (
+              <div className="text-center py-16 text-[#8A8A8A]">
+                <p className="text-[15px]">No series available yet</p>
               </div>
-            );
-          })}
-        </div>
+            )}
+          </>
+        )}
 
-        {influencerEpisodes.length === 0 && (
-          <div className="text-center py-20 text-white/40">
-            <p className="text-lg">No videos available for {influencer.name}</p>
-          </div>
+        {/* EPISODES VIEW (when series is selected) */}
+        {selectedSeries && (
+          <>
+            <div className="mb-6">
+              <h2 className="text-xl font-semibold text-[#1A1A1A] tracking-tight mb-1">{selectedSeries.title}</h2>
+              <p className="text-[13px] text-[#8A8A8A]">{selectedSeries.tagline}</p>
+            </div>
+            
+            {/* Series Progress & Goals */}
+            <SeriesProgressCard
+              seriesId={selectedSeries.id}
+              seriesTitle={selectedSeries.title}
+              creatorId={influencer?.name || ''}
+              episodeIds={episodeIds}
+              onGoalClick={(goal) => {
+                setSelectedGoal(goal);
+                setIsGoalsModalOpen(true);
+              }}
+            />
+            
+            <h3 className="text-[13px] font-semibold tracking-wide text-[#8A8A8A] mb-4 uppercase">Episodes</h3>
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+              {influencerEpisodes.map((ep: any, idx: number) => {
+                const thumbnailUrl = selectedSeries.thumbnail;
+                const epProgress = episodeProgress?.episodeStatuses?.find(s => s.episodeId === ep.id);
+                const isWatched = epProgress?.isCompleted || false;
+                const watchProgress = epProgress?.completionPercentage || 0;
+                const hasStarted = watchProgress > 0 && !isWatched;
+                
+                return (
+                  <div
+                    key={ep.id}
+                    onClick={() => {
+                      const index = influencerEpisodes.findIndex(e => e.id === ep.id);
+                      setSelectedEpisodeIndex(index);
+                    }}
+                    className={`group cursor-pointer relative aspect-[9/16] rounded-xl overflow-hidden shadow-sm transition-all hover:shadow-md hover:-translate-y-1 active:scale-[0.98] bg-[#F5F3EE] ${
+                      isWatched 
+                        ? 'border-2 border-[#4A7C59]' 
+                        : hasStarted 
+                          ? 'border-2 border-[#C9A227]/50' 
+                          : 'border border-black/[0.06]'
+                    }`}
+                  >
+                    {/* Video thumbnail or placeholder */}
+                    <div className="absolute inset-0 bg-gradient-to-br from-[#4A7C59]/10 to-[#4A90A4]/10 flex items-center justify-center">
+                      {thumbnailUrl && (
+                        <img 
+                          src={thumbnailUrl} 
+                          alt={ep.label} 
+                          className={`w-full h-full object-cover ${isWatched ? 'opacity-50' : 'opacity-70'}`}
+                        />
+                      )}
+                    </div>
+                    
+                    {/* Watched checkmark badge */}
+                    {isWatched && (
+                      <div className="absolute top-2 right-2 w-6 h-6 rounded-full bg-[#4A7C59] flex items-center justify-center shadow-md z-10">
+                        <svg viewBox="0 0 24 24" fill="currentColor" className="w-3.5 h-3.5 text-white">
+                          <path fillRule="evenodd" d="M19.916 4.626a.75.75 0 01.208 1.04l-9 13.5a.75.75 0 01-1.154.114l-6-6a.75.75 0 011.06-1.06l5.353 5.353 8.493-12.739a.75.75 0 011.04-.208z" clipRule="evenodd" />
+                        </svg>
+                      </div>
+                    )}
+                    
+                    {/* In-progress indicator */}
+                    {hasStarted && (
+                      <div className="absolute top-2 right-2 px-1.5 py-0.5 rounded-md bg-[#C9A227] text-white text-[9px] font-semibold shadow-md z-10">
+                        {Math.round(watchProgress)}%
+                      </div>
+                    )}
+                    
+                    {/* Play overlay */}
+                    <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-300 bg-black/20">
+                      <div className="w-10 h-10 rounded-xl bg-white/95 backdrop-blur-sm flex items-center justify-center shadow-lg transform scale-90 group-hover:scale-100 transition-transform">
+                        <svg viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4 text-[#1A1A1A] ml-0.5">
+                          <path d="M8 5v14l11-7z" />
+                        </svg>
+                      </div>
+                    </div>
+
+                    {/* Episode label */}
+                    <div className="absolute bottom-0 left-0 right-0 p-3 bg-gradient-to-t from-black/60 to-transparent">
+                      <span className="text-[12px] font-medium text-white">{ep.label}</span>
+                    </div>
+                    
+                    {/* Progress bar at bottom */}
+                    {hasStarted && (
+                      <div className="absolute bottom-0 left-0 right-0 h-1 bg-black/20">
+                        <div 
+                          className="h-full bg-[#C9A227] transition-all"
+                          style={{ width: `${watchProgress}%` }}
+                        />
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            {influencerEpisodes.length === 0 && (
+              <div className="text-center py-16 text-[#8A8A8A]">
+                <p className="text-[15px]">No episodes available yet</p>
+              </div>
+            )}
+          </>
         )}
       </main>
 
       {/* Video Reel Player */}
-      {selectedEpisodeIndex !== null && (
+      {selectedSeries && selectedEpisodeIndex !== null && (
         <div className={`fixed inset-0 ${chatData ? 'z-[4000]' : 'z-[5000]'} bg-[#0a0a0f]`}>
           {/* Close button */}
           <button
@@ -1185,9 +1498,9 @@ const InfluencerPage: React.FC = () => {
               }
               setSelectedEpisodeIndex(null);
             }}
-            className={`absolute top-6 left-6 z-[6000] w-12 h-12 rounded-full bg-[#1a1a24]/80 backdrop-blur-xl border border-violet-500/20 flex items-center justify-center text-white shadow-2xl transition-all hover:bg-violet-500/20 transition-opacity duration-500 ${isCloseButtonHidden ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}
+            className={`absolute top-6 left-6 z-[6000] w-10 h-10 rounded-xl bg-white/10 backdrop-blur-sm flex items-center justify-center text-white transition-all hover:bg-white/20 active:scale-95 transition-opacity duration-500 ${isCloseButtonHidden ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}
           >
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor" className="w-6 h-6">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
@@ -1247,44 +1560,85 @@ const InfluencerPage: React.FC = () => {
         onClose={() => setIsAuthModalOpen(false)} 
       />
 
+      {/* Goals Modal */}
+      {isGoalsModalOpen && selectedGoal && (
+        <GoalsModal
+          goal={selectedGoal}
+          onClose={() => {
+            setIsGoalsModalOpen(false);
+            setSelectedGoal(null);
+          }}
+          onMarkDone={async () => {
+            // Mark the goal as done
+            const { markTaskDone, getActiveGoal } = await import('../lib/goals');
+            await markTaskDone(selectedGoal.id);
+            // Refresh the goal
+            const updatedGoal = await getActiveGoal(influencer?.name || '');
+            setSelectedGoal(updatedGoal);
+          }}
+          onPause={async () => {
+            const { pauseGoal } = await import('../lib/goals');
+            await pauseGoal(selectedGoal.id);
+            setIsGoalsModalOpen(false);
+            setSelectedGoal(null);
+          }}
+          onEdit={() => {
+            // Open chat to edit goal
+            setIsGoalsModalOpen(false);
+            const firstSeries = influencerSeries[0];
+            const firstEp = firstSeries?.episodes?.find((ep: any) => 
+              ep.triggers?.some((t: any) => t.char === influencer?.name)
+            );
+            const firstTrigger = firstEp?.triggers?.find((t: any) => t.char === influencer?.name);
+            if (firstTrigger) {
+              handleChatInit({
+                char: firstTrigger.char,
+                intro: "I want to change my goal",
+                hook: firstTrigger.hook,
+                isFromHistory: true,
+                isWhatsApp: true,
+                entryPoint: 'influencer_page',
+                seriesId: firstSeries.id,
+                seriesTitle: firstSeries.title
+              });
+            }
+          }}
+        />
+      )}
+
       <WaitlistModal 
         isOpen={isWaitlistModalOpen} 
         onClose={() => setIsWaitlistModalOpen(false)} 
       />
 
+      {/* Leaderboard Modal */}
+      {isLeaderboardOpen && influencer && (
+        <LeaderboardModal
+          creatorId={influencer.name}
+          creatorName={influencer.name}
+          creatorAvatar={influencer.avatar}
+          onClose={() => setIsLeaderboardOpen(false)}
+        />
+      )}
+
       <style>{`
         .hide-scrollbar::-webkit-scrollbar { display: none; }
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-        .animate-fade-in { animation: fadeIn 0.4s ease-out forwards; }
+        .animate-fade-in { animation: fadeIn 0.3s ease-out forwards; }
         @keyframes slideUpSide {
-          from { transform: translateY(30px) scale(0.9); opacity: 0; }
+          from { transform: translateY(20px) scale(0.95); opacity: 0; }
           to { transform: translateY(0) scale(1); opacity: 1; }
         }
         .animate-slide-up-side {
-          animation: slideUpSide 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+          animation: slideUpSide 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
         }
-        @keyframes pulseGlow { 
-          0%, 100% { opacity: 0.5; transform: scale(1); }
-          50% { opacity: 0.9; transform: scale(1.08); }
-        }
-        .animate-pulse-glow { animation: pulseGlow 1.5s ease-in-out infinite; }
-        @keyframes chatPulse {
-          0%, 100% { transform: scale(1); }
-          50% { transform: scale(1.03); }
-        }
-        .animate-chat-pulse { animation: chatPulse 2s ease-in-out infinite; }
-        @keyframes ringPulse {
-          0%, 100% { opacity: 0.3; transform: scale(1); }
-          50% { opacity: 0.7; transform: scale(1.1); }
-        }
-        .animate-ring-pulse { animation: ringPulse 2s ease-in-out infinite; }
         @keyframes dotBounce {
           0%, 100% { transform: translateY(0); }
-          50% { transform: translateY(-4px); }
+          50% { transform: translateY(-3px); }
         }
-        .dot-bounce-1 { animation: dotBounce 1.2s ease-in-out infinite; }
-        .dot-bounce-2 { animation: dotBounce 1.2s ease-in-out infinite 0.2s; }
-        .dot-bounce-3 { animation: dotBounce 1.2s ease-in-out infinite 0.4s; }
+        .dot-bounce-1 { animation: dotBounce 1s ease-in-out infinite; }
+        .dot-bounce-2 { animation: dotBounce 1s ease-in-out infinite 0.15s; }
+        .dot-bounce-3 { animation: dotBounce 1s ease-in-out infinite 0.3s; }
         .reel-snap-container {
           scroll-snap-type: y mandatory;
           height: 100dvh;
@@ -1302,7 +1656,7 @@ const InfluencerPage: React.FC = () => {
           overflow: hidden;
         }
         .scrub-range { -webkit-appearance: none; }
-        .scrub-range::-webkit-slider-thumb { -webkit-appearance: none; width: 12px; height: 12px; background: white; border-radius: 50%; border: 2px solid #8b5cf6; box-shadow: 0 0 10px rgba(139, 92, 246, 0.5); cursor: pointer; }
+        .scrub-range::-webkit-slider-thumb { -webkit-appearance: none; width: 12px; height: 12px; background: white; border-radius: 50%; box-shadow: 0 1px 4px rgba(0,0,0,0.2); cursor: pointer; }
       `}</style>
     </div>
   );

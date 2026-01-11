@@ -18,39 +18,48 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({
       onClick={onClick}
       className="relative w-full group active:scale-[0.98] transition-all duration-200"
     >
-      {/* Main Card Container */}
-      <div className="relative w-full rounded-[0.9rem] md:rounded-[1.5rem] overflow-visible border border-transparent bg-gradient-to-r from-violet-500/20 via-blue-500/20 to-violet-500/20 p-[1px] md:p-[1.5px] shadow-[0_0_12px_rgba(139,92,246,0.12)] md:shadow-[0_0_20px_rgba(139,92,246,0.12)]">
-        {/* Background Gradient */}
-        <div className="relative w-full rounded-[0.9rem] md:rounded-[1.5rem] bg-gradient-to-r from-blue-500/8 via-violet-500/8 to-blue-500/8 backdrop-blur-sm">
-          {/* Content Container */}
-          <div className="flex items-center gap-2 md:gap-3 px-2.5 py-2 md:px-4 md:py-3">
-            {/* Text Content */}
-            <div className="flex-1 flex flex-col justify-center min-w-0">
-              <h3 className="text-xs md:text-lg font-black italic uppercase tracking-tighter text-white mb-0.5 leading-tight">
-                CHAT WITH {characterName.toUpperCase()}
-              </h3>
-              <p className="text-[10px] md:text-xs text-white/50 font-medium">
-                Tap to start
-              </p>
-            </div>
+      {/* Main Card Container - Minimal Elegance */}
+      <div className="relative w-full rounded-xl overflow-hidden bg-white/95 backdrop-blur-sm border border-white/20 shadow-sm hover:shadow-md transition-all">
+        {/* Content Container */}
+        <div className="flex items-center gap-3 px-4 py-3">
+          {/* Avatar */}
+          <div className="relative flex-shrink-0">
+            <img 
+              src={avatar} 
+              alt={characterName}
+              className="w-10 h-10 md:w-11 md:h-11 rounded-full object-cover"
+            />
+            {isOnline && (
+              <div className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-[#4A7C59] border-2 border-white" />
+            )}
+          </div>
+          
+          {/* Text Content */}
+          <div className="flex-1 flex flex-col justify-center min-w-0 text-left">
+            <h3 className="text-[14px] md:text-[15px] font-semibold text-[#1A1A1A] leading-tight tracking-tight">
+              Chat with {characterName}
+            </h3>
+            <p className="text-[12px] text-[#4A7C59] font-medium">
+              Available now
+            </p>
+          </div>
 
-            {/* Chat Icon */}
-            <div className="flex-shrink-0 w-5 h-5 md:w-7 md:h-7 flex items-center justify-center">
-              <svg 
-                xmlns="http://www.w3.org/2000/svg" 
-                fill="none" 
-                viewBox="0 0 24 24" 
-                strokeWidth={2} 
-                stroke="currentColor" 
-                className="w-3.5 h-3.5 md:w-5 md:h-5 text-white/60"
-              >
-                <path 
-                  strokeLinecap="round" 
-                  strokeLinejoin="round" 
-                  d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.682C2.682 15.5 2 13.828 2 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" 
-                />
-              </svg>
-            </div>
+          {/* Arrow Icon */}
+          <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-[#4A7C59] flex items-center justify-center">
+            <svg 
+              xmlns="http://www.w3.org/2000/svg" 
+              fill="none" 
+              viewBox="0 0 24 24" 
+              strokeWidth={2.5} 
+              stroke="currentColor" 
+              className="w-4 h-4 text-white"
+            >
+              <path 
+                strokeLinecap="round" 
+                strokeLinejoin="round" 
+                d="M8.25 4.5l7.5 7.5-7.5 7.5" 
+              />
+            </svg>
           </div>
         </div>
       </div>
@@ -59,4 +68,3 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({
 };
 
 export default ChatWidget;
-

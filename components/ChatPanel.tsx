@@ -3,6 +3,9 @@ import React, { useState, useEffect, useRef } from 'react';
 import { trackChatStart, updateChatMessages, trackChatEnd } from '../lib/analytics';
 import { saveMessage, loadChatHistory, isUserLoggedIn, debugListAllMessages, getUserMessageCount, MAX_USER_MESSAGES, hasUnlimitedMessages } from '../lib/chatStorage';
 import { getCharacterPrompt } from '../lib/characters';
+import { getGoalState, markTaskDone, createGoal, GoalWithStreak } from '../lib/goals';
+import { recordActivity, recordChatMessages, recordGoalCompletion } from '../lib/streaksAndPoints';
+import GoalsModal from './GoalsModal';
 
 interface ChatPanelProps {
   character: string;
@@ -45,6 +48,17 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
   const [isTyping, setIsTyping] = useState(false);
   const [isLoadingHistory, setIsLoadingHistory] = useState(true);
   const scrollRef = useRef<HTMLDivElement>(null);
+  
+  // Goal state
+  const [currentGoal, setCurrentGoal] = useState<GoalWithStreak | null>(null);
+  const [goalContext, setGoalContext] = useState<string>('');
+  const [showGoalsModal, setShowGoalsModal] = useState(false);
+  
+  // Message counting for auto-close (if no goal interest after 10 user messages)
+  const userMessageCountRef = useRef<number>(0);
+  const hasShownGoalInterestRef = useRef<boolean>(false);
+  const [isChatClosing, setIsChatClosing] = useState(false);
+  const MAX_MESSAGES_WITHOUT_GOAL = 10;
   
   const conversationHistory = useRef<{ role: 'user' | 'assistant'; content: string }[]>([]);
   const systemPrompt = useRef<string>('');
@@ -245,6 +259,13 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
       console.error('[Chat Analytics] Error starting session:', error);
     });
     
+    // Record streak activity for chatting
+    if (isUserLoggedIn()) {
+      recordActivity(character, 'chat').then(result => {
+        console.log('[Chat Streaks] Activity recorded:', result);
+      });
+    }
+    
     // Handle page unload/visibility change
     const handleBeforeUnload = () => {
       endChatSession();
@@ -310,10 +331,38 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
     }
   }, [messages, isTyping]);
 
+  // Load goal state for the character
   useEffect(() => {
-    // Get system prompt from centralized character config
-    systemPrompt.current = getCharacterPrompt(character, episodeLabel);
-  }, [character, episodeLabel]);
+    const loadGoalState = async () => {
+      console.log('[ChatPanel Goals] Loading goal state for character:', character, 'isLoggedIn:', isUserLoggedIn());
+      if (isUserLoggedIn()) {
+        const state = await getGoalState(character);
+        console.log('[ChatPanel Goals] Goal state loaded:', {
+          hasGoal: state.hasGoal,
+          goalTitle: state.goal?.title,
+          streak: state.goal?.current_streak
+        });
+        setCurrentGoal(state.goal);
+        
+        // Build enhanced context with video/series info
+        const videoContext = seriesTitle && episodeLabel 
+          ? `\nVIDEO CONTEXT:\n- Series: "${seriesTitle}"\n- Episode: "${episodeLabel}"\n- Video Hook: "${initialHook}"\n\nUse this video content as reference when suggesting goals and tasks. The user just watched this episode.\n`
+          : '';
+        
+        setGoalContext(state.contextForAI + videoContext);
+        hasShownGoalInterestRef.current = state.hasGoal;
+        console.log('[ChatPanel Goals] Goal context set, hasShownGoalInterest:', state.hasGoal);
+      } else {
+        console.log('[ChatPanel Goals] User not logged in, skipping goal load');
+      }
+    };
+    loadGoalState();
+  }, [character, seriesTitle, episodeLabel, initialHook]);
+
+  useEffect(() => {
+    // Get system prompt from centralized character config, including goal context
+    systemPrompt.current = getCharacterPrompt(character, episodeLabel, goalContext);
+  }, [character, episodeLabel, goalContext]);
 
   // Generate personalized drop-off reminder using OpenAI
   const generateDropOffReminder = async () => {
@@ -425,6 +474,47 @@ Generate ONLY the follow-up message, nothing else.
     };
   }, [isLoadingHistory]);
 
+  // Quick action: inject a message into the chat
+  const injectMessage = (message: string) => {
+    setInputValue(message);
+  };
+
+  // Handle marking task as done (update backend + inject message)
+  const handleMarkDone = async () => {
+    if (currentGoal) {
+      await markTaskDone(currentGoal.id);
+      // Award points for completing goal task
+      const points = await recordGoalCompletion(character, currentGoal.id);
+      if (points > 0) {
+        console.log('[Goal Points] Awarded', points, 'points for completing task');
+      }
+      // Refresh goal state
+      const state = await getGoalState(character);
+      setCurrentGoal(state.goal);
+      setGoalContext(state.contextForAI);
+    }
+    injectMessage("Done! I completed today's task ✓");
+  };
+
+  // Handle goal-related quick actions
+  const handleQuickAction = (action: 'my_goal' | 'mark_done' | 'adjust') => {
+    switch (action) {
+      case 'my_goal':
+        if (currentGoal) {
+          setShowGoalsModal(true);
+        } else {
+          injectMessage("I want to set a goal");
+        }
+        break;
+      case 'mark_done':
+        handleMarkDone();
+        break;
+      case 'adjust':
+        injectMessage("I need to adjust my goal - it's too difficult");
+        break;
+    }
+  };
+
   const handleSend = async () => {
     if (!inputValue.trim() || isTyping) return;
     
@@ -455,31 +545,332 @@ Generate ONLY the follow-up message, nothing else.
     // Save user message to Supabase
     if (isUserLoggedIn()) {
       saveMessage(character, 'user', userText, seriesId, episodeId);
+      
+      // Increment user message count
+      userMessageCountRef.current += 1;
+      
+      // Award points for chat messages
+      recordChatMessages(character, 1).then(points => {
+        if (points > 0) {
+          console.log('[Chat Points] Awarded', points, 'points for message');
+        }
+      });
+      
+      // Check if user is expressing goal interest
+      const goalInterestPatterns = /\b(goal|set a goal|want to achieve|improve|learn|practice|commit|challenge|habit|routine|daily|task|progress|track)\b/i;
+      if (goalInterestPatterns.test(userText)) {
+        hasShownGoalInterestRef.current = true;
+      }
+      
+      // Check if user is marking task as done
+      const donePatterns = /\b(done|completed|finished|did it|i did|task done|marked done)\b/i;
+      if (currentGoal && donePatterns.test(userText)) {
+        await markTaskDone(currentGoal.id);
+        // Refresh goal state for next message
+        const state = await getGoalState(character);
+        setCurrentGoal(state.goal);
+        setGoalContext(state.contextForAI);
+        hasShownGoalInterestRef.current = true;
+      }
+      
+      // Check if we should auto-close (no goal, no interest, reached limit)
+      if (!currentGoal && !hasShownGoalInterestRef.current && userMessageCountRef.current >= MAX_MESSAGES_WITHOUT_GOAL) {
+        // Will trigger closing remark after this response
+        setIsChatClosing(true);
+      }
     }
 
     try {
       const openai = new OpenAI({ apiKey, dangerouslyAllowBrowser: true });
+      
+      // Build the messages array
+      const aiMessages: { role: 'system' | 'user' | 'assistant'; content: string }[] = [
+        { role: 'system', content: systemPrompt.current },
+        ...conversationHistory.current,
+        { role: 'user', content: userText }
+      ];
+      
+      // If chat is closing, add instruction to provide closing remark
+      if (isChatClosing) {
+        aiMessages.push({
+          role: 'system',
+          content: `IMPORTANT: This is the final message. The user hasn't shown interest in setting goals. 
+End the conversation gracefully with a warm closing remark.
+Include: "Feel free to come back and chat with me anytime from the Chat Rooms section! I'll be here whenever you're ready to set a goal and work on something together. Take care! 💫"
+Keep it brief and friendly.`
+        });
+      }
+      
+      // Define the function/tool for creating goals
+      const tools = [
+        {
+          type: 'function' as const,
+          function: {
+            name: 'create_goal',
+            description: 'Create a new goal for the user. Only call this when the user has explicitly asked to set a goal AND you have gathered all required information: goal title and daily task. The user should have confirmed they want to proceed with this goal.',
+            parameters: {
+              type: 'object',
+              properties: {
+                title: {
+                  type: 'string',
+                  description: 'The main goal title (e.g., "Increase Strength", "Learn Spanish", "Build Morning Routine")'
+                },
+                daily_task: {
+                  type: 'string',
+                  description: 'The specific daily micro-task (10-20 minutes) that the user will do to achieve this goal (e.g., "Strength training for 15 minutes", "Practice Spanish for 20 minutes", "Meditate for 10 minutes")'
+                },
+                commitment_days: {
+                  type: 'number',
+                  description: 'Number of days per week the user commits to (typically 5-7 days). Default is 5 if not specified.',
+                  default: 5
+                },
+                difficulty_level: {
+                  type: 'number',
+                  description: 'Difficulty level from 1-5 (1 = easiest, 5 = hardest). Default is 1 if not specified.',
+                  default: 1,
+                  minimum: 1,
+                  maximum: 5
+                },
+                blocker: {
+                  type: 'string',
+                  description: 'What usually blocks the user\'s consistency (optional)'
+                },
+                duration_days: {
+                  type: 'number',
+                  description: 'How many days the goal should last (typically 30 days). Default is 30 if not specified.',
+                  default: 30
+                }
+              },
+              required: ['title', 'daily_task']
+            }
+          }
+        }
+      ];
+
+      console.log('[ChatPanel Goals] Making API call with tools:', {
+        hasTools: !!tools,
+        toolCount: tools.length,
+        toolNames: tools.map(t => t.function.name),
+        userText,
+        messageCount: aiMessages.length
+      });
+
       const response = await openai.chat.completions.create({
         model: 'gpt-4o-mini',
-        messages: [
-          { role: 'system', content: systemPrompt.current },
-          ...conversationHistory.current,
-          { role: 'user', content: userText }
-        ],
+        messages: aiMessages,
+        tools: tools,
+        tool_choice: 'auto', // Let the model decide when to use the function
         temperature: 0.8,
       });
 
-      const assistantResponse = response.choices[0]?.message?.content || "...";
+      console.log('[ChatPanel Goals] API response received:', {
+        hasChoices: !!response.choices,
+        choiceCount: response.choices?.length || 0,
+        finishReason: response.choices[0]?.finish_reason,
+        hasMessage: !!response.choices[0]?.message
+      });
+
+      const message = response.choices[0]?.message;
+      const assistantResponse = message?.content || "...";
       
-      setMessages(prev => [...prev, { 
-        role: 'assistant', 
-        content: assistantResponse, 
-        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) 
-      }]);
+      console.log('[ChatPanel Goals] Message details:', {
+        hasContent: !!message?.content,
+        contentLength: message?.content?.length || 0,
+        hasToolCalls: !!message?.tool_calls,
+        toolCallsCount: message?.tool_calls?.length || 0,
+        toolCalls: message?.tool_calls
+      });
       
-      // Save assistant response to Supabase
-      if (isUserLoggedIn()) {
-        saveMessage(character, 'assistant', assistantResponse, seriesId, episodeId);
+      // Check if the model wants to call a function
+      const toolCalls = message?.tool_calls;
+      
+      if (toolCalls && toolCalls.length > 0) {
+        console.log('[ChatPanel Goals] Tool calls found:', {
+          count: toolCalls.length,
+          toolCalls: toolCalls.map(tc => ({
+            id: tc.id,
+            type: tc.type,
+            functionName: tc.type === 'function' ? tc.function?.name : 'N/A',
+            functionArgs: tc.type === 'function' ? tc.function?.arguments : 'N/A'
+          }))
+        });
+
+        // Add the assistant's message with tool calls to the conversation
+        const followUpMessages: any[] = [
+          ...aiMessages,
+          {
+            role: 'assistant',
+            content: message.content || null,
+            tool_calls: message.tool_calls
+          }
+        ];
+
+        const toolResults: any[] = [];
+
+        // Handle function calls
+        for (const toolCall of toolCalls) {
+          console.log('[ChatPanel Goals] Processing tool call:', {
+            id: toolCall.id,
+            type: toolCall.type,
+            isFunction: toolCall.type === 'function',
+            functionName: toolCall.type === 'function' ? toolCall.function?.name : 'N/A',
+            isCreateGoal: toolCall.type === 'function' && toolCall.function?.name === 'create_goal'
+          });
+
+          if (toolCall.type === 'function' && toolCall.function.name === 'create_goal') {
+            try {
+              console.log('[ChatPanel Goals] Parsing function arguments:', {
+                rawArgs: toolCall.function.arguments,
+                argsType: typeof toolCall.function.arguments
+              });
+
+              const args = JSON.parse(toolCall.function.arguments);
+              console.log('[ChatPanel Goals] Function call received - parsed args:', args);
+              
+              let functionResult: any = { success: false, error: 'User not logged in' };
+              
+              if (isUserLoggedIn()) {
+                console.log('[ChatPanel Goals] User is logged in, calling createGoal with:', {
+                  character,
+                  title: args.title,
+                  daily_task: args.daily_task,
+                  commitment_days: args.commitment_days || 5,
+                  difficulty_level: args.difficulty_level || 1,
+                  blocker: args.blocker,
+                  duration_days: args.duration_days || 30
+                });
+
+                const newGoal = await createGoal(character, {
+                  title: args.title,
+                  daily_task: args.daily_task,
+                  commitment_days: args.commitment_days || 5,
+                  difficulty_level: args.difficulty_level || 1,
+                  blocker: args.blocker,
+                  duration_days: args.duration_days || 30
+                });
+                
+                console.log('[ChatPanel Goals] createGoal returned:', {
+                  result: newGoal,
+                  isNull: newGoal === null,
+                  hasId: !!newGoal?.id
+                });
+                
+                if (newGoal) {
+                  console.log('[ChatPanel Goals] Goal created successfully:', newGoal);
+                  // Refresh goal state
+                  const state = await getGoalState(character);
+                  console.log('[ChatPanel Goals] Goal state refreshed:', {
+                    hasGoal: state.hasGoal,
+                    goalId: state.goal?.id
+                  });
+                  setCurrentGoal(state.goal);
+                  setGoalContext(state.contextForAI);
+                  hasShownGoalInterestRef.current = true;
+                  
+                  functionResult = { 
+                    success: true, 
+                    goal: {
+                      id: newGoal.id,
+                      title: newGoal.title,
+                      daily_task: newGoal.daily_task
+                    }
+                  };
+                } else {
+                  console.error('[ChatPanel Goals] Goal creation failed - createGoal returned null');
+                  functionResult = { success: false, error: 'Failed to create goal' };
+                }
+              } else {
+                console.warn('[ChatPanel Goals] User is not logged in, cannot create goal');
+              }
+
+              // Add function result
+              toolResults.push({
+                tool_call_id: toolCall.id,
+                role: 'tool',
+                name: 'create_goal',
+                content: JSON.stringify(functionResult)
+              });
+            } catch (error) {
+              console.error('[ChatPanel Goals] Error parsing function arguments:', error);
+              console.error('[ChatPanel Goals] Error details:', {
+                message: error instanceof Error ? error.message : String(error),
+                stack: error instanceof Error ? error.stack : undefined
+              });
+              
+              toolResults.push({
+                tool_call_id: toolCall.id,
+                role: 'tool',
+                name: 'create_goal',
+                content: JSON.stringify({ success: false, error: error instanceof Error ? error.message : String(error) })
+              });
+            }
+          } else {
+            console.log('[ChatPanel Goals] Tool call is not create_goal, skipping:', {
+              type: toolCall.type,
+              functionName: toolCall.type === 'function' ? toolCall.function?.name : 'N/A'
+            });
+          }
+        }
+
+        // Send function results back to OpenAI for a follow-up response
+        console.log('[ChatPanel Goals] Sending function results back to OpenAI:', {
+          toolResultsCount: toolResults.length
+        });
+
+        const finalMessages = [...followUpMessages, ...toolResults];
+        const followUpResponse = await openai.chat.completions.create({
+          model: 'gpt-4o-mini',
+          messages: finalMessages,
+          tools: tools,
+          tool_choice: 'auto',
+          temperature: 0.8,
+        });
+
+        const followUpMessage = followUpResponse.choices[0]?.message;
+        const finalResponse = followUpMessage?.content || "Goal created successfully!";
+        
+        console.log('[ChatPanel Goals] Follow-up response received:', {
+          hasContent: !!followUpMessage?.content,
+          contentLength: followUpMessage?.content?.length || 0,
+          content: finalResponse.substring(0, 200)
+        });
+
+        setMessages(prev => [...prev, { 
+          role: 'assistant', 
+          content: finalResponse, 
+          time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) 
+        }]);
+
+        // Save assistant response to Supabase
+        if (isUserLoggedIn()) {
+          saveMessage(character, 'assistant', finalResponse, seriesId, episodeId);
+        }
+      } else {
+        // No function calls - normal response
+        console.log('[ChatPanel Goals] No tool calls in response:', {
+          hasToolCalls: !!toolCalls,
+          toolCallsLength: toolCalls?.length || 0,
+          finishReason: response.choices[0]?.finish_reason,
+          assistantResponse: assistantResponse.substring(0, 200)
+        });
+
+        setMessages(prev => [...prev, { 
+          role: 'assistant', 
+          content: assistantResponse, 
+          time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) 
+        }]);
+        
+        // Save assistant response to Supabase
+        if (isUserLoggedIn()) {
+          saveMessage(character, 'assistant', assistantResponse, seriesId, episodeId);
+        }
+      }
+      
+      // Auto-close chat after closing remark
+      if (isChatClosing) {
+        setTimeout(() => {
+          onClose();
+        }, 4000); // Give user time to read the closing message
       }
     } catch (error) {
       console.error("AI Error:", error);
@@ -499,25 +890,25 @@ Generate ONLY the follow-up message, nothing else.
     }
   };
 
-  // Loading state
+  // Loading state - Minimal Elegance
   if (isLoadingHistory) {
     return (
-      <div className="fixed inset-0 z-[5000] flex items-center justify-center bg-[#0a0a0f]/90 backdrop-blur-sm">
-        <div className="flex flex-col items-center gap-4">
-          <div className="w-12 h-12 border-4 border-violet-500/20 border-t-violet-500 rounded-full animate-spin" />
-          <p className="text-violet-400/60 text-sm">Loading chat...</p>
+      <div className="fixed inset-0 z-[5000] flex items-center justify-center bg-[#FAF9F6]">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-8 h-8 border-2 border-[#4A7C59]/20 border-t-[#4A7C59] rounded-full animate-spin" />
+          <p className="text-[#8A8A8A] text-[13px]">Loading...</p>
         </div>
       </div>
     );
   }
 
-  // PATH A: WhatsApp-style UI (Full Screen) - Now with Charcoal Theme
+  // PATH A: WhatsApp-style UI (Full Screen) - Minimal Cream Theme
   if (isWhatsApp) {
     return (
-      <div className="fixed inset-0 z-[5000] flex flex-col bg-[#0a0a0f] animate-fade-in h-full w-full overflow-hidden">
-        {/* Chat Background Image */}
+      <div className="fixed inset-0 z-[5000] flex flex-col bg-[#FAF9F6] animate-fade-in h-full w-full overflow-hidden">
+        {/* Subtle background pattern */}
         <div 
-          className="absolute inset-0 opacity-20 pointer-events-none chat-bg-image" 
+          className="absolute inset-0 opacity-[0.03] pointer-events-none" 
           style={{ 
             backgroundImage: `url('/chat_bg.png')`,
             backgroundSize: 'cover',
@@ -525,38 +916,38 @@ Generate ONLY the follow-up message, nothing else.
           }}
         />
 
-        {/* Dark Theme Header with Violet Accent */}
-        <div className="relative z-10 flex items-center gap-2 px-3 py-2.5 bg-gradient-to-r from-[#1a1a24] to-[#121218] border-b border-violet-500/20 shadow-lg">
-          <button onClick={handleClose} className="p-1 hover:bg-violet-500/20 rounded-full transition-colors active:scale-90 flex items-center">
-            <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor" className="text-violet-400"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"></path></svg>
-            <div className="w-9 h-9 rounded-full overflow-hidden border border-violet-500/30 ml-1 shadow-[0_0_15px_rgba(139,92,246,0.2)]">
+        {/* Header - Minimal Elegance */}
+        <div className="relative z-10 flex items-center gap-3 px-4 py-3 bg-white/80 backdrop-blur-xl border-b border-black/[0.06]">
+          <button onClick={handleClose} className="p-1 hover:bg-black/[0.04] rounded-xl transition-colors active:scale-95 flex items-center gap-2">
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" className="text-[#4A4A4A]"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"></path></svg>
+            <div className="w-10 h-10 rounded-full overflow-hidden">
               <img src={avatar} alt={character} className="w-full h-full object-cover" />
             </div>
           </button>
           <div className="flex flex-col flex-1" onClick={handleClose}>
-            <h4 className="text-[16px] font-semibold text-white leading-tight truncate">{character}</h4>
-            <p className="text-[12px] text-violet-400">{isTyping ? 'typing...' : 'online'}</p>
+            <h4 className="text-[15px] font-semibold text-[#1A1A1A] leading-tight truncate tracking-tight">{character}</h4>
+            <p className="text-[12px] text-[#4A7C59] font-medium">{isTyping ? 'typing...' : 'online'}</p>
           </div>
         </div>
 
         {/* Messages Scroll Area */}
-        <div ref={scrollRef} className="relative z-10 flex-1 overflow-y-auto px-4 py-4 space-y-2 flex flex-col hide-scrollbar pb-24">
-          <div className="self-center my-3 bg-[#1a1a24] text-violet-400/60 text-[12px] px-3 py-1 rounded-lg shadow-sm font-medium uppercase border border-violet-500/10">
+        <div ref={scrollRef} className="relative z-10 flex-1 overflow-y-auto px-4 py-4 space-y-2.5 flex flex-col hide-scrollbar pb-24">
+          <div className="self-center my-3 bg-black/[0.04] text-[#8A8A8A] text-[11px] px-4 py-1.5 rounded-full font-medium">
             Today
           </div>
 
           {messages.map((m, i) => (
             <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-              <div className={`relative px-3 py-2 rounded-2xl shadow-lg text-[14.5px] max-w-[85%] flex flex-col ${
+              <div className={`relative px-4 py-2.5 rounded-2xl text-[15px] max-w-[80%] flex flex-col ${
                 m.role === 'user' 
-                  ? 'bg-gradient-to-br from-violet-600 to-blue-600 rounded-tr-sm text-white' 
-                  : 'bg-[#1a1a24] border border-violet-500/10 rounded-tl-sm text-white/90'
+                  ? 'bg-[#4A7C59] rounded-tr-sm text-white' 
+                  : 'bg-white border border-black/[0.06] rounded-tl-sm text-[#1A1A1A] shadow-sm'
               }`}>
                 <span className="leading-relaxed break-words">{m.content}</span>
                 <div className="flex items-center justify-end gap-1 mt-1 -mb-0.5">
-                  <span className={`text-[10px] leading-none uppercase ${m.role === 'user' ? 'text-white/60' : 'text-violet-400/50'}`}>{m.time}</span>
+                  <span className={`text-[10px] leading-none ${m.role === 'user' ? 'text-white/60' : 'text-[#ACACAC]'}`}>{m.time}</span>
                   {m.role === 'user' && (
-                    <svg viewBox="0 0 16 11" width="16" height="11" fill="currentColor" className="text-blue-300"><path d="M11.231.329a.963.963 0 0 0-1.362.012L4.583 5.645 2.328 3.39a.962.962 0 0 0-1.36 1.36l2.935 2.935a.963.963 0 0 0 1.362-.012l5.978-5.978a.963.963 0 0 0-.012-1.366zm3.437 0a.963.963 0 0 0-1.362.012l-5.978 5.978a.963.963 0 0 0 1.362 1.362l5.978-5.978a.963.963 0 0 0-.012-1.366z"></path></svg>
+                    <svg viewBox="0 0 16 11" width="14" height="10" fill="currentColor" className="text-white/60"><path d="M11.231.329a.963.963 0 0 0-1.362.012L4.583 5.645 2.328 3.39a.962.962 0 0 0-1.36 1.36l2.935 2.935a.963.963 0 0 0 1.362-.012l5.978-5.978a.963.963 0 0 0-.012-1.366zm3.437 0a.963.963 0 0 0-1.362.012l-5.978 5.978a.963.963 0 0 0 1.362 1.362l5.978-5.978a.963.963 0 0 0-.012-1.366z"></path></svg>
                   )}
                 </div>
               </div>
@@ -564,74 +955,136 @@ Generate ONLY the follow-up message, nothing else.
           ))}
           {isTyping && (
             <div className="flex justify-start">
-              <div className="bg-[#1a1a24] border border-violet-500/10 px-4 py-2 rounded-2xl rounded-tl-sm shadow-lg flex items-center gap-1.5">
-                <div className="w-2 h-2 bg-violet-500 rounded-full animate-bounce" />
-                <div className="w-2 h-2 bg-violet-400 rounded-full animate-bounce" style={{ animationDelay: '75ms' }} />
-                <div className="w-2 h-2 bg-violet-300 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+              <div className="bg-white border border-black/[0.06] px-4 py-3 rounded-2xl rounded-tl-sm shadow-sm flex items-center gap-1.5">
+                <div className="w-2 h-2 bg-[#4A7C59] rounded-full dot-bounce-1" />
+                <div className="w-2 h-2 bg-[#6B9B7A] rounded-full dot-bounce-2" />
+                <div className="w-2 h-2 bg-[#ACACAC] rounded-full dot-bounce-3" />
+              </div>
+            </div>
+          )}
+          
+          {/* Closing indicator */}
+          {isChatClosing && !isTyping && (
+            <div className="flex justify-center my-4 animate-fade-in">
+              <div className="bg-[#C9A227]/10 border border-[#C9A227]/30 px-4 py-2 rounded-xl text-[13px] text-[#4A4A4A] text-center">
+                Chat ending soon... Come back anytime!
               </div>
             </div>
           )}
         </div>
 
-        {/* Input Bar */}
-        <div className="relative z-10 bg-[#121218] border-t border-violet-500/10 px-3 py-3 flex items-center gap-2">
-          <div className="flex-1 flex items-center bg-[#1a1a24] rounded-full px-4 py-2.5 border border-violet-500/10 focus-within:border-violet-500/30 transition-colors">
+        {/* Quick Action Buttons - Minimal */}
+        {isUserLoggedIn() && (
+          <div className="relative z-10 bg-white/80 backdrop-blur-xl border-t border-black/[0.06] px-4 pt-2 pb-0 flex items-center gap-2 overflow-x-auto hide-scrollbar">
+            <button
+              onClick={() => handleQuickAction('my_goal')}
+              className="flex-shrink-0 px-3.5 py-2 rounded-lg text-[12px] font-medium bg-black/[0.04] text-[#4A4A4A] hover:bg-black/[0.08] transition-all"
+            >
+              My Goal
+            </button>
+            {currentGoal && !currentGoal.completed_today && (
+              <button
+                onClick={() => handleQuickAction('mark_done')}
+                className="flex-shrink-0 px-3.5 py-2 rounded-lg text-[12px] font-medium bg-[#4A7C59] text-white hover:bg-[#3D6549] transition-all"
+              >
+                ✓ Done
+              </button>
+            )}
+            {currentGoal && (
+              <button
+                onClick={() => handleQuickAction('adjust')}
+                className="flex-shrink-0 px-3.5 py-2 rounded-lg text-[12px] font-medium bg-black/[0.04] text-[#8A8A8A] hover:text-[#C9A227] transition-all"
+              >
+                Adjust
+              </button>
+            )}
+            {currentGoal && (
+              <div className="flex-shrink-0 px-3 py-1.5 text-[12px] font-semibold text-[#C77B58] flex items-center gap-1 bg-[#C77B58]/10 rounded-lg">
+                {currentGoal.current_streak} streak
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Input Bar - Minimal */}
+        <div className="relative z-10 bg-white/80 backdrop-blur-xl border-t border-black/[0.06] px-4 py-3 flex items-center gap-3">
+          <div className="flex-1 flex items-center bg-[#FAF9F6] rounded-xl px-4 py-3 border border-black/[0.06] focus-within:border-[#4A7C59] transition-colors">
             <input 
               type="text" value={inputValue} onChange={(e) => setInputValue(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleSend()} 
-              placeholder="Message"
-              className="flex-1 outline-none text-white text-[16px] bg-transparent placeholder:text-white/30"
+              placeholder="Message..."
+              className="flex-1 outline-none text-[#1A1A1A] text-[15px] bg-transparent placeholder:text-[#ACACAC]"
             />
           </div>
 
           <button 
             onClick={handleSend} disabled={!inputValue.trim() || isTyping}
-            className="w-11 h-11 rounded-full flex items-center justify-center transition-all shadow-lg bg-gradient-to-br from-violet-500 to-blue-500 text-white shadow-[0_0_20px_rgba(139,92,246,0.3)] disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-11 h-11 rounded-xl flex items-center justify-center transition-all bg-[#4A7C59] text-white hover:bg-[#3D6549] active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed disabled:bg-[#ACACAC]"
           >
-            <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"></path></svg>
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"></path></svg>
           </button>
         </div>
+
+        {/* Goals Modal */}
+        {showGoalsModal && currentGoal && (
+          <GoalsModal
+            goal={currentGoal}
+            onClose={() => setShowGoalsModal(false)}
+            onMarkDone={handleMarkDone}
+            onPause={async () => {
+              const { pauseGoal } = await import('../lib/goals');
+              await pauseGoal(currentGoal.id);
+              setCurrentGoal(null);
+              setShowGoalsModal(false);
+              injectMessage("I want to pause my current goal");
+            }}
+            onEdit={() => {
+              setShowGoalsModal(false);
+              injectMessage("I want to change my goal");
+            }}
+          />
+        )}
         <style>{`
-          @media (max-width: 768px) {
-            .chat-bg-image {
-              background-size: 150% !important;
-            }
+          @keyframes dotBounce {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-3px); }
           }
+          .dot-bounce-1 { animation: dotBounce 1s ease-in-out infinite; }
+          .dot-bounce-2 { animation: dotBounce 1s ease-in-out infinite 0.15s; }
+          .dot-bounce-3 { animation: dotBounce 1s ease-in-out infinite 0.3s; }
         `}</style>
       </div>
     );
   }
 
-  // PATH B: Floating chat UI - Dark Theme
+  // PATH B: Floating chat UI - Minimal Cream Theme
   return (
     <div className="fixed inset-0 z-[5000] flex items-end justify-center p-4 md:p-8 animate-fade-in pointer-events-none">
       <div 
-        className="w-full max-w-lg border border-violet-500/20 rounded-[2.5rem] overflow-hidden flex flex-col shadow-[0_40px_100px_rgba(139,92,246,0.15)] pointer-events-auto h-[80vh] max-h-[750px] mb-20 md:mb-0 transition-all duration-500 transform translate-y-0 bg-[#0a0a0f]/95 backdrop-blur-3xl"
+        className="w-full max-w-lg border border-black/[0.06] rounded-2xl overflow-hidden flex flex-col shadow-xl pointer-events-auto h-[80vh] max-h-[750px] mb-20 md:mb-0 transition-all duration-500 transform translate-y-0 bg-white"
       >
-        <div className="px-8 py-6 flex justify-between items-center border-b border-violet-500/10 bg-gradient-to-r from-[#1a1a24]/80 to-[#121218]/80 backdrop-blur-md">
-          <div className="flex items-center gap-4">
-            <div className="relative w-14 h-14 rounded-full p-0.5 border-2 border-violet-500/50 shadow-[0_0_20px_rgba(139,92,246,0.3)] flex items-center justify-center text-lg font-black bg-[#1a1a24]">
-              <div className="w-full h-full rounded-full overflow-hidden flex items-center justify-center">
-                <img src={avatar} alt={character} className="w-full h-full object-cover" />
-              </div>
-              <div className="absolute top-0 right-0 w-4 h-4 bg-emerald-500 border-2 border-[#0a0a0f] rounded-full animate-pulse z-10 shadow-[0_0_10px_#10b981]" />
+        <div className="px-5 py-4 flex justify-between items-center border-b border-black/[0.06] bg-white">
+          <div className="flex items-center gap-3">
+            <div className="relative w-11 h-11 rounded-full overflow-hidden">
+              <img src={avatar} alt={character} className="w-full h-full object-cover" />
+              <div className="absolute bottom-0 right-0 w-3 h-3 bg-[#4A7C59] border-2 border-white rounded-full" />
             </div>
             <div>
-              <p className="text-[10px] font-black tracking-[0.3em] uppercase text-violet-400/60 leading-none mb-1">Inscene Live</p>
-              <h4 className="text-xl font-black italic tracking-tighter uppercase leading-none text-white">{character}</h4>
+              <h4 className="text-[15px] font-semibold leading-tight text-[#1A1A1A] tracking-tight">{character}</h4>
+              <p className="text-[11px] text-[#8A8A8A]">AI Coach</p>
             </div>
           </div>
-          <button onClick={handleClose} className="w-10 h-10 flex items-center justify-center hover:bg-violet-500/20 bg-[#1a1a24] rounded-full transition-all active:scale-90 border border-violet-500/20">
-             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor" className="w-5 h-5 text-violet-400/60"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+          <button onClick={handleClose} className="w-9 h-9 flex items-center justify-center hover:bg-black/[0.04] rounded-xl transition-all active:scale-95">
+             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4 text-[#8A8A8A]"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
           </button>
         </div>
 
-        <div ref={scrollRef} className="flex-1 overflow-y-auto p-8 space-y-6 hide-scrollbar bg-transparent">
+        <div ref={scrollRef} className="flex-1 overflow-y-auto p-5 space-y-3 hide-scrollbar bg-[#FAF9F6]">
           {messages.map((m, i) => (
             <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'} animate-slide-up`}>
-              <div className={`max-w-[85%] px-5 py-3.5 rounded-3xl text-[14px] shadow-lg ${
+              <div className={`max-w-[80%] px-4 py-2.5 rounded-2xl text-[15px] ${
                 m.role === 'user' 
-                  ? 'bg-gradient-to-br from-violet-600 to-blue-600 text-white rounded-tr-none font-medium shadow-[0_4px_20px_rgba(139,92,246,0.3)]' 
-                  : 'bg-[#1a1a24] border border-violet-500/10 text-white/90 font-medium rounded-tl-none'
+                  ? 'bg-[#4A7C59] text-white rounded-tr-sm' 
+                  : 'bg-white border border-black/[0.06] text-[#1A1A1A] rounded-tl-sm shadow-sm'
               }`}>
                 {m.content}
               </div>
@@ -639,31 +1092,102 @@ Generate ONLY the follow-up message, nothing else.
           ))}
           {isTyping && (
             <div className="flex justify-start animate-fade-in">
-               <div className="bg-[#1a1a24] px-5 py-3.5 rounded-3xl rounded-tl-none border border-violet-500/10 flex gap-1.5 items-center">
-                  <div className="w-2 h-2 bg-violet-500 rounded-full animate-bounce" />
-                  <div className="w-2 h-2 bg-violet-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                  <div className="w-2 h-2 bg-violet-300 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+               <div className="bg-white px-4 py-3 rounded-2xl rounded-tl-sm border border-black/[0.06] flex gap-1.5 items-center shadow-sm">
+                  <div className="w-2 h-2 bg-[#4A7C59] rounded-full dot-bounce-1" />
+                  <div className="w-2 h-2 bg-[#6B9B7A] rounded-full dot-bounce-2" />
+                  <div className="w-2 h-2 bg-[#ACACAC] rounded-full dot-bounce-3" />
                </div>
+            </div>
+          )}
+          
+          {/* Closing indicator */}
+          {isChatClosing && !isTyping && (
+            <div className="flex justify-center my-4 animate-fade-in">
+              <div className="bg-[#C9A227]/10 border border-[#C9A227]/30 px-4 py-2 rounded-xl text-[13px] text-[#4A4A4A] text-center">
+                Chat ending soon... Come back anytime!
+              </div>
             </div>
           )}
         </div>
 
-        <div className="p-8 pt-0 pb-10">
-          <div className="relative group">
+        {/* Quick Action Buttons - Minimal */}
+        {isUserLoggedIn() && (
+          <div className="px-5 pb-2 pt-2 flex items-center gap-2 overflow-x-auto hide-scrollbar bg-white border-t border-black/[0.06]">
+            <button
+              onClick={() => handleQuickAction('my_goal')}
+              className="flex-shrink-0 px-3.5 py-2 rounded-lg text-[12px] font-medium bg-black/[0.04] text-[#4A4A4A] hover:bg-black/[0.08] transition-all"
+            >
+              My Goal
+            </button>
+            {currentGoal && !currentGoal.completed_today && (
+              <button
+                onClick={() => handleQuickAction('mark_done')}
+                className="flex-shrink-0 px-3.5 py-2 rounded-lg text-[12px] font-medium bg-[#4A7C59] text-white hover:bg-[#3D6549] transition-all"
+              >
+                ✓ Done
+              </button>
+            )}
+            {currentGoal && (
+              <button
+                onClick={() => handleQuickAction('adjust')}
+                className="flex-shrink-0 px-3.5 py-2 rounded-lg text-[12px] font-medium bg-black/[0.04] text-[#8A8A8A] hover:text-[#C9A227] transition-all"
+              >
+                Adjust
+              </button>
+            )}
+            {currentGoal && (
+              <div className="flex-shrink-0 px-3 py-1.5 text-[12px] font-semibold text-[#C77B58] flex items-center gap-1 bg-[#C77B58]/10 rounded-lg">
+                {currentGoal.current_streak} streak
+              </div>
+            )}
+          </div>
+        )}
+
+        <div className="p-5 pt-2 pb-6 bg-white">
+          <div className="relative group flex items-center gap-3">
             <input 
               type="text" value={inputValue} onChange={(e) => setInputValue(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleSend()} placeholder={`Reply to ${character}...`}
-              className="w-full bg-[#1a1a24] border border-violet-500/20 rounded-[2rem] px-8 py-5 text-sm font-medium focus:outline-none focus:border-violet-500/50 focus:bg-[#222230] transition-all text-white placeholder:text-white/30 pr-16"
+              className="flex-1 bg-[#FAF9F6] border border-black/[0.06] rounded-xl px-4 py-3 text-[15px] focus:outline-none focus:border-[#4A7C59] transition-all text-[#1A1A1A] placeholder:text-[#ACACAC]"
             />
             <button 
               onClick={handleSend} disabled={!inputValue.trim() || isTyping}
-              className="absolute right-2 top-2 bottom-2 w-12 h-12 rounded-full flex items-center justify-center text-white shadow-xl active:scale-90 transition-all disabled:opacity-30 bg-gradient-to-br from-violet-500 to-blue-500 shadow-[0_0_20px_rgba(139,92,246,0.3)]"
+              className="w-11 h-11 rounded-xl flex items-center justify-center text-white active:scale-95 transition-all disabled:opacity-40 bg-[#4A7C59] hover:bg-[#3D6549] disabled:bg-[#ACACAC]"
             >
-              <svg viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5 ml-0.5"><path d="M3.478 2.405a.75.75 0 00-.926.94l2.432 7.905H13.5a.75.75 0 010 1.5H4.984l-2.432 7.905a.75.75 0 00.926.94 60.519 60.519 0 0018.445-8.986.75.75 0 000-1.218A60.517 60.517 0 003.478 2.405z" /></svg>
+              <svg viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5"><path d="M3.478 2.405a.75.75 0 00-.926.94l2.432 7.905H13.5a.75.75 0 010 1.5H4.984l-2.432 7.905a.75.75 0 00.926.94 60.519 60.519 0 0018.445-8.986.75.75 0 000-1.218A60.517 60.517 0 003.478 2.405z" /></svg>
             </button>
           </div>
         </div>
+
+        {/* Goals Modal */}
+        {showGoalsModal && currentGoal && (
+          <GoalsModal
+            goal={currentGoal}
+            onClose={() => setShowGoalsModal(false)}
+            onMarkDone={handleMarkDone}
+            onPause={async () => {
+              const { pauseGoal } = await import('../lib/goals');
+              await pauseGoal(currentGoal.id);
+              setCurrentGoal(null);
+              setShowGoalsModal(false);
+              injectMessage("I want to pause my current goal");
+            }}
+            onEdit={() => {
+              setShowGoalsModal(false);
+              injectMessage("I want to change my goal");
+            }}
+          />
+        )}
       </div>
-      <style>{`.hide-scrollbar::-webkit-scrollbar { display: none; }`}</style>
+      <style>{`
+        .hide-scrollbar::-webkit-scrollbar { display: none; }
+        @keyframes dotBounce {
+          0%, 100% { transform: translateY(0); }
+          50% { transform: translateY(-3px); }
+        }
+        .dot-bounce-1 { animation: dotBounce 1s ease-in-out infinite; }
+        .dot-bounce-2 { animation: dotBounce 1s ease-in-out infinite 0.15s; }
+        .dot-bounce-3 { animation: dotBounce 1s ease-in-out infinite 0.3s; }
+      `}</style>
     </div>
   );
 };

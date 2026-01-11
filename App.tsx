@@ -7,6 +7,7 @@ import WaitlistModal from './components/WaitlistModal.tsx';
 import UserMenu from './components/UserMenu.tsx';
 import InfluencerPage from './components/InfluencerPage.tsx';
 import ChatWidget from './components/ChatWidget.tsx';
+import CalendarView from './components/CalendarView.tsx';
 import { AuthProvider, useAuth } from './lib/auth';
 import { getUserMessageCount, MAX_USER_MESSAGES, hasUnlimitedMessages } from './lib/chatStorage';
 import { Analytics } from "@vercel/analytics/react";
@@ -40,26 +41,14 @@ const getSmartImageUrl = (url: string, v: string = '1', w: number = 400, h: numb
 };
 
 /**
- * Character Avatar Component
+ * Character Avatar Component - Refined minimal style
  */
-const CharacterDP: React.FC<{ src: string, name: string, theme: 'blue' | 'pink' | 'purple' | 'cyan' | 'green', size?: string, isOnline?: boolean }> = ({ src, name, theme, size = "w-16 h-16", isOnline = true }) => {
+const CharacterDP: React.FC<{ src: string, name: string, theme: 'blue' | 'pink' | 'purple' | 'cyan' | 'green', size?: string, isOnline?: boolean, isDark?: boolean }> = ({ src, name, theme, size = "w-16 h-16", isOnline = true, isDark = false }) => {
   const [error, setError] = useState(false);
-  const borderColor = 
-    theme === 'blue' ? 'border-blue-500' : 
-    theme === 'pink' ? 'border-pink-500' : 
-    theme === 'purple' ? 'border-violet-500' : 
-    theme === 'cyan' ? 'border-cyan-400' :
-    'border-emerald-400';
-  const bgColor = 
-    theme === 'blue' ? 'bg-blue-600/30' : 
-    theme === 'pink' ? 'bg-pink-600/30' : 
-    theme === 'purple' ? 'bg-violet-600/30' : 
-    theme === 'cyan' ? 'bg-cyan-600/30' :
-    'bg-emerald-600/30';
 
   return (
-    <div className={`relative ${size} rounded-full flex items-center justify-center p-0.5 border-2 shadow-2xl transition-all duration-300 group-hover:scale-105 ${borderColor} ${bgColor}`}>
-      {isOnline && <div className="absolute bottom-0 right-0 w-4 h-4 bg-emerald-500 border-2 border-[#0a0a0f] rounded-full animate-pulse shadow-[0_0_12px_#10b981] z-30" />}
+    <div className={`relative ${size} rounded-full flex items-center justify-center overflow-hidden shadow-lg transition-all duration-300`}>
+      {isOnline && <div className={`absolute bottom-0 right-0 w-3 h-3 bg-[#4A7C59] border-2 ${isDark ? 'border-black' : 'border-white'} rounded-full z-30`} />}
       <div className="w-full h-full rounded-full overflow-hidden flex items-center justify-center">
         {!error ? (
           <img 
@@ -69,7 +58,7 @@ const CharacterDP: React.FC<{ src: string, name: string, theme: 'blue' | 'pink' 
             onError={() => setError(true)}
           />
         ) : (
-          <span className="text-xl font-black text-white">{name[0]}</span>
+          <span className={`text-xl font-semibold ${isDark ? 'text-white' : 'text-[#1A1A1A]'}`}>{name[0]}</span>
         )}
       </div>
     </div>
@@ -81,6 +70,96 @@ const formatTime = (seconds: number) => {
   const mins = Math.floor(seconds / 60);
   const secs = Math.floor(seconds % 60);
   return `${mins}:${secs.toString().padStart(2, '0')}`;
+};
+
+/**
+ * VIDEO END SCREEN - Auto-redirects to chat after countdown
+ */
+const VideoEndScreen: React.FC<{
+  episode: any;
+  series: any;
+  onEnterStory: (char: string, intro: string, hook: string, entryPoint: string) => void;
+  onNextEpisode: () => void;
+}> = ({ episode, series, onEnterStory, onNextEpisode }) => {
+  const [countdown, setCountdown] = useState(5);
+  const [userInteracted, setUserInteracted] = useState(false);
+  const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Get the first trigger (primary character for this episode)
+  const primaryTrigger = episode.triggers[0];
+
+  useEffect(() => {
+    // Start countdown for auto-redirect
+    countdownRef.current = setInterval(() => {
+      setCountdown(prev => {
+        if (prev <= 1) {
+          // Auto-redirect to chat
+          if (!userInteracted && primaryTrigger) {
+            onEnterStory(primaryTrigger.char, primaryTrigger.intro, primaryTrigger.hook, 'video_end_screen');
+          }
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => {
+      if (countdownRef.current) {
+        clearInterval(countdownRef.current);
+      }
+    };
+  }, [userInteracted, primaryTrigger, onEnterStory]);
+
+  const handleManualChat = (t: any) => {
+    setUserInteracted(true);
+    if (countdownRef.current) {
+      clearInterval(countdownRef.current);
+    }
+    onEnterStory(t.char, t.intro, t.hook, 'video_end_screen');
+  };
+
+  const handleNextEpisode = () => {
+    setUserInteracted(true);
+    if (countdownRef.current) {
+      clearInterval(countdownRef.current);
+    }
+    onNextEpisode();
+  };
+
+  return (
+    <div className="absolute inset-0 z-[100] flex flex-col items-center justify-center p-8 bg-black/60 backdrop-blur-xl animate-fade-in pointer-events-auto">
+      <h3 className="text-2xl font-semibold text-white mb-3 tracking-tight">Continue your journey</h3>
+      
+      {/* Auto-redirect countdown */}
+      <div className="flex items-center gap-3 mb-8">
+        <p className="text-white/60 text-sm">
+          Connecting to {primaryTrigger?.char || 'coach'} in
+        </p>
+        <div className="w-9 h-9 rounded-lg bg-white/10 backdrop-blur-sm flex items-center justify-center">
+          <span className="text-white font-semibold text-lg">{countdown}</span>
+        </div>
+      </div>
+      
+      <div className="flex flex-col gap-3 mb-10 w-full max-w-[280px]">
+        {episode.triggers.map((t: any, idx: number) => (
+          <ChatWidget
+            key={idx}
+            characterName={t.char}
+            avatar={series.avatars[t.char]}
+            onClick={() => handleManualChat(t)}
+            isOnline={true}
+          />
+        ))}
+      </div>
+
+      <button onClick={handleNextEpisode} className="flex flex-col items-center gap-2 group">
+        <div className="w-12 h-12 rounded-xl bg-white/10 backdrop-blur-sm text-white flex items-center justify-center hover:bg-white/20 active:scale-95 transition-all">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 13.5L12 21m0 0l-7.5-7.5M12 21V3" /></svg>
+        </div>
+        <span className="text-[13px] text-white/50 group-hover:text-white/80 transition-colors">Next</span>
+      </button>
+    </div>
+  );
 };
 
 /**
@@ -812,10 +891,10 @@ const ReelItem: React.FC<{
       />
 
       {loading && !isEnded && (
-        <div className="absolute inset-0 flex items-center justify-center bg-[#0a0a0f]/60 backdrop-blur-md z-10">
+        <div className="absolute inset-0 flex items-center justify-center bg-black/40 backdrop-blur-sm z-10">
           <div className="flex flex-col items-center gap-3">
-            <div className="w-10 h-10 border-2 border-violet-500/20 border-t-violet-500 rounded-full animate-spin shadow-[0_0_20px_rgba(139,92,246,0.3)]" />
-            <p className="text-[9px] font-black tracking-[0.4em] uppercase text-white/40">Loading Scene...</p>
+            <div className="w-10 h-10 border-2 border-white/20 border-t-white rounded-full animate-spin" />
+            <p className="text-sm text-white/60">Loading...</p>
           </div>
         </div>
       )}
@@ -823,14 +902,11 @@ const ReelItem: React.FC<{
       {!isEnded && (
         <>
           <div className={`absolute bottom-24 left-6 pointer-events-none z-50 transition-opacity duration-500 ${isUIHidden ? 'opacity-0' : 'opacity-100'}`}>
-            <div className="flex items-center gap-2 mb-2">
-              <div className="h-[2px] w-6 bg-violet-500 rounded-full shadow-[0_0_8px_#8b5cf6]" />
-              <span className="text-[10px] font-black tracking-[0.3em] uppercase text-white/90 drop-shadow-md">{episode.label}</span>
-            </div>
-            <p className="text-white text-xs font-medium opacity-60 max-w-[200px] leading-tight drop-shadow-lg">{series.reelHint || 'Roleplay with the characters to change their destiny'}</p>
+            <span className="text-[13px] font-medium text-white/90 drop-shadow-md">{episode.label}</span>
+            <p className="text-white text-[12px] opacity-50 max-w-[200px] leading-tight mt-1">{series.reelHint || 'Chat with the characters'}</p>
           </div>
 
-          <div className="absolute right-4 bottom-24 flex flex-col items-end gap-4 z-[100] pointer-events-auto max-w-[280px]">
+          <div className="absolute right-4 bottom-24 flex flex-col items-end gap-3 z-[100] pointer-events-auto max-w-[280px]">
             <button 
               onClick={(e) => { 
                 e.stopPropagation(); 
@@ -843,9 +919,9 @@ const ReelItem: React.FC<{
                 }
                 toggleMute(); 
               }}
-              className={`flex flex-col items-center gap-1.5 active:scale-90 transition-all group mb-2 transition-opacity duration-500 ${isUIHidden ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}
+              className={`flex flex-col items-center gap-1.5 active:scale-95 transition-all group mb-2 transition-opacity duration-500 ${isUIHidden ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}
             >
-              <div className="w-12 h-12 rounded-full bg-[#1a1a24]/80 backdrop-blur-xl border border-violet-500/20 flex items-center justify-center text-white shadow-2xl transition-all group-hover:bg-violet-500/20 group-hover:border-violet-500/40">
+              <div className="w-11 h-11 rounded-xl bg-white/10 backdrop-blur-sm flex items-center justify-center text-white transition-all hover:bg-white/20">
                 {isMuted ? (
                   <svg viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5"><path d="M13.5 4.06c0-1.336-1.616-2.005-2.56-1.06l-4.5 4.5H4.508c-1.141 0-2.318.664-2.66 1.905A9.76 9.76 0 0 0 1.5 12c0 .898.121 1.768.35 2.595.341 1.24 1.518 1.905 2.659 1.905h1.93l4.5 4.5c.945.945 2.561.276 2.561-1.06V4.06ZM18.535 7.465a.75.75 0 0 1 1.06 0L22.12 10l-2.525 2.525a.75.75 0 1 1-1.06-1.06L20 10l-1.465-1.465a.75.75 0 0 1 0-1.06Z" /></svg>
                 ) : (
@@ -863,35 +939,33 @@ const ReelItem: React.FC<{
                   onEnterStory(t.char, t.intro, t.hook, 'video_sidebar'); 
                 }}
                 className="w-full animate-slide-up-side cursor-pointer"
-                style={{ animationDelay: `${idx * 150}ms` }}
+                style={{ animationDelay: `${idx * 100}ms` }}
               >
-                <div className="relative group animate-chat-pulse">
+                <div className="relative group">
                   {/* Speech Bubble */}
                   {isActive && !isEnded && (
-                    <div className="absolute top-1/2 -translate-y-1/2 right-full z-50 transition-all duration-500 ease-in-out pointer-events-none" style={{ opacity: 1 }}>
-                      <div className={`relative bg-blue-500 rounded-[18px] px-3.5 py-2 shadow-lg transition-all duration-500 ease-in-out ${isUIHidden ? 'max-w-[240px]' : 'max-w-[60px]'}`}>
-                        <div className="text-white text-[12px] font-medium leading-tight transition-all duration-500 ease-in-out whitespace-nowrap flex items-center gap-0.5">
-                          {isUIHidden ? 'Talk to me now!' : (
+                    <div className="absolute top-1/2 -translate-y-1/2 right-full z-50 transition-all duration-500 ease-in-out pointer-events-none mr-2" style={{ opacity: 1 }}>
+                      <div className={`relative bg-white/95 backdrop-blur-sm rounded-xl px-3 py-2 shadow-lg transition-all duration-500 ease-in-out ${isUIHidden ? 'max-w-[180px]' : 'max-w-[50px]'}`}>
+                        <div className="text-[#1A1A1A] text-[12px] font-medium leading-tight transition-all duration-500 ease-in-out whitespace-nowrap flex items-center gap-0.5">
+                          {isUIHidden ? 'Chat now' : (
                             <>
-                              <span className="inline-block dot-bounce-1">.</span>
-                              <span className="inline-block dot-bounce-2">.</span>
-                              <span className="inline-block dot-bounce-3">.</span>
+                              <span className="inline-block dot-bounce-1 text-[#4A7C59]">.</span>
+                              <span className="inline-block dot-bounce-2 text-[#4A7C59]">.</span>
+                              <span className="inline-block dot-bounce-3 text-[#4A7C59]">.</span>
                             </>
                           )}
                         </div>
-                        {/* Tail pointing right from the bubble toward the icon - center aligned with DP */}
-                        <div className="absolute top-1/2 -translate-y-1/2 right-0 translate-x-full w-0 h-0 border-l-[8px] border-t-[6px] border-b-[6px] border-l-blue-500 border-t-transparent border-b-transparent transition-all duration-500"></div>
+                        {/* Tail pointing right */}
+                        <div className="absolute top-1/2 -translate-y-1/2 right-0 translate-x-full w-0 h-0 border-l-[6px] border-t-[5px] border-b-[5px] border-l-white/95 border-t-transparent border-b-transparent"></div>
                       </div>
                     </div>
                   )}
-                   <div className="absolute inset-0 rounded-full blur-xl bg-gradient-to-r from-violet-500/60 to-blue-500/60 animate-pulse-glow" />
-                   <div className="absolute inset-[-4px] rounded-full border-2 border-violet-400/50 animate-ring-pulse" />
-                   <div className={`absolute inset-0 rounded-full blur-xl opacity-0 group-hover:opacity-60 transition-opacity ${t.char === 'Priyank' ? 'bg-blue-500' : t.char === 'Arzoo' ? 'bg-pink-500' : t.char === 'Anish' ? 'bg-cyan-400' : t.char === 'Chirag' ? 'bg-emerald-400' : 'bg-violet-500'}`} />
                    <CharacterDP 
                     src={series.avatars[t.char]} 
                     name={t.char} 
-                    theme="purple"
-                    size="w-14 h-14"
+                    theme="green"
+                    size="w-12 h-12"
+                    isDark={true}
                    />
                 </div>
               </div>
@@ -901,36 +975,19 @@ const ReelItem: React.FC<{
       )}
 
       {isEnded && (
-        <div className="absolute inset-0 z-[100] flex flex-col items-center justify-center p-8 bg-[#0a0a0f]/80 backdrop-blur-3xl animate-fade-in pointer-events-auto">
-           <h3 className="text-4xl font-black italic uppercase text-white mb-2 tracking-tighter">End of Scene</h3>
-           <p className="text-violet-400/60 text-[10px] font-black tracking-[0.5em] uppercase mb-12">Pick your path</p>
-           
-           <div className="flex flex-col gap-4 mb-16 w-full max-w-[280px]">
-             {episode.triggers.map((t: any, idx: number) => (
-                <ChatWidget
-                  key={idx}
-                  characterName={t.char}
-                  avatar={series.avatars[t.char]}
-                  onClick={() => onEnterStory(t.char, t.intro, t.hook, 'video_end_screen')}
-                  isOnline={true}
-                />
-             ))}
-           </div>
-
-           <button onClick={onNextEpisode} className="flex flex-col items-center gap-4 group">
-             <div className="w-14 h-14 rounded-full bg-gradient-to-br from-violet-500 to-blue-500 text-white flex items-center justify-center shadow-[0_0_30px_rgba(139,92,246,0.4)] active:scale-90 transition-all group-hover:scale-110">
-               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor" className="w-6 h-6"><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 13.5L12 21m0 0l-7.5-7.5M12 21V3" /></svg>
-             </div>
-             <span className="text-[9px] font-black tracking-[0.4em] uppercase text-white/30 group-hover:text-violet-400 transition-colors">Next Episode</span>
-           </button>
-        </div>
+        <VideoEndScreen
+          episode={episode}
+          series={series}
+          onEnterStory={onEnterStory}
+          onNextEpisode={onNextEpisode}
+        />
       )}
 
       {!isEnded && (
         <div className={`absolute bottom-0 left-0 right-0 z-[70] pt-20 group/scrubber transition-all pointer-events-none transition-opacity duration-500 ${isUIHidden ? 'opacity-0' : 'opacity-100'}`}>
-          <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-[#0a0a0f]/90 to-transparent h-24 pointer-events-none" />
-          <div className={`relative px-6 pb-6 transition-all duration-300 ${isScrubbing ? 'translate-y-[-10px]' : 'translate-y-0'}`}>
-            <div className="relative h-6 flex items-center">
+          <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent h-20 pointer-events-none" />
+          <div className={`relative px-5 pb-5 transition-all duration-300 ${isScrubbing ? 'translate-y-[-8px]' : 'translate-y-0'}`}>
+            <div className="relative h-5 flex items-center">
               <input 
                 type="range" 
                 min="0" 
@@ -951,15 +1008,14 @@ const ReelItem: React.FC<{
                 className="scrub-range w-full h-1 bg-white/20 rounded-full appearance-none cursor-pointer pointer-events-auto z-10" 
               />
               <div 
-                className={`absolute left-0 top-1/2 -translate-y-1/2 h-1 bg-gradient-to-r from-violet-500 to-blue-500 rounded-full transition-all duration-75 pointer-events-none ${isScrubbing ? 'shadow-[0_0_15px_#8b5cf6]' : ''}`} 
+                className="absolute left-0 top-1/2 -translate-y-1/2 h-1 bg-white rounded-full transition-all duration-75 pointer-events-none" 
                 style={{ width: `${progress}%` }} 
               />
             </div>
-            <div className={`mt-1.5 flex justify-between items-center transition-all duration-500 ${isScrubbing ? 'opacity-100' : 'opacity-40'}`}>
-              <div className="text-[9px] font-black text-white tracking-[0.2em] uppercase tabular-nums">
-                <span className="text-violet-400">{formatTime(currentTime)}</span> / {formatTime(duration)}
+            <div className={`mt-1.5 flex justify-between items-center transition-all duration-500 ${isScrubbing ? 'opacity-100' : 'opacity-50'}`}>
+              <div className="text-[11px] text-white tabular-nums">
+                {formatTime(currentTime)} / {formatTime(duration)}
               </div>
-              <div className="text-[8px] font-black text-white/40 tracking-[0.3em] uppercase">Inscene Rhythm Engine</div>
             </div>
           </div>
         </div>
@@ -1135,8 +1191,11 @@ export const SERIES_CATALOG = [
   }
 ];
 
-// Charcoal theme background
-const CHARCOAL_GRADIENT = 'linear-gradient(135deg, #0a0a0f 0%, #121218 50%, #0a0a0f 100%)';
+// Premium cream/off-white theme - Steve Jobs approved
+const CREAM_BG = '#FAF9F6';
+const SAGE_GREEN = '#4A7C59';
+const SAGE_DARK = '#3D6549';
+const SKY_BLUE = '#4A90A4';
 
 interface ConversationHistoryEntry {
   messages: any[];
@@ -1157,6 +1216,7 @@ const AppContent: React.FC = () => {
   const [choiceModalData, setChoiceModalData] = useState<any>(null);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [isWaitlistModalOpen, setIsWaitlistModalOpen] = useState(false);
+  const [isCalendarOpen, setIsCalendarOpen] = useState(false);
   
   const [conversations, setConversations] = useState<Record<string, ConversationHistoryEntry>>({});
   const [typingStatus, setTypingStatus] = useState<Record<string, boolean>>({});
@@ -1456,13 +1516,13 @@ const AppContent: React.FC = () => {
   };
 
   return (
-    <div className="flex flex-col min-h-[100dvh] h-[100dvh] text-white overflow-hidden" style={{ background: CHARCOAL_GRADIENT }}>
-      <header className={`fixed top-0 left-0 right-0 z-[1000] px-6 py-6 transition-all duration-500 ${selectedSeries ? 'bg-gradient-to-b from-[#0a0a0f]/90 to-transparent' : 'bg-transparent'} ${currentView === 'chats' ? 'hidden' : ''}`}>
+    <div className="flex flex-col min-h-[100dvh] h-[100dvh] overflow-hidden" style={{ background: CREAM_BG, color: '#1A1A1A' }}>
+      <header className={`fixed top-0 left-0 right-0 z-[1000] px-6 py-4 transition-all duration-500 ${selectedSeries ? 'bg-gradient-to-b from-[#FAF9F6]/98 to-transparent backdrop-blur-sm' : 'bg-[#FAF9F6] border-b border-black/[0.06]'} ${currentView === 'chats' ? 'hidden' : ''}`}>
         <div className="flex justify-between items-center max-w-4xl mx-auto">
           {selectedSeries ? (
             <>
               <div 
-                className={`flex items-center gap-3 cursor-pointer group active:scale-95 transition-transform transition-opacity duration-500 ${isHeaderUIHidden ? 'opacity-0 pointer-events-none' : 'opacity-100'}`} 
+                className={`flex items-center gap-3 cursor-pointer group active:scale-[0.98] transition-all duration-500 ${isHeaderUIHidden ? 'opacity-0 pointer-events-none' : 'opacity-100'}`} 
                 onClick={() => { 
                   setIsHeaderUIHidden(false);
                   if (headerInactivityTimerRef.current) {
@@ -1475,9 +1535,11 @@ const AppContent: React.FC = () => {
                   setChatData(null); 
                 }}
               >
-                <Logo size={28} isPulsing={false} />
+                <div className="w-10 h-10 rounded-xl bg-[#4A7C59] flex items-center justify-center shadow-sm hover:shadow-md transition-shadow">
+                  <Logo size={22} isPulsing={false} />
+                </div>
               </div>
-              <div className={`flex items-center gap-3 transition-opacity duration-500 ${isHeaderUIHidden ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
+              <div className={`flex items-center gap-2 transition-opacity duration-500 ${isHeaderUIHidden ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
                 <UserMenu onSignInClick={() => setIsAuthModalOpen(true)} />
                 <button 
                   onClick={() => {
@@ -1490,9 +1552,9 @@ const AppContent: React.FC = () => {
                     }
                     setSelectedSeries(null);
                   }} 
-                  className="w-9 h-9 rounded-full bg-[#1a1a24]/80 backdrop-blur-3xl border border-violet-500/20 flex items-center justify-center active:scale-90 hover:bg-violet-500/20 transition-all"
+                  className="w-9 h-9 rounded-xl bg-white/80 backdrop-blur-sm border border-black/[0.08] flex items-center justify-center active:scale-95 hover:bg-white transition-all shadow-sm"
                 >
-                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor" className="w-4 h-4 text-white"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4 text-[#4A4A4A]"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
                 </button>
               </div>
             </>
@@ -1500,7 +1562,7 @@ const AppContent: React.FC = () => {
             <>
               <div className="flex-1" />
               <div className="flex flex-col items-center">
-                <div className="w-12 h-12 flex items-center justify-center bg-[#1a1a24]/60 backdrop-blur-xl rounded-full border border-violet-500/20 pulse-glow">
+                <div className="w-11 h-11 flex items-center justify-center bg-[#4A7C59] rounded-xl shadow-sm animate-float">
                   <Logo size={24} isPulsing={false} />
                 </div>
               </div>
@@ -1515,32 +1577,43 @@ const AppContent: React.FC = () => {
       {!selectedSeries && (
         <main className={`flex-1 overflow-y-auto hide-scrollbar ${currentView === 'chats' ? 'pt-0 pb-20' : 'pt-24 pb-28 px-6 animate-slide-up'}`}>
           {currentView === 'discover' ? (
-            <div className="flex flex-col gap-6 max-w-lg mx-auto">
+            <div className="flex flex-col gap-8 max-w-lg mx-auto">
+              {/* Greeting for logged in users */}
+              {isAuthenticated && user && (
+                <div className="pt-2">
+                  <h1 className="text-2xl font-semibold text-[#1A1A1A] tracking-tight">
+                    Welcome <span className="text-[#4A7C59]">{user.given_name || user.name?.split(' ')[0] || 'there'}</span> 👋
+                  </h1>
+                </div>
+              )}
 
-              {/* Influencer Cards Section */}
-              <div className="pt-4">
-                  <h2 className="text-xs font-black uppercase tracking-[0.3em] text-white/40 mb-4">Featured Influencers</h2>
+              {/* Influencer Cards Section - Minimal Elegance */}
+              <div className="pt-2">
+                  <h2 className="text-[13px] font-semibold tracking-wide text-[#8A8A8A] mb-5">
+                    Featured
+                  </h2>
                   <div className="grid grid-cols-2 gap-4 mb-8">
-                    {getAllInfluencers().map((influencer: InfluencerInfo) => (
+                    {getAllInfluencers().map((influencer: InfluencerInfo, idx: number) => (
                       <div
                         key={influencer.id}
                         onClick={() => navigate(`/${influencer.id}`)}
-                        className="group cursor-pointer relative aspect-[9/12] rounded-[1.5rem] overflow-hidden border border-violet-500/20 shadow-xl transition-all hover:border-violet-500/50 hover:scale-[1.02] hover:shadow-[0_0_30px_rgba(139,92,246,0.2)] active:scale-95"
+                        className="group cursor-pointer relative aspect-[3/4] rounded-2xl overflow-hidden bg-white border border-black/[0.06] shadow-sm transition-all duration-300 hover:shadow-lg hover:-translate-y-1 active:scale-[0.98]"
+                        style={{ animationDelay: `${idx * 80}ms` }}
                       >
-                        <div className="absolute inset-0 bg-gradient-to-br from-violet-500/20 to-blue-500/20" />
                         <img 
                           src={influencer.avatar} 
                           alt={influencer.name} 
-                          className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity"
+                          className="w-full h-full object-cover"
                         />
-                        <div className="absolute inset-0 bg-gradient-to-t from-[#0a0a0f]/90 via-transparent to-transparent" />
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/10 to-transparent" />
                         <div className="absolute bottom-0 left-0 right-0 p-4">
-                          <h3 className="text-base font-black uppercase tracking-tight text-white mb-1">{influencer.name}</h3>
-                          <p className="text-[9px] font-medium text-white/50 line-clamp-2">{influencer.seriesTitle}</p>
+                          <h3 className="text-[15px] font-semibold text-white mb-0.5 tracking-tight">{influencer.name}</h3>
+                          <p className="text-[12px] font-medium text-white/60 line-clamp-1">{influencer.seriesTitle}</p>
                         </div>
-                        <div className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <div className="w-10 h-10 rounded-full bg-violet-500/30 backdrop-blur-md border border-violet-500/50 flex items-center justify-center">
-                            <svg viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5 text-white ml-0.5"><path d="M8 5v14l11-7z" /></svg>
+                        {/* Play button on hover */}
+                        <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-300 bg-black/10">
+                          <div className="w-12 h-12 rounded-full bg-white/95 backdrop-blur-sm flex items-center justify-center shadow-lg transform scale-90 group-hover:scale-100 transition-transform">
+                            <svg viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5 text-[#1A1A1A] ml-0.5"><path d="M8 5v14l11-7z" /></svg>
                           </div>
                         </div>
                       </div>
@@ -1549,9 +1622,9 @@ const AppContent: React.FC = () => {
                 </div>
             </div>
           ) : (
-            <div className="flex flex-col h-full bg-[#0a0a0f] relative">
-              {/* Dark Theme Chat Header */}
-              <div className="bg-gradient-to-r from-[#1a1a24] to-[#121218] text-white pt-10 px-6 pb-4 shadow-lg border-b border-violet-500/10">
+            <div className="flex flex-col h-full bg-[#FAF9F6] relative">
+              {/* Minimal Chat Header */}
+              <div className="bg-[#FAF9F6] pt-10 px-6 pb-4 border-b border-black/[0.06]">
                 <div className="flex items-center justify-between">
                   {isSearchActive ? (
                     <div className="flex-1 flex items-center gap-3 mr-4">
@@ -1559,29 +1632,31 @@ const AppContent: React.FC = () => {
                         type="text"
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
-                        placeholder="Search chats..."
+                        placeholder="Search..."
                         autoFocus
-                        className="flex-1 bg-[#0a0a0f] border border-violet-500/20 rounded-full px-4 py-2 text-white placeholder:text-white/30 focus:outline-none focus:border-violet-500/50 text-sm"
+                        className="flex-1 bg-white border border-black/[0.08] rounded-xl px-4 py-2.5 text-[#1A1A1A] placeholder:text-[#ACACAC] focus:outline-none focus:border-[#4A7C59] text-sm font-medium shadow-sm"
                       />
                       <button
                         onClick={() => {
                           setIsSearchActive(false);
                           setSearchQuery('');
                         }}
-                        className="p-1 hover:bg-violet-500/20 rounded-full transition-colors"
+                        className="p-2 hover:bg-black/[0.04] rounded-lg transition-colors"
                       >
-                        <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" className="text-violet-400"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+                        <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" className="text-[#8A8A8A]"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
                       </button>
                     </div>
                   ) : (
                     <>
-                      <h1 className="text-2xl font-bold tracking-wide">Chats</h1>
-                      <div className="flex items-center gap-5">
+                      <h1 className="text-xl font-semibold text-[#1A1A1A] tracking-tight">
+                        Messages
+                      </h1>
+                      <div className="flex items-center gap-4">
                         <button 
                           onClick={() => setIsSearchActive(true)}
-                          className="p-1 hover:bg-violet-500/20 rounded-full transition-colors"
+                          className="p-2 hover:bg-black/[0.04] rounded-lg transition-colors"
                         >
-                          <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" className="text-violet-400"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+                          <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" className="text-[#8A8A8A]"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
                         </button>
                       </div>
                     </>
@@ -1590,7 +1665,7 @@ const AppContent: React.FC = () => {
               </div>
 
               {/* Chat List Area */}
-              <div className="flex-1 overflow-y-auto pt-1 bg-[#0a0a0f]">
+              <div className="flex-1 overflow-y-auto pt-1 bg-[#FAF9F6]">
                 {(() => {
                   // Get all characters and merge with existing conversations (excluding Arzoo)
                   const allCharacterNames = getAllCharacterNames().filter(name => name !== 'Arzoo');
@@ -1633,9 +1708,8 @@ const AppContent: React.FC = () => {
                   
                   if (searchQuery.trim() && filteredConversations.length === 0) {
                     return (
-                      <div className="flex flex-col items-center justify-center py-20 text-center animate-fade-in text-white/40">
-                        <h3 className="text-lg font-medium mb-1">No results found</h3>
-                        <p className="text-sm px-10 text-white/30">Try searching for a different name or message.</p>
+                      <div className="flex flex-col items-center justify-center py-20 text-center animate-fade-in">
+                        <p className="text-[15px] font-medium text-[#8A8A8A]">No results found</p>
                       </div>
                     );
                   }
@@ -1658,28 +1732,32 @@ const AppContent: React.FC = () => {
                             entryPoint: 'chat_history'
                           });
                         }}
-                        className="flex items-center gap-4 px-4 py-3.5 hover:bg-[#1a1a24]/50 active:bg-[#1a1a24] transition-all cursor-pointer group border-b border-violet-500/5"
+                        className="flex items-center gap-4 px-5 py-4 hover:bg-black/[0.02] active:bg-black/[0.04] transition-all cursor-pointer"
                       >
-                        <div className="relative w-[54px] h-[54px] rounded-full overflow-hidden bg-[#1a1a24] border border-violet-500/20">
-                           <img src={conv.avatar} alt={conv.character} className="w-full h-full object-cover" />
+                        <div className="relative w-[52px] h-[52px] rounded-full bg-[#F5F3EE]">
+                           <div className="w-full h-full rounded-full overflow-hidden">
+                             <img src={conv.avatar} alt={conv.character} className="w-full h-full object-cover" />
+                           </div>
+                           {/* Online dot */}
+                           <div className="absolute bottom-0 right-0 w-3 h-3 rounded-full bg-[#4A7C59] border-2 border-[#FAF9F6] z-10" />
                         </div>
                         <div className="flex-1 flex flex-col justify-center min-w-0">
                           <div className="flex justify-between items-baseline mb-0.5">
-                            <h4 className="text-[17px] font-bold text-white leading-tight truncate">{conv.character}</h4>
-                            <span className="text-[11px] font-medium text-violet-400 whitespace-nowrap ml-2">
+                            <h4 className="text-[15px] font-semibold text-[#1A1A1A] leading-tight truncate tracking-tight">{conv.character}</h4>
+                            <span className="text-[11px] font-medium text-[#ACACAC] whitespace-nowrap ml-2">
                               {conv.lastUpdate ? new Date(conv.lastUpdate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
                             </span>
                           </div>
                           <div className="flex justify-between items-center">
-                            <p className="text-[14px] text-white/50 truncate pr-4 font-normal leading-tight">
+                            <p className="text-[13px] text-[#8A8A8A] truncate pr-4 leading-snug">
                               {typingStatus[conv.character] 
                                 ? 'typing...' 
                                 : (conv.messages.length > 0 
                                   ? conv.messages[conv.messages.length - 1]?.content 
-                                  : 'Tap to chat')}
+                                  : 'Start a conversation')}
                             </p>
                             {unseenCounts[conv.character] > 0 && (
-                              <div className="bg-gradient-to-r from-violet-500 to-blue-500 text-white rounded-full min-w-[20px] h-5 flex items-center justify-center text-[10px] font-bold px-1.5 shadow-sm">
+                              <div className="bg-[#4A7C59] text-white rounded-full min-w-[20px] h-[20px] flex items-center justify-center text-[11px] font-semibold px-1.5">
                                 {unseenCounts[conv.character]}
                               </div>
                             )}
@@ -1721,62 +1799,104 @@ const AppContent: React.FC = () => {
       )}
 
       {!selectedSeries && (
-        <nav className="fixed bottom-0 left-0 right-0 z-[1001] px-6 pb-8 pt-4">
-          <div className="max-w-md mx-auto h-16 rounded-[2rem] border border-violet-500/20 flex items-center shadow-[0_0_40px_rgba(139,92,246,0.1)] relative overflow-hidden bg-[#121218]/90 backdrop-blur-3xl">
+        <nav className="fixed bottom-0 left-0 right-0 z-[1001] px-4 pb-6 pt-2">
+          <div className="max-w-md mx-auto h-14 rounded-2xl border border-black/[0.06] flex items-center shadow-lg relative overflow-hidden bg-white/80 backdrop-blur-xl">
             <button 
-              onClick={() => setCurrentView('discover')}
-              className={`flex-1 flex flex-col items-center gap-1 transition-all justify-center h-full ${currentView === 'discover' ? 'text-violet-400' : 'text-white/30'}`}
+              onClick={() => {
+                setCurrentView('discover');
+                setIsCalendarOpen(false);
+              }}
+              className={`flex-1 flex flex-col items-center gap-0.5 transition-colors duration-300 ease-in-out justify-center h-full ${currentView === 'discover' && !isCalendarOpen ? 'text-[#4A7C59]' : 'text-[#ACACAC]'}`}
             >
               <svg 
                 viewBox="0 0 24 24" 
                 fill="currentColor" 
-                className={`w-6 h-6 transition-all duration-300 ${currentView === 'discover' ? 'drop-shadow-[0_0_8px_rgba(139,92,246,0.8)]' : ''}`}
+                className="w-6 h-6 transition-colors duration-300 ease-in-out"
               >
                 <path d="M11.03 3.97a.75.75 0 0 1 1.06 0l7.452 7.453c.11.11.176.26.182.417v8.91a.75.75 0 0 1-.75.75H14.5a.75.75 0 0 1-.75-.75v-4.5a.75.75 0 0 0-.75-.75h-2a.75.75 0 0 0-.75.75v4.5a.75.75 0 0 1-.75.75H5.274a.75.75 0 0 1-.75-.75V11.84c.006-.157.072-.307.182-.417L11.03 3.97Z" />
               </svg>
-              {currentView === 'discover' && <div className="w-1 h-1 bg-violet-400 rounded-full mt-0.5 shadow-[0_0_5px_#8b5cf6] animate-fade-in" />}
+              <span className="text-[10px] font-semibold transition-colors duration-300 ease-in-out">Discover</span>
             </button>
 
             <button 
-              onClick={() => setCurrentView('chats')}
-              className={`flex-1 flex flex-col items-center gap-1 transition-all justify-center h-full ${currentView === 'chats' ? 'text-violet-400' : 'text-white/30'}`}
+              onClick={() => {
+                setCurrentView('chats');
+                setIsCalendarOpen(false);
+              }}
+              className={`flex-1 flex flex-col items-center gap-0.5 transition-colors duration-300 ease-in-out justify-center h-full ${currentView === 'chats' && !isCalendarOpen ? 'text-[#4A90A4]' : 'text-[#ACACAC]'}`}
             >
               <div className="relative">
-                <svg viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6">
+                <svg viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6 transition-colors duration-300 ease-in-out">
                   <path fillRule="evenodd" d="M4.804 21.644A6.707 6.707 0 006 21.75a6.721 6.721 0 003.583-1.029c.774.182 1.584.279 2.417.279 5.322 0 9.75-3.97 9.75-9 0-5.03-4.428-9-9.75-9s-9.75 3.97-9.75 9c0 2.409 1.025 4.587 2.674 6.192.232.226.277.428.178.713a19.022 19.022 0 01-1.522 3.535c-.211.373.08.794.48.754a10.875 10.875 0 002.517-.504z" clipRule="evenodd" />
                 </svg>
                 {Object.keys(conversations).length > 0 && currentView !== 'chats' && (
-                  <div className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-violet-500 rounded-full border-2 border-[#121218] animate-pulse" />
+                  <div className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-[#C77B58] rounded-full" />
                 )}
               </div>
-              {currentView === 'chats' && <div className="w-1 h-1 bg-violet-400 rounded-full mt-0.5 shadow-[0_0_5px_#8b5cf6] animate-fade-in" />}
+              <span className="text-[10px] font-semibold transition-colors duration-300 ease-in-out">Messages</span>
+            </button>
+
+            {/* Calendar/Goals Tab */}
+            <button 
+              onClick={() => {
+                if (isAuthenticated) {
+                  setIsCalendarOpen(true);
+                } else {
+                  setIsAuthModalOpen(true);
+                }
+              }}
+              className={`flex-1 flex flex-col items-center gap-0.5 transition-colors duration-300 ease-in-out justify-center h-full ${isCalendarOpen ? 'text-[#C9A227]' : 'text-[#ACACAC]'} hover:text-[#C9A227]`}
+            >
+              <svg viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6 transition-colors duration-300 ease-in-out">
+                <path fillRule="evenodd" d="M6.75 2.25A.75.75 0 0 1 7.5 3v1.5h9V3A.75.75 0 0 1 18 3v1.5h.75a3 3 0 0 1 3 3v11.25a3 3 0 0 1-3 3H5.25a3 3 0 0 1-3-3V7.5a3 3 0 0 1 3-3H6V3a.75.75 0 0 1 .75-.75Zm13.5 9a1.5 1.5 0 0 0-1.5-1.5H5.25a1.5 1.5 0 0 0-1.5 1.5v7.5a1.5 1.5 0 0 0 1.5 1.5h13.5a1.5 1.5 0 0 0 1.5-1.5v-7.5Z" clipRule="evenodd" />
+              </svg>
+              <span className="text-[10px] font-semibold transition-colors duration-300 ease-in-out">Progress</span>
             </button>
           </div>
         </nav>
       )}
 
-      {/* Choice Selection Modal */}
+      {/* Calendar View */}
+      {isCalendarOpen && (
+        <CalendarView 
+          onClose={() => setIsCalendarOpen(false)}
+          onGoalSelect={(goal) => {
+            // Open chat with the creator
+            setIsCalendarOpen(false);
+            handleChatInit({
+              char: goal.creator_id,
+              intro: `Let's check on your goal: "${goal.title}"`,
+              hook: goal.daily_task,
+              isFromHistory: true,
+              isWhatsApp: true,
+              entryPoint: 'chat_history'
+            });
+          }}
+        />
+      )}
+
+      {/* Choice Selection Modal - Minimal Elegance */}
       {choiceModalData && (
-        <div className="fixed inset-0 z-[2000] flex items-center justify-center p-6 bg-[#0a0a0f]/80 backdrop-blur-sm animate-fade-in">
-          <div className="relative w-full max-w-sm bg-[#121218]/95 backdrop-blur-[60px] border border-violet-500/20 rounded-[3.5rem] overflow-hidden shadow-[0_30px_100px_rgba(139,92,246,0.2)] p-8 animate-slide-up">
+        <div className="fixed inset-0 z-[2000] flex items-center justify-center p-6 bg-black/30 backdrop-blur-md animate-fade-in">
+          <div className="relative w-full max-w-sm bg-white rounded-2xl overflow-hidden shadow-xl p-8 animate-slide-up">
              {/* Close Button */}
              <button 
                onClick={() => setChoiceModalData(null)} 
-               className="absolute top-6 right-6 w-10 h-10 rounded-full bg-[#1a1a24]/80 hover:bg-violet-500/20 border border-violet-500/20 flex items-center justify-center transition-all active:scale-90"
+               className="absolute top-5 right-5 w-9 h-9 rounded-xl bg-black/[0.04] hover:bg-black/[0.08] flex items-center justify-center transition-all active:scale-95"
              >
-               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-5 h-5 text-white/50"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4 text-[#8A8A8A]"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
              </button>
 
-             <div className="flex flex-col items-center gap-6 mt-4">
-                <div className="relative w-28 h-28 rounded-full overflow-hidden border-2 border-violet-500/30 shadow-[0_0_40px_rgba(139,92,246,0.3)] p-1 bg-gradient-to-tr from-violet-500/20 to-transparent">
-                  <img src={choiceModalData.thumbnail} className="w-full h-full object-cover rounded-full" />
+             <div className="flex flex-col items-center gap-6 mt-2">
+                <div className="relative w-24 h-24 rounded-2xl overflow-hidden shadow-md">
+                  <img src={choiceModalData.thumbnail} className="w-full h-full object-cover" />
                 </div>
                 <div className="text-center">
-                  <h3 className="text-2xl font-black italic uppercase tracking-tighter text-white">{choiceModalData.title}</h3>
-                  <p className="text-violet-400/60 text-[9px] font-black tracking-[0.4em] uppercase mt-2">Pick your experience</p>
+                  <h3 className="text-xl font-semibold text-[#1A1A1A] tracking-tight">{choiceModalData.title}</h3>
+                  <p className="text-[#8A8A8A] text-sm mt-1">How would you like to start?</p>
                 </div>
                 
-                <div className="w-full flex flex-col gap-4 mt-2">
+                <div className="w-full flex flex-col gap-3 mt-2">
                   {/* Show influencer options if multiple, otherwise show default options */}
                   {choiceModalData.avatars && Object.keys(choiceModalData.avatars).filter(name => name !== 'Arzoo').length > 1 ? (
                     // Multiple influencers - show routes to each (excluding Arzoo)
@@ -1789,9 +1909,9 @@ const AppContent: React.FC = () => {
                             navigate(`/${getInfluencerSlug(influencerName)}`);
                             setChoiceModalData(null);
                           }}
-                          className="w-full py-5 rounded-[2rem] bg-gradient-to-r from-violet-500 to-blue-500 text-white font-black uppercase tracking-widest text-[10px] shadow-[0_10px_30px_rgba(139,92,246,0.3)] active:scale-95 transition-all"
+                          className="w-full py-3.5 rounded-xl bg-[#4A7C59] text-white font-semibold text-[15px] hover:bg-[#3D6549] active:scale-[0.98] transition-all"
                         >
-                          Visit {influencerName}'s Page
+                          Visit {influencerName}
                         </button>
                       ))
                   ) : (
@@ -1815,9 +1935,9 @@ const AppContent: React.FC = () => {
                           });
                           setChoiceModalData(null);
                         }}
-                        className="w-full py-5 rounded-[2rem] bg-gradient-to-r from-violet-500 to-blue-500 text-white font-black uppercase tracking-widest text-[10px] shadow-[0_10px_30px_rgba(139,92,246,0.3)] active:scale-95 transition-all"
+                        className="w-full py-3.5 rounded-xl bg-[#4A7C59] text-white font-semibold text-[15px] hover:bg-[#3D6549] active:scale-[0.98] transition-all"
                       >
-                        {choiceModalData.id === 'heart-beats' ? '1. Immersive story on text' : '1. Chat with AI Avatar'}
+                        {choiceModalData.id === 'heart-beats' ? 'Start Chat' : 'Chat with Coach'}
                       </button>
                       
                       <button 
@@ -1831,9 +1951,9 @@ const AppContent: React.FC = () => {
                           }
                           setChoiceModalData(null);
                         }}
-                        className="w-full py-5 rounded-[2rem] bg-[#1a1a24]/80 border border-violet-500/20 text-white font-black uppercase tracking-widest text-[10px] active:scale-95 transition-all hover:bg-violet-500/10"
+                        className="w-full py-3.5 rounded-xl bg-transparent border border-black/[0.12] text-[#4A4A4A] font-semibold text-[15px] hover:bg-black/[0.02] active:scale-[0.98] transition-all"
                       >
-                        {choiceModalData.id === 'heart-beats' ? '2. Watch and interact' : '2. Watch and Learn'}
+                        {choiceModalData.id === 'heart-beats' ? 'Watch Video' : 'Watch Content'}
                       </button>
                     </>
                   )}
@@ -1882,35 +2002,25 @@ const AppContent: React.FC = () => {
 
       <style>{`
         .hide-scrollbar::-webkit-scrollbar { display: none; }
-        @keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
-        .animate-slide-up { animation: slideUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+        @keyframes slideUp { from { transform: translateY(16px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        .animate-slide-up { animation: slideUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-        .animate-fade-in { animation: fadeIn 0.4s ease-out forwards; }
-        @keyframes pulseGlow { 
-          0%, 100% { opacity: 0.5; transform: scale(1); }
-          50% { opacity: 0.9; transform: scale(1.08); }
-        }
-        .animate-pulse-glow { animation: pulseGlow 1.5s ease-in-out infinite; }
-        @keyframes chatPulse {
-          0%, 100% { transform: scale(1); }
-          50% { transform: scale(1.03); }
-        }
-        .animate-chat-pulse { animation: chatPulse 2s ease-in-out infinite; }
-        @keyframes ringPulse {
-          0%, 100% { opacity: 0.3; transform: scale(1); }
-          50% { opacity: 0.7; transform: scale(1.1); }
-        }
-        .animate-ring-pulse { animation: ringPulse 2s ease-in-out infinite; }
-        @keyframes dotBounce {
+        .animate-fade-in { animation: fadeIn 0.3s ease-out forwards; }
+        @keyframes subtleFloat { 
           0%, 100% { transform: translateY(0); }
           50% { transform: translateY(-4px); }
         }
-        .dot-bounce-1 { animation: dotBounce 1.2s ease-in-out infinite; }
-        .dot-bounce-2 { animation: dotBounce 1.2s ease-in-out infinite 0.2s; }
-        .dot-bounce-3 { animation: dotBounce 1.2s ease-in-out infinite 0.4s; }
+        .animate-float { animation: subtleFloat 3s ease-in-out infinite; }
+        @keyframes dotBounce {
+          0%, 100% { transform: translateY(0); }
+          50% { transform: translateY(-3px); }
+        }
+        .dot-bounce-1 { animation: dotBounce 1s ease-in-out infinite; }
+        .dot-bounce-2 { animation: dotBounce 1s ease-in-out infinite 0.15s; }
+        .dot-bounce-3 { animation: dotBounce 1s ease-in-out infinite 0.3s; }
         .reel-snap-container { scroll-behavior: smooth; }
         .scrub-range { -webkit-appearance: none; }
-        .scrub-range::-webkit-slider-thumb { -webkit-appearance: none; width: 12px; height: 12px; background: white; border-radius: 50%; border: 2px solid #8b5cf6; box-shadow: 0 0 10px rgba(139, 92, 246, 0.5); cursor: pointer; }
+        .scrub-range::-webkit-slider-thumb { -webkit-appearance: none; width: 12px; height: 12px; background: white; border-radius: 50%; box-shadow: 0 1px 4px rgba(0,0,0,0.2); cursor: pointer; }
       `}</style>
     </div>
   );

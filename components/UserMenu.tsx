@@ -24,7 +24,7 @@ const UserMenu: React.FC<UserMenuProps> = ({ onSignInClick }) => {
 
   if (isLoading) {
     return (
-      <div className="w-9 h-9 rounded-full bg-violet-500/20 animate-pulse" />
+      <div className="w-9 h-9 rounded-xl bg-black/[0.04] animate-pulse" />
     );
   }
 
@@ -32,7 +32,7 @@ const UserMenu: React.FC<UserMenuProps> = ({ onSignInClick }) => {
     return (
       <button
         onClick={onSignInClick}
-        className="px-4 py-2 rounded-full bg-[#1a1a24]/80 backdrop-blur-xl border border-violet-500/20 text-white text-xs font-bold uppercase tracking-widest hover:bg-violet-500/20 hover:border-violet-500/40 active:scale-95 transition-all"
+        className="px-4 py-2 rounded-xl bg-[#4A7C59] text-white text-[13px] font-semibold hover:bg-[#3D6549] active:scale-[0.98] transition-all"
       >
         Sign In
       </button>
@@ -47,82 +47,82 @@ const UserMenu: React.FC<UserMenuProps> = ({ onSignInClick }) => {
     <div className="relative" ref={menuRef}>
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-2 p-1 rounded-full bg-[#1a1a24]/80 backdrop-blur-xl border border-violet-500/20 hover:bg-violet-500/20 hover:border-violet-500/40 active:scale-95 transition-all"
+        className="flex items-center gap-2 p-0.5 rounded-xl bg-white border border-black/[0.06] hover:border-black/[0.12] active:scale-[0.98] transition-all shadow-sm"
       >
         {avatarUrl ? (
           <img 
             src={avatarUrl} 
             alt={displayName} 
-            className="w-8 h-8 rounded-full object-cover"
+            className="w-8 h-8 rounded-lg object-cover"
             referrerPolicy="no-referrer"
           />
         ) : (
-          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-violet-500 to-blue-500 flex items-center justify-center text-white font-bold text-sm">
+          <div className="w-8 h-8 rounded-lg bg-[#4A7C59] flex items-center justify-center text-white font-semibold text-sm">
             {initials}
           </div>
         )}
       </button>
 
-      {/* Dropdown Menu */}
+      {/* Dropdown Menu - Minimal Elegance */}
       {isOpen && (
-        <div className="absolute right-0 top-12 w-64 bg-[#121218]/95 backdrop-blur-xl border border-violet-500/20 rounded-2xl shadow-[0_20px_60px_rgba(139,92,246,0.2)] overflow-hidden animate-fade-in z-[100]">
+        <div className="absolute right-0 top-11 w-56 bg-white border border-black/[0.08] rounded-xl shadow-lg overflow-hidden animate-fade-in z-[100]">
           {/* User Info */}
-          <div className="px-5 py-4 border-b border-violet-500/10">
+          <div className="px-4 py-3 border-b border-black/[0.06] bg-[#FAF9F6]">
             <div className="flex items-center gap-3">
               {avatarUrl ? (
                 <img 
                   src={avatarUrl} 
                   alt={displayName} 
-                  className="w-12 h-12 rounded-full object-cover border border-violet-500/20"
+                  className="w-10 h-10 rounded-lg object-cover"
                   referrerPolicy="no-referrer"
                 />
               ) : (
-                <div className="w-12 h-12 rounded-full bg-gradient-to-br from-violet-500 to-blue-500 flex items-center justify-center text-white font-bold text-lg">
+                <div className="w-10 h-10 rounded-lg bg-[#4A7C59] flex items-center justify-center text-white font-semibold">
                   {initials}
                 </div>
               )}
               <div className="flex-1 min-w-0">
-                <p className="text-white font-semibold truncate">{displayName}</p>
-                <p className="text-violet-400/50 text-sm truncate">{user?.email}</p>
+                <p className="text-[#1A1A1A] font-semibold text-[14px] truncate">{displayName}</p>
+                <p className="text-[#8A8A8A] text-[12px] truncate">{user?.email}</p>
               </div>
             </div>
           </div>
 
           {/* Menu Items */}
-          <div className="py-2">
+          <div className="py-1">
             <button
               onClick={() => {
                 setIsOpen(false);
               }}
-              className="w-full px-5 py-3 flex items-center gap-3 text-white/70 hover:text-white hover:bg-violet-500/10 transition-all text-left"
+              className="w-full px-4 py-2.5 flex items-center gap-3 text-[#4A4A4A] hover:bg-black/[0.02] transition-all text-left"
             >
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 text-violet-400/60">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4 text-[#8A8A8A]">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
               </svg>
-              <span className="text-sm font-medium">Profile</span>
+              <span className="text-[13px] font-medium">Profile</span>
             </button>
 
-            <div className="my-2 border-t border-violet-500/10" />
+            <div className="my-1 border-t border-black/[0.06] mx-3" />
 
             <button
               onClick={async () => {
                 setIsOpen(false);
                 await signOut();
               }}
-              className="w-full px-5 py-3 flex items-center gap-3 text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-all text-left"
+              className="w-full px-4 py-2.5 flex items-center gap-3 text-[#C77B58] hover:bg-[#C77B58]/5 transition-all text-left"
             >
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l-3 3m0 0l3 3m-3-3h12.75" />
               </svg>
-              <span className="text-sm font-medium">Sign Out</span>
+              <span className="text-[13px] font-medium">Sign Out</span>
             </button>
           </div>
         </div>
       )}
 
       <style>{`
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: translateY(0); } }
-        .animate-fade-in { animation: fadeIn 0.2s ease-out forwards; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: translateY(0); } }
+        .animate-fade-in { animation: fadeIn 0.15s ease-out forwards; }
       `}</style>
     </div>
   );

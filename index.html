@@ -4,68 +4,139 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="theme-color" content="#0a0a0f">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="theme-color" content="#FAF9F6">
     <link rel="icon" type="image/png" href="/icon.png">
     <link rel="apple-touch-icon" href="/icon.png">
-    <title>Inscene | Watch. Talk. Connect. </title>
+    <title>Inscene | Watch. Talk. Connect.</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-      @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&display=swap');
+      @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
       
       :root {
-        /* Charcoal Black Theme */
-        --bg-charcoal: #0a0a0f;
-        --bg-charcoal-light: #121218;
-        --bg-charcoal-lighter: #1a1a24;
-        --bg-charcoal-surface: #222230;
+        /* Cream/Off-white Premium Palette */
+        --bg-cream: #FAF9F6;
+        --bg-cream-warm: #F5F3EE;
+        --bg-cream-soft: #FFFCF7;
+        --bg-card: #FFFFFF;
         
-        /* Blue/Violet Accent Palette */
-        --accent-blue: #3b82f6;
-        --accent-blue-bright: #60a5fa;
-        --accent-violet: #8b5cf6;
-        --accent-violet-bright: #a78bfa;
-        --accent-indigo: #6366f1;
-        --accent-purple: #a855f7;
+        /* Refined Accent Colors - Softer, more elegant */
+        --accent-sage: #4A7C59;
+        --accent-sage-light: #6B9B7A;
+        --accent-sage-dark: #3D6549;
         
-        /* Glow effects */
-        --glow-blue: rgba(59, 130, 246, 0.4);
-        --glow-violet: rgba(139, 92, 246, 0.4);
+        --accent-sky: #4A90A4;
+        --accent-coral: #C77B58;
+        --accent-amber: #C9A227;
+        --accent-rose: #B4687A;
+        
+        /* Text Colors - Refined grays */
+        --text-primary: #1A1A1A;
+        --text-secondary: #4A4A4A;
+        --text-muted: #8A8A8A;
+        --text-light: #ACACAC;
+        
+        /* Borders */
+        --border-subtle: rgba(0, 0, 0, 0.06);
+        --border-light: rgba(0, 0, 0, 0.08);
+        --border-medium: rgba(0, 0, 0, 0.12);
+        
+        /* Shadows - Soft and elegant */
+        --shadow-subtle: 0 1px 2px rgba(0, 0, 0, 0.04);
+        --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.04);
+        --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.06);
+        --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.08);
+        --shadow-xl: 0 16px 48px rgba(0, 0, 0, 0.10);
       }
 
       html, body {
         height: 100%;
         width: 100%;
         overflow: hidden;
-        background-color: var(--bg-charcoal);
+        background-color: var(--bg-cream);
         position: fixed;
       }
 
       body {
-        font-family: 'Outfit', sans-serif;
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
         margin: 0;
         padding: 0;
-        background: var(--bg-charcoal);
-        background-attachment: fixed;
-        color: #ffffff;
+        background: var(--bg-cream);
+        color: var(--text-primary);
         -webkit-tap-highlight-color: transparent;
         user-select: none;
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
       }
 
+      /* Elegant button styles */
+      .btn-primary {
+        background-color: var(--accent-sage);
+        color: white;
+        border: none;
+        border-radius: 12px;
+        padding: 14px 28px;
+        font-weight: 600;
+        font-size: 15px;
+        letter-spacing: -0.01em;
+        transition: all 0.2s ease;
+        cursor: pointer;
+      }
+      .btn-primary:hover {
+        background-color: var(--accent-sage-dark);
+        transform: translateY(-1px);
+        box-shadow: var(--shadow-md);
+      }
+      .btn-primary:active {
+        transform: translateY(0);
+      }
+
+      .btn-secondary {
+        background-color: transparent;
+        color: var(--text-secondary);
+        border: 1.5px solid var(--border-medium);
+        border-radius: 12px;
+        padding: 13px 27px;
+        font-weight: 600;
+        font-size: 15px;
+        letter-spacing: -0.01em;
+        transition: all 0.2s ease;
+        cursor: pointer;
+      }
+      .btn-secondary:hover {
+        border-color: var(--accent-sage);
+        color: var(--accent-sage);
+        background-color: rgba(74, 124, 89, 0.04);
+      }
+
+      /* Elegant card styles */
+      .card {
+        background: var(--bg-card);
+        border: 1px solid var(--border-subtle);
+        border-radius: 16px;
+        box-shadow: var(--shadow-sm);
+        transition: all 0.3s ease;
+      }
+      .card:hover {
+        box-shadow: var(--shadow-md);
+        transform: translateY(-2px);
+      }
+
+      /* Animations */
       @keyframes slideUp {
-        from { transform: translateY(20px); opacity: 0; }
+        from { transform: translateY(16px); opacity: 0; }
         to { transform: translateY(0); opacity: 1; }
       }
       .animate-slide-up {
-        animation: slideUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        animation: slideUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
       }
 
       @keyframes slideUpSide {
-        from { transform: translateY(30px) scale(0.9); opacity: 0; }
+        from { transform: translateY(24px) scale(0.96); opacity: 0; }
         to { transform: translateY(0) scale(1); opacity: 1; }
       }
       .animate-slide-up-side {
-        animation: slideUpSide 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        animation: slideUpSide 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
       }
 
       @keyframes fadeIn {
@@ -73,21 +144,21 @@
         to { opacity: 1; }
       }
       .animate-fade-in {
-        animation: fadeIn 0.4s ease-out forwards;
+        animation: fadeIn 0.3s ease-out forwards;
       }
 
-      @keyframes pulse-glow {
-        0%, 100% { box-shadow: 0 0 20px var(--glow-violet), 0 0 40px var(--glow-blue); }
-        50% { box-shadow: 0 0 30px var(--glow-violet), 0 0 60px var(--glow-blue); }
+      @keyframes subtle-float {
+        0%, 100% { transform: translateY(0); }
+        50% { transform: translateY(-4px); }
       }
-      .pulse-glow {
-        animation: pulse-glow 2s ease-in-out infinite;
+      .animate-float {
+        animation: subtle-float 3s ease-in-out infinite;
       }
 
       ::-webkit-scrollbar { display: none; }
       #root { height: 100%; width: 100%; }
 
-      /* Improved snapping for YouTube-like experience */
+      /* Scroll snapping */
       .reel-snap-container {
         scroll-snap-type: y mandatory;
         height: 100dvh;
@@ -113,8 +184,30 @@
         background: transparent;
       }
       .custom-scrollbar::-webkit-scrollbar-thumb {
-        background: var(--accent-violet);
+        background: var(--accent-sage);
         border-radius: 2px;
+        opacity: 0.5;
+      }
+
+      /* Refined input styles */
+      input, textarea {
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+        letter-spacing: -0.01em;
+      }
+      
+      input:focus, textarea:focus {
+        outline: none;
+      }
+
+      /* Premium badge */
+      .badge-streak {
+        background: linear-gradient(135deg, var(--accent-amber) 0%, var(--accent-coral) 100%);
+        color: white;
+        font-weight: 700;
+        padding: 6px 12px;
+        border-radius: 20px;
+        font-size: 13px;
+        letter-spacing: -0.01em;
       }
     </style>
     <script type="importmap">

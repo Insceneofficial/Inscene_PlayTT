@@ -29,10 +29,10 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess }) => 
       
       // Render new Google button
       window.google.accounts.id.renderButton(googleButtonRef.current, {
-        theme: 'filled_blue',
+        theme: 'outline',
         size: 'large',
         text: 'continue_with',
-        width: 300,
+        width: 280,
         logo_alignment: 'center',
       });
     }
@@ -41,49 +41,49 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess }) => 
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-[6000] flex items-center justify-center p-4 bg-[#0a0a0f]/80 backdrop-blur-xl animate-fade-in">
-      <div className="relative w-full max-w-md bg-gradient-to-br from-[#1a1a24] via-[#121218] to-[#0a0a0f] border border-violet-500/20 rounded-[2.5rem] overflow-hidden shadow-[0_40px_100px_rgba(139,92,246,0.2)] animate-slide-up">
+    <div className="fixed inset-0 z-[6000] flex items-center justify-center p-4 bg-black/30 backdrop-blur-md animate-fade-in">
+      <div className="relative w-full max-w-sm bg-white rounded-2xl overflow-hidden shadow-xl animate-slide-up">
         {/* Header */}
         <div className="relative px-8 pt-8 pb-6">
           {/* Close Button */}
           <button 
             onClick={onClose}
-            className="absolute top-6 right-6 w-10 h-10 rounded-full bg-[#1a1a24]/80 hover:bg-violet-500/20 border border-violet-500/20 flex items-center justify-center transition-all active:scale-90"
+            className="absolute top-5 right-5 w-8 h-8 rounded-lg bg-black/[0.04] hover:bg-black/[0.08] flex items-center justify-center transition-all active:scale-95"
           >
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-5 h-5 text-violet-400/50">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4 text-[#8A8A8A]">
               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
 
           {/* Logo/Title */}
           <div className="flex flex-col items-center gap-4">
-            <div className="w-20 h-20 rounded-full bg-gradient-to-br from-violet-500 to-blue-500 flex items-center justify-center shadow-[0_0_60px_rgba(139,92,246,0.4)]">
-              <svg viewBox="0 0 24 24" fill="currentColor" className="w-10 h-10 text-white">
+            <div className="w-16 h-16 rounded-2xl bg-[#4A7C59] flex items-center justify-center">
+              <svg viewBox="0 0 24 24" fill="currentColor" className="w-8 h-8 text-white">
                 <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
               </svg>
             </div>
             <div className="text-center">
-              <h2 className="text-3xl font-black text-white tracking-tight">
+              <h2 className="text-2xl font-semibold text-[#1A1A1A] tracking-tight">
                 Welcome
               </h2>
-              <p className="text-white/40 text-sm mt-2 max-w-[280px]">
-                Sign in to save your progress and unlock personalized experiences
+              <p className="text-[#8A8A8A] text-[14px] mt-2 max-w-[260px]">
+                Sign in to save your progress and access all features
               </p>
             </div>
           </div>
         </div>
 
         {/* Content */}
-        <div className="px-8 pb-10 space-y-6">
+        <div className="px-8 pb-8 space-y-4 bg-[#FAF9F6]">
           {/* Google Sign-In Button Container */}
-          <div className="flex justify-center">
+          <div className="flex justify-center pt-4">
             {GOOGLE_CLIENT_ID ? (
               <div ref={googleButtonRef} className="google-signin-container" />
             ) : (
               // Fallback custom button if Google script not loaded
               <button
                 onClick={signInWithGoogle}
-                className="w-full max-w-[300px] py-4 rounded-2xl bg-white text-slate-900 font-bold flex items-center justify-center gap-3 hover:bg-white/90 active:scale-[0.98] transition-all shadow-lg"
+                className="w-full max-w-[280px] py-3.5 rounded-xl bg-white text-[#1A1A1A] font-semibold flex items-center justify-center gap-3 hover:bg-black/[0.02] active:scale-[0.98] transition-all border border-black/[0.08] shadow-sm"
               >
                 <svg className="w-5 h-5" viewBox="0 0 24 24">
                   <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
@@ -97,35 +97,35 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess }) => 
           </div>
 
           {/* Divider */}
-          <div className="flex items-center gap-4">
-            <div className="flex-1 h-px bg-violet-500/10" />
-            <span className="text-violet-400/30 text-xs font-bold uppercase tracking-widest">or</span>
-            <div className="flex-1 h-px bg-violet-500/10" />
+          <div className="flex items-center gap-4 py-2">
+            <div className="flex-1 h-px bg-black/[0.06]" />
+            <span className="text-[#ACACAC] text-[12px] font-medium">or</span>
+            <div className="flex-1 h-px bg-black/[0.06]" />
           </div>
 
           {/* Continue as Guest */}
           <button
             onClick={onClose}
-            className="w-full py-4 rounded-2xl bg-[#1a1a24]/80 border border-violet-500/20 text-white/60 font-medium hover:bg-violet-500/10 hover:text-white active:scale-[0.98] transition-all"
+            className="w-full py-3 rounded-xl bg-transparent border border-black/[0.08] text-[#4A4A4A] font-medium hover:bg-black/[0.02] active:scale-[0.98] transition-all text-[14px]"
           >
             Continue as Guest
           </button>
 
           {/* Terms */}
-          <p className="text-center text-white/20 text-xs leading-relaxed">
+          <p className="text-center text-[#ACACAC] text-[11px] leading-relaxed pt-2">
             By continuing, you agree to our{' '}
-            <span className="text-violet-400/60 hover:text-violet-400 cursor-pointer">Terms of Service</span>
+            <span className="text-[#4A7C59] hover:underline cursor-pointer">Terms</span>
             {' '}and{' '}
-            <span className="text-violet-400/60 hover:text-violet-400 cursor-pointer">Privacy Policy</span>
+            <span className="text-[#4A7C59] hover:underline cursor-pointer">Privacy Policy</span>
           </p>
         </div>
       </div>
 
       <style>{`
-        @keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
-        .animate-slide-up { animation: slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+        @keyframes slideUp { from { transform: translateY(16px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        .animate-slide-up { animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-        .animate-fade-in { animation: fadeIn 0.3s ease-out forwards; }
+        .animate-fade-in { animation: fadeIn 0.2s ease-out forwards; }
         .google-signin-container { min-height: 44px; display: flex; align-items: center; justify-content: center; }
       `}</style>
     </div>
