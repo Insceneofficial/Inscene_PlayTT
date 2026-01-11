@@ -1243,7 +1243,7 @@ const InfluencerPage: React.FC = () => {
         </div>
       </header>
 
-      <main className="pt-28 pb-20 px-6 max-w-6xl mx-auto w-full">
+      <main className="pt-28 pb-28 px-6 max-w-6xl mx-auto w-full">
         {/* Influencer Header */}
         <div className="flex flex-col md:flex-row items-center md:items-start gap-6 mb-10">
           <CharacterDP 
@@ -1619,6 +1619,56 @@ const InfluencerPage: React.FC = () => {
           creatorAvatar={influencer.avatar}
           onClose={() => setIsLeaderboardOpen(false)}
         />
+      )}
+
+      {/* Bottom Navigation Bar - visible on series/episodes view */}
+      {selectedEpisodeIndex === null && (
+        <nav className="fixed bottom-0 left-0 right-0 z-[1001] px-4 pb-6 pt-2">
+          <div className="max-w-md mx-auto h-14 rounded-2xl border border-black/[0.06] flex items-center shadow-lg relative overflow-hidden bg-white/80 backdrop-blur-xl">
+            <button 
+              onClick={() => navigate('/')}
+              className="flex-1 flex flex-col items-center gap-0.5 transition-colors duration-300 ease-in-out justify-center h-full text-[#ACACAC] hover:text-[#4A7C59]"
+            >
+              <svg 
+                viewBox="0 0 24 24" 
+                fill="currentColor" 
+                className="w-6 h-6 transition-colors duration-300 ease-in-out"
+              >
+                <path d="M11.03 3.97a.75.75 0 0 1 1.06 0l7.452 7.453c.11.11.176.26.182.417v8.91a.75.75 0 0 1-.75.75H14.5a.75.75 0 0 1-.75-.75v-4.5a.75.75 0 0 0-.75-.75h-2a.75.75 0 0 0-.75.75v4.5a.75.75 0 0 1-.75.75H5.274a.75.75 0 0 1-.75-.75V11.84c.006-.157.072-.307.182-.417L11.03 3.97Z" />
+              </svg>
+              <span className="text-[10px] font-semibold transition-colors duration-300 ease-in-out">Discover</span>
+            </button>
+
+            <button 
+              onClick={() => navigate('/?view=chats')}
+              className="flex-1 flex flex-col items-center gap-0.5 transition-colors duration-300 ease-in-out justify-center h-full text-[#ACACAC] hover:text-[#4A90A4]"
+            >
+              <div className="relative">
+                <svg viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6 transition-colors duration-300 ease-in-out">
+                  <path fillRule="evenodd" d="M4.804 21.644A6.707 6.707 0 006 21.75a6.721 6.721 0 003.583-1.029c.774.182 1.584.279 2.417.279 5.322 0 9.75-3.97 9.75-9 0-5.03-4.428-9-9.75-9s-9.75 3.97-9.75 9c0 2.409 1.025 4.587 2.674 6.192.232.226.277.428.178.713a19.022 19.022 0 01-1.522 3.535c-.211.373.08.794.48.754a10.875 10.875 0 002.517-.504z" clipRule="evenodd" />
+                </svg>
+              </div>
+              <span className="text-[10px] font-semibold transition-colors duration-300 ease-in-out">Messages</span>
+            </button>
+
+            {/* Calendar/Goals Tab */}
+            <button 
+              onClick={() => {
+                if (isAuthenticated) {
+                  navigate('/?view=progress');
+                } else {
+                  setIsAuthModalOpen(true);
+                }
+              }}
+              className="flex-1 flex flex-col items-center gap-0.5 transition-colors duration-300 ease-in-out justify-center h-full text-[#ACACAC] hover:text-[#C9A227]"
+            >
+              <svg viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6 transition-colors duration-300 ease-in-out">
+                <path fillRule="evenodd" d="M6.75 2.25A.75.75 0 0 1 7.5 3v1.5h9V3A.75.75 0 0 1 18 3v1.5h.75a3 3 0 0 1 3 3v11.25a3 3 0 0 1-3 3H5.25a3 3 0 0 1-3-3V7.5a3 3 0 0 1 3-3H6V3a.75.75 0 0 1 .75-.75Zm13.5 9a1.5 1.5 0 0 0-1.5-1.5H5.25a1.5 1.5 0 0 0-1.5 1.5v7.5a1.5 1.5 0 0 0 1.5 1.5h13.5a1.5 1.5 0 0 0 1.5-1.5v-7.5Z" clipRule="evenodd" />
+              </svg>
+              <span className="text-[10px] font-semibold transition-colors duration-300 ease-in-out">Progress</span>
+            </button>
+          </div>
+        </nav>
       )}
 
       <style>{`
