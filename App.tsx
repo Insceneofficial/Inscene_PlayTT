@@ -23,8 +23,6 @@ import { AVATARS, getCharacterAvatar, getAllCharacterNames, CHARACTER_PROFILES }
 import { setSeriesCatalog, getAllInfluencers, getInfluencerSlug, InfluencerInfo } from './lib/influencerMapping';
 
 // Re-export for backward compatibility with existing code
-const PRIYANK_AVATAR = AVATARS.Priyank;
-const ARZOO_AVATAR = AVATARS.Arzoo;
 const DEBU_AVATAR = AVATARS.Debu;
 const ANISH_AVATAR = AVATARS.Anish;
 const CHIRAG_AVATAR = AVATARS.Chirag;
@@ -1029,56 +1027,6 @@ const ReelItem: React.FC<{
  */
 export const SERIES_CATALOG = [
   {
-    id: 'heart-beats',
-    title: 'Heart Beats',
-    tagline: 'Interactive Drama',
-    thumbnail: getSmartImageUrl("https://lh3.googleusercontent.com/d/11oMmLSZFpeZsoGxw2uV_bPEWJB4-fvDx", "thumb_v4", 400, 400),
-    accentColor: '#3b82f6',
-    reelHint: 'Roleplay with the characters to change their destiny',
-    avatars: {
-      Priyank: PRIYANK_AVATAR,
-      Arzoo: ARZOO_AVATAR
-    },
-    episodes: [
-      { 
-        id: 1, 
-        label: "Episode 01", 
-        url: "https://rgmeakgorodicnqgrffu.supabase.co/storage/v1/object/public/inscene-videos/Priyank/Heart.Beats.Episode.1.mp4", 
-        triggers: [
-          { char: 'Priyank', intro: "Hey, itni jaldi kahan ja rahi ho? 😉", hook: "We just met at Lodhi Garden. You are walking away." }, 
-          { char: 'Arzoo', intro: "Excuse me? Follow kar rahe ho kya? 🤨", hook: "Catching Priyank following me at Lodhi Garden." }
-        ] 
-      },
-      { 
-        id: 2, 
-        label: "Episode 02", 
-        url: "https://rgmeakgorodicnqgrffu.supabase.co/storage/v1/object/public/inscene-videos/Priyank/Heart.Beats.Episode.2.mp4", 
-        triggers: [
-          { char: 'Priyank', intro: "Lizard wala joke bura tha kya? 😂", hook: "After the awkward lizard joke during tiffin." }, 
-          { char: 'Arzoo', intro: "Seriously? Itna ghatiya joke... 🙄", hook: "Responding to Priyank's weird lizard pickup line." }
-        ] 
-      },
-      { 
-        id: 3, 
-        label: "Episode 03", 
-        url: "https://rgmeakgorodicnqgrffu.supabase.co/storage/v1/object/public/inscene-videos/Priyank/Heart.Beats.Episode.3.mp4", 
-        triggers: [
-          { char: 'Priyank', intro: "Wait, main explain kar sakta hoon! 😟", hook: "Trying to stop Arzoo after she sees him with another girl." }, 
-          { char: 'Arzoo', intro: "Ab kya explain karoge? Sab dekh liya maine. 😡", hook: "Angry and walking away after a misunderstanding." }
-        ] 
-      },
-      { 
-        id: 4, 
-        label: "Episode 04", 
-        url: "https://rgmeakgorodicnqgrffu.supabase.co/storage/v1/object/public/inscene-videos/Priyank/Heart.Beats.Episode.4.mp4", 
-        triggers: [
-          { char: 'Priyank', intro: "Peace offering? ☕️", hook: "Approaching Arzoo in the rain with a hot tea." }, 
-          { char: 'Arzoo', intro: "Extra shakkar honi chahiye... 😌", hook: "Softening up after Priyank's sincere effort." }
-        ] 
-      }
-    ]
-  },
-  {
     id: 'startup-boy-anish',
     title: 'Startup Boy Anish',
     tagline: 'Insayy Journey',
@@ -1462,8 +1410,6 @@ const AppContent: React.FC = () => {
           messages: messages,
           avatar: prev[char]?.avatar || 
             (char === 'Debu' ? DEBU_AVATAR : 
-             char === 'Priyank' ? PRIYANK_AVATAR : 
-             char === 'Arzoo' ? ARZOO_AVATAR : 
              char === 'Anish' ? ANISH_AVATAR : 
              CHIRAG_AVATAR),
           lastUpdate: lastUpdate !== undefined ? lastUpdate : (existingConversation?.lastUpdate || Date.now())
@@ -1667,8 +1613,8 @@ const AppContent: React.FC = () => {
               {/* Chat List Area */}
               <div className="flex-1 overflow-y-auto pt-1 bg-[#FAF9F6]">
                 {(() => {
-                  // Get all characters and merge with existing conversations (excluding Arzoo)
-                  const allCharacterNames = getAllCharacterNames().filter(name => name !== 'Arzoo');
+                  // Get all characters and merge with existing conversations
+                  const allCharacterNames = getAllCharacterNames();
                   const allConversations: ConversationHistoryEntry[] = allCharacterNames.map(charName => {
                     const existingConv = conversations[charName];
                     const characterProfile = CHARACTER_PROFILES[charName];
@@ -1898,10 +1844,9 @@ const AppContent: React.FC = () => {
                 
                 <div className="w-full flex flex-col gap-3 mt-2">
                   {/* Show influencer options if multiple, otherwise show default options */}
-                  {choiceModalData.avatars && Object.keys(choiceModalData.avatars).filter(name => name !== 'Arzoo').length > 1 ? (
-                    // Multiple influencers - show routes to each (excluding Arzoo)
+                  {choiceModalData.avatars && Object.keys(choiceModalData.avatars).length > 1 ? (
+                    // Multiple influencers - show routes to each
                     Object.keys(choiceModalData.avatars)
-                      .filter(name => name !== 'Arzoo')
                       .map((influencerName) => (
                         <button
                           key={influencerName}
@@ -1942,8 +1887,8 @@ const AppContent: React.FC = () => {
                       
                       <button 
                         onClick={() => {
-                          // Get first influencer that's not Arzoo
-                          const firstInfluencerName = choiceModalData.avatars ? Object.keys(choiceModalData.avatars).find(name => name !== 'Arzoo') : null;
+                          // Get first influencer
+                          const firstInfluencerName = choiceModalData.avatars ? Object.keys(choiceModalData.avatars)[0] : null;
                           if (firstInfluencerName) {
                             navigate(`/${getInfluencerSlug(firstInfluencerName)}`);
                           } else {
@@ -1969,7 +1914,7 @@ const AppContent: React.FC = () => {
           episodeLabel={chatData.episodeLabel || selectedSeries?.episodes[activeIdx]?.label || "Inscene History"}
           instantGreeting={chatData.intro || ""}
           initialHook={chatData.hook || "Continuing conversation"}
-          avatar={chatData.avatar || (selectedSeries?.avatars ? selectedSeries.avatars[chatData.char] : (chatData.char === 'Debu' ? DEBU_AVATAR : chatData.char === 'Priyank' ? PRIYANK_AVATAR : chatData.char === 'Arzoo' ? ARZOO_AVATAR : chatData.char === 'Anish' ? ANISH_AVATAR : CHIRAG_AVATAR))}
+          avatar={chatData.avatar || (selectedSeries?.avatars ? selectedSeries.avatars[chatData.char] : (chatData.char === 'Debu' ? DEBU_AVATAR : chatData.char === 'Anish' ? ANISH_AVATAR : CHIRAG_AVATAR))}
           onClose={() => {
             // Don't clear typing status here - let it clear naturally when typing stops
             setChatData(null);

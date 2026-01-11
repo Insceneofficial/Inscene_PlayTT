@@ -99,7 +99,7 @@ Tracks each chat session with message counts and duration.
 | viewer_id | TEXT | Links to viewers table |
 | session_id | TEXT | Browser session ID |
 | google_user_id | TEXT | Links to users when logged in |
-| character_name | TEXT | e.g., 'Priyank', 'Arzoo' |
+| character_name | TEXT | e.g., 'Debu', 'Anish', 'Chirag' |
 | series_id | TEXT | Context series (optional) |
 | series_title | TEXT | Context series title |
 | episode_id | INTEGER | Context episode |

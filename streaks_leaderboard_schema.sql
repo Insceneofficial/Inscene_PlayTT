@@ -14,7 +14,7 @@ CREATE TABLE IF NOT EXISTS user_streaks (
   google_user_id TEXT NOT NULL,
   
   -- Creator/character this streak is with
-  creator_id TEXT NOT NULL, -- 'Priyank', 'Arzoo', 'Debu', 'Anish', 'Chirag'
+  creator_id TEXT NOT NULL, -- 'Debu', 'Anish', 'Chirag'
   
   -- Streak tracking
   current_streak INTEGER DEFAULT 0,

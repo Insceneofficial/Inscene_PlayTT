@@ -14,7 +14,7 @@ CREATE TABLE IF NOT EXISTS goals (
   google_user_id TEXT NOT NULL,
   
   -- Creator/character this goal is with
-  creator_id TEXT NOT NULL, -- 'Priyank', 'Arzoo', 'Debu', 'Anish', 'Chirag'
+  creator_id TEXT NOT NULL, -- 'Debu', 'Anish', 'Chirag'
   
   -- Goal details
   title TEXT NOT NULL,

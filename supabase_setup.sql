@@ -105,7 +105,7 @@ CREATE TABLE IF NOT EXISTS chat_sessions (
   google_user_id TEXT, -- Links to Google user ID when logged in
   
   -- Chat identification (matches your character structure)
-  character_name TEXT NOT NULL, -- 'Priyank', 'Arzoo', 'Debu', 'Anish', 'Chirag'
+  character_name TEXT NOT NULL, -- 'Debu', 'Anish', 'Chirag'
   
   -- Context: which series/episode triggered this chat (can be null if from chat history)
   series_id TEXT, -- Can be null if opened from chat history
@@ -151,7 +151,7 @@ CREATE TABLE IF NOT EXISTS chat_messages (
   google_user_id TEXT NOT NULL,
   
   -- Character this chat is with
-  character_name TEXT NOT NULL, -- 'Priyank', 'Arzoo', 'Debu', 'Anish', 'Chirag'
+  character_name TEXT NOT NULL, -- 'Debu', 'Anish', 'Chirag'
   
   -- Message content
   role TEXT NOT NULL CHECK (role IN ('user', 'assistant')),
