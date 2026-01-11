@@ -3,8 +3,8 @@
 import { CHARACTER_PROFILES } from './characters';
 
 export interface InfluencerInfo {
-  id: string; // URL-friendly ID (e.g., 'bigleafygiant', 'startupboyanish', 'fit___monk', 'debuthefilmguy')
-  name: string; // Display name (e.g., 'Priyank', 'Anish', 'Chirag', 'Debu')
+  id: string; // URL-friendly ID (e.g., 'startupboyanish', 'fit___monk', 'debuthefilmguy')
+  name: string; // Display name (e.g., 'Anish', 'Chirag', 'Debu')
   seriesId: string; // ID of the series they belong to
   seriesTitle: string; // Title of the series
   avatar: string;
@@ -26,15 +26,12 @@ export const setSeriesCatalog = (catalog: any[]) => {
  * Map influencer name to URL-friendly slug
  */
 const INFLUENCER_SLUGS: Record<string, string> = {
-  'Priyank': 'bigleafygiant',
   'Anish': 'startupboyanish',
   'Chirag': 'fit___monk',
   'Debu': 'debuthefilmguy',
-  // Arzoo - no page needed
 };
 
 const SLUG_TO_NAME: Record<string, string> = {
-  'bigleafygiant': 'Priyank',
   'startupboyanish': 'Anish',
   'fit___monk': 'Chirag',
   'debuthefilmguy': 'Debu',
@@ -77,19 +74,19 @@ export const getInfluencerBySlug = (slug: string): InfluencerInfo | null => {
 };
 
 /**
- * Get all influencers with their info (excluding Arzoo)
+ * Get all influencers with their info
  */
 export const getAllInfluencers = (): InfluencerInfo[] => {
   const influencers: InfluencerInfo[] = [];
   const seen = new Set<string>();
   
   // List of influencers that should have pages
-  const allowedInfluencers = new Set(['Priyank', 'Anish', 'Chirag', 'Debu']);
+  const allowedInfluencers = new Set(['Anish', 'Chirag', 'Debu']);
   
   for (const series of seriesCatalog) {
     if (series.avatars) {
       for (const [charName, avatar] of Object.entries(series.avatars)) {
-        // Skip Arzoo and any other influencers not in allowed list
+        // Skip any influencers not in allowed list
         if (!allowedInfluencers.has(charName)) {
           continue;
         }
