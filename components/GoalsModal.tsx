@@ -32,7 +32,7 @@ const GoalsModal: React.FC<GoalsModalProps> = ({
                 🎯
               </div>
               <div>
-                <h3 className="text-[16px] font-semibold text-[#1A1A1A]">Your Goal</h3>
+                <h3 className="text-[16px] font-semibold text-[#1A1A1A]">Your Challenge</h3>
                 <p className="text-[12px] text-[#8A8A8A]">with {goal.creator_id}</p>
               </div>
             </div>
@@ -51,7 +51,7 @@ const GoalsModal: React.FC<GoalsModalProps> = ({
         <div className="p-6 space-y-4 bg-[#FAF9F6]">
           {/* Goal Title */}
           <div className="bg-white rounded-xl p-4 border border-black/[0.06]">
-            <p className="text-[11px] text-[#8A8A8A] uppercase tracking-wide font-medium mb-1">Goal</p>
+            <p className="text-[11px] text-[#8A8A8A] uppercase tracking-wide font-medium mb-1">Challenge</p>
             <p className="text-[#1A1A1A] font-medium text-[15px] leading-snug">{goal.title}</p>
           </div>
 
@@ -79,40 +79,6 @@ const GoalsModal: React.FC<GoalsModalProps> = ({
             )}
           </div>
 
-          {/* Target Date */}
-          {goal.target_date && (
-            <div className="bg-white rounded-xl p-4 border border-[#C9A227]/20">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-[11px] text-[#C9A227] uppercase tracking-wide font-medium mb-1">Target Date</p>
-                  <p className="text-[#1A1A1A] font-medium text-[14px]">
-                    {new Date(goal.target_date + 'T12:00:00').toLocaleDateString('en-US', {
-                      weekday: 'short',
-                      month: 'short',
-                      day: 'numeric'
-                    })}
-                  </p>
-                </div>
-                <div className="text-right">
-                  {(() => {
-                    const daysLeft = Math.ceil((new Date(goal.target_date).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
-                    if (daysLeft < 0) {
-                      return <p className="text-[#C77B58] font-semibold text-[14px]">Overdue</p>;
-                    } else if (daysLeft === 0) {
-                      return <p className="text-[#C9A227] font-semibold text-[14px]">Due Today</p>;
-                    } else {
-                      return (
-                        <div>
-                          <p className="text-[#C9A227] font-semibold text-xl">{daysLeft}</p>
-                          <p className="text-[11px] text-[#8A8A8A]">days left</p>
-                        </div>
-                      );
-                    }
-                  })()}
-                </div>
-              </div>
-            </div>
-          )}
 
           {/* Stats Row */}
           <div className="grid grid-cols-3 gap-3">

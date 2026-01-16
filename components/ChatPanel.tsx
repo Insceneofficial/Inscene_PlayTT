@@ -5,6 +5,7 @@ import { saveMessage, loadChatHistory, isUserLoggedIn, debugListAllMessages, get
 import { getCharacterPrompt } from '../lib/characters';
 import { getGoalState, markTaskDone, createGoal, GoalWithStreak } from '../lib/goals';
 import { recordActivity, recordChatMessages, recordGoalCompletion } from '../lib/streaksAndPoints';
+import { getChallengePrompt, markChallengeCompleted, isChallengeCompleted, getFirstChallengeMessage, getChallengeForEpisode } from '../lib/challenges';
 import GoalsModal from './GoalsModal';
 
 interface ChatPanelProps {
@@ -24,6 +25,7 @@ interface ChatPanelProps {
   seriesTitle?: string;
   episodeId?: number;
   onWaitlistRequired?: () => void;
+  onChallengeCompleted?: (seriesId: string, episodeId: number) => void;
 }
 
 const ChatPanel: React.FC<ChatPanelProps> = ({ 
@@ -41,7 +43,8 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
   seriesId,
   seriesTitle,
   episodeId,
-  onWaitlistRequired
+  onWaitlistRequired,
+  onChallengeCompleted
 }) => {
   const [messages, setMessages] = useState<{ role: 'user' | 'assistant'; content: string; time: string }[]>([]);
   const [inputValue, setInputValue] = useState('');
@@ -130,14 +133,22 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
             time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
           })));
         } else {
-          // No history - start with greeting
+          // No history - check if we should send challenge message first
+          let firstMessage = instantGreeting;
+          if (entryPoint === 'video_end_screen' && seriesId && episodeId && episodeId > 1) {
+            const challengeMessage = getFirstChallengeMessage(seriesId, episodeId);
+            if (challengeMessage) {
+              firstMessage = challengeMessage;
+            }
+          }
+          
           setMessages([{
             role: 'assistant',
-            content: instantGreeting,
+            content: firstMessage,
             time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
           }]);
           // Save the greeting message
-          saveMessage(character, 'assistant', instantGreeting, seriesId, episodeId);
+          saveMessage(character, 'assistant', firstMessage, seriesId, episodeId);
           initialMessagesSaved.current = true;
         }
       } else {
@@ -148,9 +159,18 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
             time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
           })));
         } else {
+          // Not logged in - check if we should send challenge message first
+          let firstMessage = instantGreeting;
+          if (entryPoint === 'video_end_screen' && seriesId && episodeId && episodeId > 1) {
+            const challengeMessage = getFirstChallengeMessage(seriesId, episodeId);
+            if (challengeMessage) {
+              firstMessage = challengeMessage;
+            }
+          }
+          
           setMessages([{
             role: 'assistant',
-            content: instantGreeting,
+            content: firstMessage,
             time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
           }]);
         }
@@ -160,7 +180,98 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
     };
     
     loadHistory();
-  }, [character, existingMessages, instantGreeting, seriesId, episodeId]);
+  }, [character, existingMessages, instantGreeting, seriesId, episodeId, entryPoint]);
+  
+  // Auto-send AI challenge message when chat opens after video ends
+  const hasAutoSentRef = useRef(false);
+  useEffect(() => {
+    // Only auto-send if:
+    // 1. History has loaded
+    // 2. Entry point is video_end_screen
+    // 3. Episode ID > 1 (episode 1 shows path choice modal instead)
+    // 4. No existing messages (fresh chat)
+    // 5. Haven't already auto-sent
+    // 6. System prompt is ready
+    if (
+      !isLoadingHistory &&
+      entryPoint === 'video_end_screen' &&
+      seriesId &&
+      episodeId &&
+      episodeId > 1 &&
+      messages.length === 1 &&
+      messages[0]?.role === 'assistant' &&
+      systemPrompt.current &&
+      !hasAutoSentRef.current
+    ) {
+      hasAutoSentRef.current = true;
+      console.log('[ChatPanel] Auto-generating AI challenge message for episode', episodeId);
+      
+      // Generate AI message automatically
+      const generateAutoMessage = async () => {
+        const apiKey = process.env.API_KEY;
+        if (!apiKey) return;
+        
+        setIsTyping(true);
+        
+        try {
+          const openai = new OpenAI({ apiKey, dangerouslyAllowBrowser: true });
+          
+          // Build conversation - use the challenge context in system prompt
+          // The system prompt already has instructions about the challenge
+          // We just need to trigger the AI to start the conversation
+          const aiMessages: { role: 'system' | 'user' | 'assistant'; content: string }[] = [
+            { role: 'system', content: systemPrompt.current }
+          ];
+          
+          // Add a simple user message that prompts the AI to start talking about the challenge
+          // The system prompt will guide the AI on what to say
+          aiMessages.push({
+            role: 'user',
+            content: 'Hi!'
+          });
+          
+          // Get AI response
+          const response = await openai.chat.completions.create({
+            model: 'gpt-4o-mini',
+            messages: aiMessages,
+            temperature: 0.95
+          });
+          
+          const assistantResponse = response.choices[0]?.message?.content || "...";
+          const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+          
+          // Replace the initial static message with AI-generated one
+          setMessages([{
+            role: 'assistant',
+            content: assistantResponse,
+            time: now
+          }]);
+          
+          // Update conversation history
+          conversationHistory.current = [
+            { role: 'user', content: aiMessages[1].content },
+            { role: 'assistant', content: assistantResponse }
+          ];
+          
+          // Save to Supabase if logged in
+          if (isUserLoggedIn()) {
+            // Remove old message and save new one
+            saveMessage(character, 'assistant', assistantResponse, seriesId, episodeId);
+          }
+        } catch (error) {
+          console.error('[ChatPanel] Auto-message generation error:', error);
+          // Keep the initial message if AI generation fails
+        } finally {
+          setIsTyping(false);
+        }
+      };
+      
+      // Small delay to ensure system prompt is ready
+      setTimeout(() => {
+        generateAutoMessage();
+      }, 800);
+    }
+  }, [isLoadingHistory, entryPoint, seriesId, episodeId, messages, character, systemPrompt]);
   
   // Helper function to end chat session
   const endChatSession = async () => {
@@ -361,8 +472,40 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
 
   useEffect(() => {
     // Get system prompt from centralized character config, including goal context
-    systemPrompt.current = getCharacterPrompt(character, episodeLabel, goalContext);
-  }, [character, episodeLabel, goalContext]);
+    let basePrompt = getCharacterPrompt(character, episodeLabel, goalContext);
+    
+    // Add challenge prompt if episode has a challenge
+    // Only add if previous challenge is complete (or episode 2, which has no previous challenge)
+    if (seriesId && episodeId && episodeId > 1) {
+      // Check if previous challenge is complete
+      const previousEpisodeId = episodeId - 1;
+      const isPreviousComplete = episodeId === 2 || isChallengeCompleted(seriesId, previousEpisodeId);
+      
+      if (isPreviousComplete) {
+        // Previous challenge complete - can set new challenge
+        const challengePrompt = getChallengePrompt(seriesId, episodeId);
+        if (challengePrompt) {
+          basePrompt += '\n\n' + challengePrompt;
+        }
+      } else {
+        // Previous challenge not complete - focus on that
+        const previousChallenge = getChallengeForEpisode(seriesId, previousEpisodeId);
+        if (previousChallenge) {
+          basePrompt += `\n\nIMPORTANT: The user has NOT completed their previous challenge for episode ${previousEpisodeId}: "${previousChallenge}". 
+
+Your role:
+1. Gently remind them about this incomplete challenge
+2. Help them complete it before moving to the next one
+3. Only when they explicitly mention they've completed it, acknowledge and then you can help them with the next challenge
+4. Be encouraging and supportive, but keep them focused on completing the previous challenge first
+
+Do NOT set a new challenge until the previous one is completed.`;
+        }
+      }
+    }
+    
+    systemPrompt.current = basePrompt;
+  }, [character, episodeLabel, goalContext, seriesId, episodeId]);
 
   // Generate personalized drop-off reminder using OpenAI
   const generateDropOffReminder = async () => {
@@ -503,14 +646,14 @@ Generate ONLY the follow-up message, nothing else.
         if (currentGoal) {
           setShowGoalsModal(true);
         } else {
-          injectMessage("I want to set a goal");
+          injectMessage("I want to set a challenge");
         }
         break;
       case 'mark_done':
         handleMarkDone();
         break;
       case 'adjust':
-        injectMessage("I need to adjust my goal - it's too difficult");
+        injectMessage("I need to adjust my challenge - it's too difficult");
         break;
     }
   };
@@ -573,6 +716,43 @@ Generate ONLY the follow-up message, nothing else.
         hasShownGoalInterestRef.current = true;
       }
       
+      // Check if user has completed the episode challenge
+      if (seriesId && episodeId && episodeId > 1) {
+        const challengeCompletionPatterns = /\b(completed|finished|done|did it|i did|finished the challenge|completed the challenge|i'm done|i finished|finished it|completed it|i completed|done with|finished with)\b/i;
+        if (challengeCompletionPatterns.test(userText) && !isChallengeCompleted(seriesId, episodeId)) {
+          // Check if the context suggests they're talking about the challenge
+          // Look for challenge-related keywords
+          const challengeKeywords = /\b(prototype|ai|feedback|users|lovable|replit|friends|test|launch|10 users|3 friends)\b/i;
+          if (challengeKeywords.test(userText)) {
+            console.log('[ChatPanel] Challenge completion detected for episode', episodeId);
+            markChallengeCompleted(seriesId, episodeId);
+            // Notify parent component to update episode list
+            if (onChallengeCompleted) {
+              onChallengeCompleted(seriesId, episodeId);
+            }
+          }
+        }
+      }
+      
+      // Check if user has completed the episode challenge
+      if (seriesId && episodeId && episodeId > 1) {
+        const challengeCompletionPatterns = /\b(completed|finished|done|did it|i did|finished the challenge|completed the challenge|i'm done|i finished|finished it|completed it)\b/i;
+        if (challengeCompletionPatterns.test(userText) && !isChallengeCompleted(seriesId, episodeId)) {
+          // Check if the context suggests they're talking about the challenge
+          // This is a simple check - in production you might want more sophisticated detection
+          const challengeKeywords = /\b(prototype|ai|feedback|users|lovable|replit|friends|test|launch)\b/i;
+          if (challengeKeywords.test(userText)) {
+            console.log('[ChatPanel] Challenge completion detected for episode', episodeId);
+            markChallengeCompleted(seriesId, episodeId);
+            // Trigger a callback to update episode list if available
+            if (onMessagesUpdate) {
+              // The parent component should check challenge completion and update episode list
+              onMessagesUpdate(messages);
+            }
+          }
+        }
+      }
+      
       // Check if we should auto-close (no goal, no interest, reached limit)
       if (!currentGoal && !hasShownGoalInterestRef.current && userMessageCountRef.current >= MAX_MESSAGES_WITHOUT_GOAL) {
         // Will trigger closing remark after this response
@@ -594,9 +774,9 @@ Generate ONLY the follow-up message, nothing else.
       if (isChatClosing) {
         aiMessages.push({
           role: 'system',
-          content: `IMPORTANT: This is the final message. The user hasn't shown interest in setting goals. 
+          content: `IMPORTANT: This is the final message. The user hasn't shown interest in setting challenges. 
 End the conversation gracefully with a warm closing remark.
-Include: "Feel free to come back and chat with me anytime from the Chat Rooms section! I'll be here whenever you're ready to set a goal and work on something together. Take care! 💫"
+Include: "Feel free to come back and chat with me anytime from the Chat Rooms section! I'll be here whenever you're ready to set a challenge and work on something together. Take care! 💫"
 Keep it brief and friendly.`
         });
       }
@@ -980,7 +1160,7 @@ Keep it brief and friendly.`
               onClick={() => handleQuickAction('my_goal')}
               className="flex-shrink-0 px-3.5 py-2 rounded-lg text-[12px] font-medium bg-black/[0.04] text-[#4A4A4A] hover:bg-black/[0.08] transition-all"
             >
-              My Goal
+              My Challenge
             </button>
             {currentGoal && !currentGoal.completed_today && (
               <button
@@ -1035,11 +1215,11 @@ Keep it brief and friendly.`
               await pauseGoal(currentGoal.id);
               setCurrentGoal(null);
               setShowGoalsModal(false);
-              injectMessage("I want to pause my current goal");
+              injectMessage("I want to pause my current challenge");
             }}
             onEdit={() => {
               setShowGoalsModal(false);
-              injectMessage("I want to change my goal");
+              injectMessage("I want to change my challenge");
             }}
           />
         )}
@@ -1127,7 +1307,7 @@ Keep it brief and friendly.`
               onClick={() => handleQuickAction('my_goal')}
               className="flex-shrink-0 px-3.5 py-2 rounded-lg text-[12px] font-medium bg-black/[0.04] text-[#4A4A4A] hover:bg-black/[0.08] transition-all"
             >
-              My Goal
+              My Challenge
             </button>
             {currentGoal && !currentGoal.completed_today && (
               <button
@@ -1179,11 +1359,11 @@ Keep it brief and friendly.`
               await pauseGoal(currentGoal.id);
               setCurrentGoal(null);
               setShowGoalsModal(false);
-              injectMessage("I want to pause my current goal");
+              injectMessage("I want to pause my current challenge");
             }}
             onEdit={() => {
               setShowGoalsModal(false);
-              injectMessage("I want to change my goal");
+              injectMessage("I want to change my challenge");
             }}
           />
         )}

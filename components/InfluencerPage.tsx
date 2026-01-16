@@ -10,7 +10,9 @@ import LeaderboardModal from './LeaderboardModal.tsx';
 import StreakWidget from './StreakWidget.tsx';
 import SeriesProgressCard from './SeriesProgressCard.tsx';
 import GoalsModal from './GoalsModal.tsx';
+import PathChoiceModal from './PathChoiceModal.tsx';
 import { useAuth } from '../lib/auth';
+import { canProceedToEpisode } from '../lib/challenges';
 import { getUserMessageCount, MAX_USER_MESSAGES, hasUnlimitedMessages } from '../lib/chatStorage';
 import { getInfluencerBySlug, getSeriesForInfluencer, setSeriesCatalog } from '../lib/influencerMapping';
 import { getCharacterAvatar } from '../lib/characters';
@@ -18,7 +20,59 @@ import { SERIES_CATALOG } from '../App';
 import { trackPageView, trackVideoStart, updateVideoProgress, trackVideoEnd, getSeriesProgress, SeriesProgress } from '../lib/analytics';
 
 /**
- * VIDEO END SCREEN - Auto-redirects to chat after countdown
+ * Utility function to get user's path choice for a series
+ */
+const getPathChoice = (seriesId: string): 'building' | 'exploring' | null => {
+  if (typeof window === 'undefined') return null;
+  const storageKey = `inscene_path_choice_${seriesId}`;
+  const choice = localStorage.getItem(storageKey);
+  if (choice === 'building' || choice === 'exploring') {
+    return choice;
+  }
+  return null;
+};
+
+/**
+ * Utility function to filter episodes based on path choice and challenge completion
+ */
+const getFilteredEpisodes = (episodes: any[], seriesId: string): any[] => {
+  const pathChoice = getPathChoice(seriesId);
+  console.log('[getFilteredEpisodes] seriesId:', seriesId, 'pathChoice:', pathChoice, 'total episodes:', episodes.length);
+  
+  // If no path choice made yet, only show episode 1
+  if (!pathChoice) {
+    const filtered = episodes.filter((ep: any) => ep.id === 1);
+    console.log('[getFilteredEpisodes] No path choice, showing only episode 1:', filtered.length);
+    return filtered;
+  }
+  
+  // Get base episodes based on path
+  let baseEpisodes: number[];
+  if (pathChoice === 'building') {
+    baseEpisodes = [1, 2, 3, 4, 5];
+  } else if (pathChoice === 'exploring') {
+    baseEpisodes = [1, 3, 5];
+  } else {
+    const filtered = episodes.filter((ep: any) => ep.id === 1);
+    console.log('[getFilteredEpisodes] Invalid path choice, showing only episode 1:', filtered.length);
+    return filtered;
+  }
+  
+  console.log('[getFilteredEpisodes] Base episodes for path', pathChoice, ':', baseEpisodes);
+  
+  // Filter episodes - show all episodes in baseEpisodes (no challenge completion check)
+  const filtered = episodes.filter((ep: any) => {
+    const isIncluded = baseEpisodes.includes(ep.id);
+    console.log('[getFilteredEpisodes] Episode', ep.id, 'included:', isIncluded);
+    return isIncluded;
+  });
+  
+  console.log('[getFilteredEpisodes] Final filtered episodes:', filtered.map((ep: any) => ep.id));
+  return filtered;
+};
+
+/**
+ * VIDEO END SCREEN - Shows path choice modal for episode 1, otherwise auto-redirects to chat
  */
 const VideoEndScreen: React.FC<{
   episode: any;
@@ -26,7 +80,8 @@ const VideoEndScreen: React.FC<{
   influencerName: string;
   onEnterStory: (char: string, intro: string, hook: string, entryPoint: string) => void;
   onNextEpisode: () => void;
-}> = ({ episode, series, influencerName, onEnterStory, onNextEpisode }) => {
+  onShowPathChoice?: () => void;
+}> = ({ episode, series, influencerName, onEnterStory, onNextEpisode, onShowPathChoice }) => {
   const [countdown, setCountdown] = useState(5);
   const [userInteracted, setUserInteracted] = useState(false);
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -34,10 +89,41 @@ const VideoEndScreen: React.FC<{
   // Get the trigger for this influencer
   const primaryTrigger = episode.triggers?.find((t: any) => t.char === influencerName) || episode.triggers?.[0];
 
+  // For episode 1, ALWAYS show path choice modal instead of auto-redirect
+  // Note: This useEffect runs even if component returns null
   useEffect(() => {
-    console.log('[VideoEndScreen] Mounted - starting countdown, primaryTrigger:', primaryTrigger?.char);
+    console.log('[VideoEndScreen] useEffect for path choice - episode.id:', episode.id, 'onShowPathChoice:', !!onShowPathChoice);
+    if (episode.id === 1 && onShowPathChoice) {
+      console.log('[VideoEndScreen] Episode 1 detected, ALWAYS showing path choice modal');
+      // Trigger path choice modal immediately
+      // This will always trigger regardless of previous choices
+      console.log('[VideoEndScreen] Calling onShowPathChoice immediately');
+      onShowPathChoice();
+    }
+  }, [episode.id, onShowPathChoice]);
+
+  useEffect(() => {
+    console.log('[VideoEndScreen] Mounted - episode:', episode.id, 'primaryTrigger:', primaryTrigger?.char);
     
-    // Start countdown for auto-redirect
+    // For episode 1, don't start countdown - path choice modal will be shown instead
+    if (episode.id === 1 && onShowPathChoice) {
+      // Don't auto-redirect for episode 1
+      return;
+    }
+    
+    // For episodes 2-5, auto-redirect to chat immediately (no countdown) to set challenge
+    if (episode.id > 1 && primaryTrigger) {
+      // Small delay then auto-redirect to chat
+      const timer = setTimeout(() => {
+        if (!userInteracted) {
+          console.log('[VideoEndScreen] Auto-redirecting to chat for episode', episode.id, 'to set challenge');
+          onEnterStory(primaryTrigger.char, primaryTrigger.intro, primaryTrigger.hook, 'video_end_screen');
+        }
+      }, 1000);
+      return () => clearTimeout(timer);
+    }
+    
+    // For other episodes (if any), start countdown for auto-redirect
     countdownRef.current = setInterval(() => {
       setCountdown(prev => {
         if (prev <= 1) {
@@ -59,7 +145,7 @@ const VideoEndScreen: React.FC<{
         clearInterval(countdownRef.current);
       }
     };
-  }, [userInteracted, primaryTrigger, onEnterStory]);
+  }, [userInteracted, primaryTrigger, onEnterStory, episode.id, onShowPathChoice]);
 
   const handleManualChat = (t: any) => {
     setUserInteracted(true);
@@ -79,6 +165,16 @@ const VideoEndScreen: React.FC<{
 
   const influencerTriggers = episode.triggers?.filter((t: any) => t.char === influencerName) || [];
 
+  // For episode 1, don't show the chat redirect UI - path choice modal will be shown instead
+  if (episode.id === 1 && onShowPathChoice) {
+    return null; // Don't render the end screen UI for episode 1
+  }
+  
+  // For episodes 2-5, don't show the countdown UI - auto-redirect to chat happens immediately
+  if (episode.id > 1 && episode.id <= 5) {
+    return null; // Don't render the end screen UI, chat will open automatically
+  }
+  
   return (
     <div className="absolute inset-0 z-[100] flex flex-col items-center justify-center p-8 bg-black/60 backdrop-blur-xl animate-fade-in pointer-events-auto">
       <h3 className="text-2xl font-semibold text-white mb-3 tracking-tight">Continue your journey</h3>
@@ -163,7 +259,8 @@ const ReelItem: React.FC<{
   onNextEpisode: () => void;
   isChatOpen?: boolean;
   showEndScreen?: boolean;
-}> = ({ episode, series, influencerName, influencerTheme, isActive, isMuted, toggleMute, onEnterStory, onNextEpisode, isChatOpen = false, showEndScreen = true }) => {
+  onShowPathChoice?: () => void;
+}> = ({ episode, series, influencerName, influencerTheme, isActive, isMuted, toggleMute, onEnterStory, onNextEpisode, isChatOpen = false, showEndScreen = true, onShowPathChoice }) => {
   console.log('[InfluencerPage ReelItem] Component rendering - isActive:', isActive, 'episode:', episode?.label);
   
   const videoRef = React.useRef<HTMLVideoElement>(null);
@@ -471,19 +568,29 @@ const ReelItem: React.FC<{
 
   useEffect(() => {
     // When video ends, mark for end screen display and end analytics session
-    if (isEnded && isActive && !hasTriggeredNextScroll.current) {
-      hasTriggeredNextScroll.current = true; // Mark as triggered to prevent multiple calls
-      
+    if (isEnded && isActive) {
       // End analytics session if available
-      if (analyticsRecordId.current) {
+      if (analyticsRecordId.current && !hasTriggeredNextScroll.current) {
+        hasTriggeredNextScroll.current = true; // Mark as triggered to prevent multiple calls
         endVideoSession(true);
+      }
+      
+      // For episode 1, ALWAYS trigger path choice modal immediately when video ends
+      if (episode.id === 1 && onShowPathChoice) {
+        console.log('[InfluencerPage ReelItem] Episode 1 ended - triggering path choice modal immediately');
+        // Trigger immediately without delay to ensure it shows
+        onShowPathChoice();
+        return;
       }
       
       // NOTE: We no longer auto-scroll to next episode
       // Instead, the VideoEndScreen will handle auto-redirect to chat
-      console.log('[InfluencerPage ReelItem] Video ended - showing end screen with chat redirect');
+      if (!hasTriggeredNextScroll.current) {
+        console.log('[InfluencerPage ReelItem] Video ended - showing end screen with chat redirect');
+        hasTriggeredNextScroll.current = true;
+      }
     }
-  }, [isEnded, isActive]);
+  }, [isEnded, isActive, episode.id, onShowPathChoice]);
 
   // Inactivity detection - hide UI after 5 seconds of inactivity
   useEffect(() => {
@@ -734,8 +841,16 @@ const ReelItem: React.FC<{
           handlePause();
         }}
         onEnded={() => {
-          console.log('[Video] Ended - Episode:', episode.label);
+          console.log('[Video] Ended - Episode:', episode.label, 'Episode ID:', episode.id);
           setIsEnded(true);
+          // For episode 1, immediately trigger path choice modal when video ends
+          if (episode.id === 1 && onShowPathChoice) {
+            console.log('[Video] onEnded - Episode 1 detected, triggering path choice modal');
+            // Use setTimeout to ensure state is updated first
+            setTimeout(() => {
+              onShowPathChoice();
+            }, 100);
+          }
         }}
         onError={(e) => {
           const video = videoRef.current;
@@ -937,7 +1052,7 @@ const ReelItem: React.FC<{
         </div>
       )}
 
-      {/* Video End Screen with auto-redirect to chat */}
+      {/* Video End Screen with auto-redirect to chat or path choice for episode 1 */}
       {isEnded && showEndScreen && (
         <VideoEndScreen
           episode={episode}
@@ -945,6 +1060,7 @@ const ReelItem: React.FC<{
           influencerName={influencerName}
           onEnterStory={onEnterStory}
           onNextEpisode={onNextEpisode}
+          onShowPathChoice={episode.id === 1 ? onShowPathChoice : undefined}
         />
       )}
     </div>
@@ -971,6 +1087,10 @@ const InfluencerPage: React.FC = () => {
   const [selectedGoal, setSelectedGoal] = useState<any>(null);
   const [episodeProgress, setEpisodeProgress] = useState<SeriesProgress | null>(null);
   const [isCloseButtonHidden, setIsCloseButtonHidden] = useState(false);
+  const [showPathChoiceModal, setShowPathChoiceModal] = useState(false);
+  const [pathChoiceEpisode, setPathChoiceEpisode] = useState<any>(null);
+  const [pathChoiceVersion, setPathChoiceVersion] = useState(0); // Force re-render when path choice changes
+  const [challengeVersion, setChallengeVersion] = useState(0); // Force re-render when challenge completion changes
   const closeButtonInactivityTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const closeButtonActivityHandlerRef = React.useRef<((event?: Event) => void) | null>(null);
   const closeButtonMouseMoveHandlerRef = React.useRef<((event?: Event) => void) | null>(null);
@@ -1087,12 +1207,19 @@ const InfluencerPage: React.FC = () => {
     };
   }, [selectedEpisodeIndex, chatData]);
 
-  // Filter episodes to only show those with this influencer (memoized to prevent re-renders)
+  // Filter episodes to only show those with this influencer, then filter by path choice and challenge completion
   const influencerEpisodes = useMemo(() => {
-    return series?.episodes?.filter((ep: any) => 
+    const allEpisodes = series?.episodes?.filter((ep: any) => 
       ep.triggers?.some((t: any) => t.char === influencer?.name)
     ) || [];
-  }, [series?.episodes, influencer?.name]);
+    
+    // Apply path-based and challenge-based filtering if series exists
+    if (series?.id) {
+      return getFilteredEpisodes(allEpisodes, series.id);
+    }
+    
+    return allEpisodes;
+  }, [series?.episodes, series?.id, influencer?.name, pathChoiceVersion]); // Include pathChoiceVersion to force re-evaluation when path choice changes
   
   // Memoize episode IDs to prevent SeriesProgressCard re-renders
   const episodeIds = useMemo(() => {
@@ -1458,6 +1585,11 @@ const InfluencerPage: React.FC = () => {
                   }}
                   onNextEpisode={handleNextEpisode}
                   isChatOpen={!!chatData}
+                  onShowPathChoice={ep.id === 1 ? () => {
+                    console.log('[InfluencerPage] Showing path choice modal for episode 1');
+                    setPathChoiceEpisode(ep);
+                    setShowPathChoiceModal(true);
+                  } : undefined}
                 />
               </div>
             ))}
@@ -1480,6 +1612,11 @@ const InfluencerPage: React.FC = () => {
           seriesTitle={chatData.seriesTitle}
           episodeId={chatData.episodeId}
           onWaitlistRequired={() => setIsWaitlistModalOpen(true)}
+          onChallengeCompleted={(seriesId, episodeId) => {
+            console.log('[InfluencerPage] Challenge completed callback - seriesId:', seriesId, 'episodeId:', episodeId);
+            // Force re-render to update episode list
+            setChallengeVersion(prev => prev + 1);
+          }}
         />
       )}
 
@@ -1546,6 +1683,25 @@ const InfluencerPage: React.FC = () => {
           creatorName={influencer.name}
           creatorAvatar={influencer.avatar}
           onClose={() => setIsLeaderboardOpen(false)}
+        />
+      )}
+
+      {/* Path Choice Modal - Shows after episode 1 */}
+      {showPathChoiceModal && series && (
+        <PathChoiceModal
+          seriesId={series.id}
+          seriesTitle={series.title}
+          onChoice={(path) => {
+            console.log('[InfluencerPage] Path choice selected:', path);
+            setShowPathChoiceModal(false);
+            setPathChoiceEpisode(null);
+            // Force re-render by incrementing pathChoiceVersion to trigger useMemo re-evaluation
+            setPathChoiceVersion(prev => prev + 1);
+            // Close the video player to let user see the updated episode list
+            if (selectedEpisodeIndex !== null) {
+              setSelectedEpisodeIndex(null);
+            }
+          }}
         />
       )}
 

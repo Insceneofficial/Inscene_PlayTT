@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { BrowserRouter, Routes, Route, Link, useNavigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Link, useNavigate, useSearchParams } from 'react-router-dom';
 import Logo from './components/Logo.tsx';
 import ChatPanel from './components/ChatPanel.tsx';
 import AuthModal from './components/AuthModal.tsx';
@@ -7,7 +7,8 @@ import WaitlistModal from './components/WaitlistModal.tsx';
 import UserMenu from './components/UserMenu.tsx';
 import InfluencerPage from './components/InfluencerPage.tsx';
 import ChatWidget from './components/ChatWidget.tsx';
-import CalendarView from './components/CalendarView.tsx';
+import GoalsView from './components/GoalsView.tsx';
+import PathChoiceModal from './components/PathChoiceModal.tsx';
 import { AuthProvider, useAuth } from './lib/auth';
 import { getUserMessageCount, MAX_USER_MESSAGES, hasUnlimitedMessages } from './lib/chatStorage';
 import { Analytics } from "@vercel/analytics/react";
@@ -71,14 +72,15 @@ const formatTime = (seconds: number) => {
 };
 
 /**
- * VIDEO END SCREEN - Auto-redirects to chat after countdown
+ * VIDEO END SCREEN - Shows path choice modal for episode 1, otherwise auto-redirects to chat
  */
 const VideoEndScreen: React.FC<{
   episode: any;
   series: any;
   onEnterStory: (char: string, intro: string, hook: string, entryPoint: string) => void;
   onNextEpisode: () => void;
-}> = ({ episode, series, onEnterStory, onNextEpisode }) => {
+  onShowPathChoice?: () => void;
+}> = ({ episode, series, onEnterStory, onNextEpisode, onShowPathChoice }) => {
   const [countdown, setCountdown] = useState(5);
   const [userInteracted, setUserInteracted] = useState(false);
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -86,8 +88,24 @@ const VideoEndScreen: React.FC<{
   // Get the first trigger (primary character for this episode)
   const primaryTrigger = episode.triggers[0];
 
+  // For episode 1, show path choice modal instead of auto-redirect
   useEffect(() => {
-    // Start countdown for auto-redirect
+    if (episode.id === 1 && onShowPathChoice) {
+      // Trigger path choice modal after a short delay
+      const timer = setTimeout(() => {
+        onShowPathChoice();
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+  }, [episode.id, onShowPathChoice]);
+
+  useEffect(() => {
+    // For episode 1, don't start countdown - path choice modal will be shown instead
+    if (episode.id === 1 && onShowPathChoice) {
+      return;
+    }
+    
+    // For other episodes, start countdown for auto-redirect
     countdownRef.current = setInterval(() => {
       setCountdown(prev => {
         if (prev <= 1) {
@@ -106,7 +124,7 @@ const VideoEndScreen: React.FC<{
         clearInterval(countdownRef.current);
       }
     };
-  }, [userInteracted, primaryTrigger, onEnterStory]);
+  }, [userInteracted, primaryTrigger, onEnterStory, episode.id, onShowPathChoice]);
 
   const handleManualChat = (t: any) => {
     setUserInteracted(true);
@@ -123,6 +141,11 @@ const VideoEndScreen: React.FC<{
     }
     onNextEpisode();
   };
+
+  // For episode 1, don't show the chat redirect UI - path choice modal will be shown instead
+  if (episode.id === 1 && onShowPathChoice) {
+    return null; // Don't render the end screen UI for episode 1
+  }
 
   return (
     <div className="absolute inset-0 z-[100] flex flex-col items-center justify-center p-8 bg-black/60 backdrop-blur-xl animate-fade-in pointer-events-auto">
@@ -171,8 +194,9 @@ const ReelItem: React.FC<{
   toggleMute: () => void,
   onEnterStory: (char: string, intro: string, hook: string, entryPoint: string) => void,
   onNextEpisode: () => void,
-  isChatOpen?: boolean
-}> = ({ episode, series, isActive, isMuted, toggleMute, onEnterStory, onNextEpisode, isChatOpen = false }) => {
+  isChatOpen?: boolean;
+  onShowPathChoice?: () => void;
+}> = ({ episode, series, isActive, isMuted, toggleMute, onEnterStory, onNextEpisode, isChatOpen = false, onShowPathChoice }) => {
   console.log('[ReelItem] Component rendering - isActive:', isActive, 'episode:', episode?.label);
   
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -978,6 +1002,7 @@ const ReelItem: React.FC<{
           series={series}
           onEnterStory={onEnterStory}
           onNextEpisode={onNextEpisode}
+          onShowPathChoice={episode.id === 1 ? onShowPathChoice : undefined}
         />
       )}
 
@@ -1155,6 +1180,7 @@ interface ConversationHistoryEntry {
 
 const AppContent: React.FC = () => {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { user, isAuthenticated } = useAuth();
   const [selectedSeries, setSelectedSeries] = useState<any>(null);
   const [activeIdx, setActiveIdx] = useState(0);
@@ -1164,7 +1190,8 @@ const AppContent: React.FC = () => {
   const [choiceModalData, setChoiceModalData] = useState<any>(null);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [isWaitlistModalOpen, setIsWaitlistModalOpen] = useState(false);
-  const [isCalendarOpen, setIsCalendarOpen] = useState(false);
+  const [isGoalsOpen, setIsGoalsOpen] = useState(false);
+  const [showPathChoiceModal, setShowPathChoiceModal] = useState(false);
   
   const [conversations, setConversations] = useState<Record<string, ConversationHistoryEntry>>({});
   const [typingStatus, setTypingStatus] = useState<Record<string, boolean>>({});
@@ -1181,6 +1208,25 @@ const AppContent: React.FC = () => {
   useEffect(() => {
     setSeriesCatalog(SERIES_CATALOG);
   }, []);
+
+  // Read URL query parameters to set the view
+  useEffect(() => {
+    const viewParam = searchParams.get('view');
+    if (viewParam === 'chats') {
+      setCurrentView('chats');
+      setIsGoalsOpen(false);
+    } else if (viewParam === 'progress') {
+      if (isAuthenticated) {
+        setIsGoalsOpen(true);
+        setCurrentView('discover');
+      } else {
+        setIsAuthModalOpen(true);
+      }
+    } else {
+      setCurrentView('discover');
+      setIsGoalsOpen(false);
+    }
+  }, [searchParams, isAuthenticated]);
 
   // Track viewer on app load
   useEffect(() => {
@@ -1718,9 +1764,36 @@ const AppContent: React.FC = () => {
         </main>
       )}
 
-      {selectedSeries && (
-        <div className={`reel-snap-container fixed inset-0 ${chatData ? 'z-[400]' : 'z-[500]'} hide-scrollbar overflow-y-scroll snap-y snap-mandatory`}>
-          {selectedSeries.episodes.map((ep: any, i: number) => (
+      {selectedSeries && (() => {
+        // Filter episodes based on path choice
+        const getFilteredEpisodes = (episodes: any[], seriesId: string): any[] => {
+          if (typeof window === 'undefined') return episodes;
+          const storageKey = `inscene_path_choice_${seriesId}`;
+          const choice = localStorage.getItem(storageKey);
+          
+          // If no path choice made yet, only show episode 1
+          if (!choice || (choice !== 'building' && choice !== 'exploring')) {
+            return episodes.filter((ep: any) => ep.id === 1);
+          }
+          
+          // If building path: show episodes 1, 2, 3, 4, 5
+          if (choice === 'building') {
+            return episodes.filter((ep: any) => [1, 2, 3, 4, 5].includes(ep.id));
+          }
+          
+          // If exploring path: show episodes 1, 3, 5
+          if (choice === 'exploring') {
+            return episodes.filter((ep: any) => [1, 3, 5].includes(ep.id));
+          }
+          
+          return episodes.filter((ep: any) => ep.id === 1);
+        };
+        
+        const filteredEpisodes = getFilteredEpisodes(selectedSeries.episodes, selectedSeries.id);
+        
+        return (
+          <div className={`reel-snap-container fixed inset-0 ${chatData ? 'z-[400]' : 'z-[500]'} hide-scrollbar overflow-y-scroll snap-y snap-mandatory`}>
+            {filteredEpisodes.map((ep: any, i: number) => (
             <div key={ep.id} data-index={i} className="reel-item-wrapper reel-item snap-start h-[100dvh]">
               <ReelItem 
                 episode={ep} series={selectedSeries} 
@@ -1738,11 +1811,15 @@ const AppContent: React.FC = () => {
                 })}
                 onNextEpisode={handleNext}
                 isChatOpen={!!chatData}
+                onShowPathChoice={ep.id === 1 ? () => {
+                  setShowPathChoiceModal(true);
+                } : undefined}
               />
             </div>
           ))}
         </div>
-      )}
+        );
+      })()}
 
       {!selectedSeries && (
         <nav className="fixed bottom-0 left-0 right-0 z-[1001] px-4 pb-6 pt-2">
@@ -1750,9 +1827,10 @@ const AppContent: React.FC = () => {
             <button 
               onClick={() => {
                 setCurrentView('discover');
-                setIsCalendarOpen(false);
+                setIsGoalsOpen(false);
+                setSearchParams({});
               }}
-              className={`flex-1 flex flex-col items-center gap-0.5 transition-colors duration-300 ease-in-out justify-center h-full ${currentView === 'discover' && !isCalendarOpen ? 'text-[#4A7C59]' : 'text-[#ACACAC]'}`}
+              className={`flex-1 flex flex-col items-center gap-0.5 transition-colors duration-300 ease-in-out justify-center h-full ${currentView === 'discover' && !isGoalsOpen ? 'text-[#4A7C59]' : 'text-[#ACACAC]'}`}
             >
               <svg 
                 viewBox="0 0 24 24" 
@@ -1767,9 +1845,10 @@ const AppContent: React.FC = () => {
             <button 
               onClick={() => {
                 setCurrentView('chats');
-                setIsCalendarOpen(false);
+                setIsGoalsOpen(false);
+                setSearchParams({ view: 'chats' });
               }}
-              className={`flex-1 flex flex-col items-center gap-0.5 transition-colors duration-300 ease-in-out justify-center h-full ${currentView === 'chats' && !isCalendarOpen ? 'text-[#4A90A4]' : 'text-[#ACACAC]'}`}
+              className={`flex-1 flex flex-col items-center gap-0.5 transition-colors duration-300 ease-in-out justify-center h-full ${currentView === 'chats' && !isGoalsOpen ? 'text-[#4A90A4]' : 'text-[#ACACAC]'}`}
             >
               <div className="relative">
                 <svg viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6 transition-colors duration-300 ease-in-out">
@@ -1782,36 +1861,39 @@ const AppContent: React.FC = () => {
               <span className="text-[10px] font-semibold transition-colors duration-300 ease-in-out">Messages</span>
             </button>
 
-            {/* Calendar/Goals Tab */}
+            {/* Challenges Tab */}
             <button 
               onClick={() => {
                 if (isAuthenticated) {
-                  setIsCalendarOpen(true);
+                  setIsGoalsOpen(true);
+                  setSearchParams({ view: 'progress' });
                 } else {
                   setIsAuthModalOpen(true);
                 }
               }}
-              className={`flex-1 flex flex-col items-center gap-0.5 transition-colors duration-300 ease-in-out justify-center h-full ${isCalendarOpen ? 'text-[#C9A227]' : 'text-[#ACACAC]'} hover:text-[#C9A227]`}
+              className={`flex-1 flex flex-col items-center gap-0.5 transition-colors duration-300 ease-in-out justify-center h-full ${isGoalsOpen ? 'text-[#C9A227]' : 'text-[#ACACAC]'} hover:text-[#C9A227]`}
             >
-              <svg viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6 transition-colors duration-300 ease-in-out">
-                <path fillRule="evenodd" d="M6.75 2.25A.75.75 0 0 1 7.5 3v1.5h9V3A.75.75 0 0 1 18 3v1.5h.75a3 3 0 0 1 3 3v11.25a3 3 0 0 1-3 3H5.25a3 3 0 0 1-3-3V7.5a3 3 0 0 1 3-3H6V3a.75.75 0 0 1 .75-.75Zm13.5 9a1.5 1.5 0 0 0-1.5-1.5H5.25a1.5 1.5 0 0 0-1.5 1.5v7.5a1.5 1.5 0 0 0 1.5 1.5h13.5a1.5 1.5 0 0 0 1.5-1.5v-7.5Z" clipRule="evenodd" />
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-6 h-6 transition-colors duration-300 ease-in-out">
+                <circle cx="12" cy="12" r="10" />
+                <circle cx="12" cy="12" r="6" />
+                <circle cx="12" cy="12" r="2" />
               </svg>
-              <span className="text-[10px] font-semibold transition-colors duration-300 ease-in-out">Progress</span>
+              <span className="text-[10px] font-semibold transition-colors duration-300 ease-in-out">Challenges</span>
             </button>
           </div>
         </nav>
       )}
 
-      {/* Calendar View */}
-      {isCalendarOpen && (
-        <CalendarView 
-          onClose={() => setIsCalendarOpen(false)}
+      {/* Challenges View */}
+      {isGoalsOpen && (
+        <GoalsView 
+          onClose={() => setIsGoalsOpen(false)}
           onGoalSelect={(goal) => {
             // Open chat with the creator
-            setIsCalendarOpen(false);
+            setIsGoalsOpen(false);
             handleChatInit({
               char: goal.creator_id,
-              intro: `Let's check on your goal: "${goal.title}"`,
+              intro: `Let's check on your challenge: "${goal.title}"`,
               hook: goal.daily_task,
               isFromHistory: true,
               isWhatsApp: true,
@@ -1942,6 +2024,20 @@ const AppContent: React.FC = () => {
         isOpen={isWaitlistModalOpen} 
         onClose={() => setIsWaitlistModalOpen(false)} 
       />
+
+      {/* Path Choice Modal - Shows after episode 1 */}
+      {showPathChoiceModal && selectedSeries && (
+        <PathChoiceModal
+          seriesId={selectedSeries.id}
+          seriesTitle={selectedSeries.title}
+          onChoice={(path) => {
+            setShowPathChoiceModal(false);
+            // The episodes will be re-filtered automatically via the filtering logic
+            // Close the video player to let user see the updated episode list
+            setSelectedSeries(null);
+          }}
+        />
+      )}
 
       <Analytics />
 
