@@ -1354,9 +1354,7 @@ const InfluencerPage: React.FC = () => {
         <div className="flex justify-between items-center max-w-6xl mx-auto">
           {/* Home button */}
           <div className="flex items-center gap-3 cursor-pointer group active:scale-[0.98] transition-transform" onClick={() => navigate('/')}>
-            <div className="w-9 h-9 rounded-xl bg-[#4A7C59] flex items-center justify-center">
-              <Logo size={20} isPulsing={false} />
-            </div>
+            <Logo size={32} isPulsing={false} src="/icon_purple.png" />
             <span className="text-[#8A8A8A] text-sm font-medium">Home</span>
           </div>
           <div className="flex items-center gap-2">

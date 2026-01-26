@@ -24,8 +24,6 @@ import { AVATARS, getCharacterAvatar, getAllCharacterNames, CHARACTER_PROFILES }
 import { setSeriesCatalog, getAllInfluencers, getInfluencerSlug, InfluencerInfo } from './lib/influencerMapping';
 
 // Re-export for backward compatibility with existing code
-const DEBU_AVATAR = AVATARS.Debu;
-const ANISH_AVATAR = AVATARS.Anish;
 const CHIRAG_AVATAR = AVATARS.Chirag;
 
 /**
@@ -1052,59 +1050,6 @@ const ReelItem: React.FC<{
  */
 export const SERIES_CATALOG = [
   {
-    id: 'startup-boy-anish',
-    title: 'Startup Boy Anish',
-    tagline: 'Insayy Journey',
-    thumbnail: getSmartImageUrl("https://lh3.googleusercontent.com/d/1FKR6HevmeSv1baTCUtfi5CWQo8FO0QAf", "anish_thumb_v1", 400, 400),
-    accentColor: '#22d3ee',
-    reelHint: 'Ask Anish about Insayy startup life',
-    avatars: {
-      Anish: ANISH_AVATAR
-    },
-    episodes: [
-      { 
-        id: 1, 
-        label: "Phase 1", 
-        url: "https://rgmeakgorodicnqgrffu.supabase.co/storage/v1/object/public/inscene-videos/Anish/Anish_Ep1.mp4", 
-        triggers: [
-          { char: 'Anish', intro: "Yo! Ready to start something big or just testing the waters? Startup life is brutal bro.", hook: "Validation and readiness phase. Assessing if the user is ready to bootstrap or fundraise." }
-        ] 
-      },
-      { 
-        id: 2, 
-        label: "Phase 2", 
-        url: "https://rgmeakgorodicnqgrffu.supabase.co/storage/v1/object/public/inscene-videos/Anish/Anish_Ep2.mp4", 
-        triggers: [
-          { char: 'Anish', intro: "Core roles decide everything. What's your real strength? Tech or Sales?", hook: "Mapping responsibilities and finding a co-founder with the right fit." }
-        ] 
-      },
-      { 
-        id: 3, 
-        label: "Phase 3", 
-        url: "https://rgmeakgorodicnqgrffu.supabase.co/storage/v1/object/public/inscene-videos/Anish/Anish_Ep3.mp4", 
-        triggers: [
-          { char: 'Anish', intro: "Gemini and OpenAI are massive, but we need to find our niche. What's our moat?", hook: "Differentiating from giants. Identifying a defensible advantage in the AI space." }
-        ] 
-      },
-      { 
-        id: 4, 
-        label: "Phase 4", 
-        url: "https://rgmeakgorodicnqgrffu.supabase.co/storage/v1/object/public/inscene-videos/Anish/Anish_Ep4.mp4", 
-        triggers: [
-          { char: 'Anish', intro: "Idea is cheap, execution is everything. What are we building in the next 14 days?", hook: "Clarifying the core problem and defining immediate next steps." }
-        ] 
-      },
-      { 
-        id: 5, 
-        label: "Phase 5", 
-        url: "https://rgmeakgorodicnqgrffu.supabase.co/storage/v1/object/public/inscene-videos/Anish/Anish_Ep5.mp4", 
-        triggers: [
-          { char: 'Anish', intro: "Pivot or Patience? Big question. Sometimes you gotta build a lean team first.", hook: "Decision making on pivots and building an early team with limited resources." }
-        ] 
-      }
-    ]
-  },
-  {
     id: 'cricket-coaching',
     title: 'Cricket Coaching',
     tagline: 'Athlete Mindset',
@@ -1121,43 +1066,6 @@ export const SERIES_CATALOG = [
         url: "https://rgmeakgorodicnqgrffu.supabase.co/storage/v1/object/public/inscene-videos/Chirag/FitMonk.Chirag._Ep0_Demo.mp4", 
         triggers: [
           { char: 'Chirag', intro: "Ready to dominate the pitch? Fitness is 70% of the game. What's holding you back?", hook: "Athlete coaching session focused on cricket performance and doubt clearing." }
-        ] 
-      }
-    ]
-  },
-  {
-    id: 'deb-filmmaker',
-    title: 'Debu',
-    tagline: 'Growth Path',
-    thumbnail: getSmartImageUrl("https://lh3.googleusercontent.com/d/1BGjtlHgMy4BToZJQ-eOhr-UpH82LOMVh", "deb_thumb_v1", 400, 400),
-    accentColor: '#a855f7',
-    reelHint: 'Ask Debu your questions',
-    avatars: {
-      Debu: DEBU_AVATAR
-    },
-    episodes: [
-      { 
-        id: 1, 
-        label: "Scene 01", 
-        url: "https://rgmeakgorodicnqgrffu.supabase.co/storage/v1/object/public/inscene-videos/Debu/Episode1_Debu.mp4", 
-        triggers: [
-          { char: 'Debu', intro: "Welcome. Before we ever touch a camera, we must sharpen the mind. Tell me, what draws you to cinema?", hook: "Assessment of the user's cinematic palate." }
-        ] 
-      },
-      { 
-        id: 2, 
-        label: "Scene 02", 
-        url: "https://rgmeakgorodicnqgrffu.supabase.co/storage/v1/object/public/inscene-videos/Debu/Episode2_Debu.mp4", 
-        triggers: [
-          { char: 'Debu', intro: "Composition is the skeleton of a shot. How do you frame a soul without losing the context?", hook: "Lesson on the philosophy of framing and composition." }
-        ] 
-      },
-      { 
-        id: 3, 
-        label: "Scene 03", 
-        url: "https://rgmeakgorodicnqgrffu.supabase.co/storage/v1/object/public/inscene-videos/Debu/Episode3_Debu.mp4", 
-        triggers: [
-          { char: 'Debu', intro: "The edit is where the story is truly born. Do you have the courage to kill your darlings?", hook: "Deep dive into the ruthlessness of the editing process." }
         ] 
       }
     ]
@@ -1454,10 +1362,7 @@ const AppContent: React.FC = () => {
           ...prev[char],
           character: char,
           messages: messages,
-          avatar: prev[char]?.avatar || 
-            (char === 'Debu' ? DEBU_AVATAR : 
-             char === 'Anish' ? ANISH_AVATAR : 
-             CHIRAG_AVATAR),
+          avatar: prev[char]?.avatar || CHIRAG_AVATAR,
           lastUpdate: lastUpdate !== undefined ? lastUpdate : (existingConversation?.lastUpdate || Date.now())
         }
       };
@@ -1527,7 +1432,7 @@ const AppContent: React.FC = () => {
                   setChatData(null); 
                 }}
               >
-                <div className="w-10 h-10 rounded-xl bg-[#4A7C59] flex items-center justify-center shadow-sm hover:shadow-md transition-shadow">
+                <div className="w-10 h-10 rounded-xl bg-purple-600 flex items-center justify-center shadow-sm hover:shadow-md transition-shadow">
                   <Logo size={22} isPulsing={false} />
                 </div>
               </div>
@@ -1554,9 +1459,7 @@ const AppContent: React.FC = () => {
             <>
               <div className="flex-1" />
               <div className="flex flex-col items-center">
-                <div className="w-11 h-11 flex items-center justify-center bg-[#4A7C59] rounded-xl shadow-sm animate-float">
-                  <Logo size={24} isPulsing={false} />
-                </div>
+                <Logo size={32} isPulsing={false} src="/icon_purple.png" />
               </div>
               <div className="flex-1 flex justify-end">
                 <UserMenu onSignInClick={() => setIsAuthModalOpen(true)} />
@@ -1996,7 +1899,7 @@ const AppContent: React.FC = () => {
           episodeLabel={chatData.episodeLabel || selectedSeries?.episodes[activeIdx]?.label || "Inscene History"}
           instantGreeting={chatData.intro || ""}
           initialHook={chatData.hook || "Continuing conversation"}
-          avatar={chatData.avatar || (selectedSeries?.avatars ? selectedSeries.avatars[chatData.char] : (chatData.char === 'Debu' ? DEBU_AVATAR : chatData.char === 'Anish' ? ANISH_AVATAR : CHIRAG_AVATAR))}
+          avatar={chatData.avatar || (selectedSeries?.avatars ? selectedSeries.avatars[chatData.char] : CHIRAG_AVATAR)}
           onClose={() => {
             // Don't clear typing status here - let it clear naturally when typing stops
             setChatData(null);

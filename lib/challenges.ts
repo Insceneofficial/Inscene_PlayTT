@@ -3,21 +3,11 @@
  * Challenges are set through chat and must be completed before proceeding
  */
 
-// Challenges for Anish's series
-export const ANISH_CHALLENGES: Record<number, string> = {
-  2: "Think about launching a very small AI prototype in 7 days and getting feedback from 10 real users",
-  3: "Update on the AI prototype using no code tools like lovable replit",
-  4: "Test with 3 friends",
-  5: "Launch with 10 friends"
-};
-
 /**
  * Get challenge for a specific episode
  */
 export const getChallengeForEpisode = (seriesId: string, episodeId: number): string | null => {
-  if (seriesId === 'startup-boy-anish') {
-    return ANISH_CHALLENGES[episodeId] || null;
-  }
+  // No challenges defined for current series
   return null;
 };
 

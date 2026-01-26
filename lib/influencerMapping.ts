@@ -3,8 +3,8 @@
 import { CHARACTER_PROFILES } from './characters';
 
 export interface InfluencerInfo {
-  id: string; // URL-friendly ID (e.g., 'startupboyanish', 'fit___monk', 'debuthefilmguy')
-  name: string; // Display name (e.g., 'Anish', 'Chirag', 'Debu')
+  id: string; // URL-friendly ID (e.g., 'fit___monk')
+  name: string; // Display name (e.g., 'Chirag')
   seriesId: string; // ID of the series they belong to
   seriesTitle: string; // Title of the series
   avatar: string;
@@ -26,15 +26,11 @@ export const setSeriesCatalog = (catalog: any[]) => {
  * Map influencer name to URL-friendly slug
  */
 const INFLUENCER_SLUGS: Record<string, string> = {
-  'Anish': 'startupboyanish',
   'Chirag': 'fit___monk',
-  'Debu': 'debuthefilmguy',
 };
 
 const SLUG_TO_NAME: Record<string, string> = {
-  'startupboyanish': 'Anish',
   'fit___monk': 'Chirag',
-  'debuthefilmguy': 'Debu',
 };
 
 export const getInfluencerSlug = (name: string): string => {
@@ -81,7 +77,7 @@ export const getAllInfluencers = (): InfluencerInfo[] => {
   const seen = new Set<string>();
   
   // List of influencers that should have pages
-  const allowedInfluencers = new Set(['Anish', 'Chirag', 'Debu']);
+  const allowedInfluencers = new Set(['Chirag']);
   
   for (const series of seriesCatalog) {
     if (series.avatars) {
