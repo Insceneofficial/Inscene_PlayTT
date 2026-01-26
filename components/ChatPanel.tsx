@@ -1229,15 +1229,9 @@ Keep it brief and friendly.`
         </div>
 
         {/* Quick Action Buttons - Minimal */}
-        {isUserLoggedIn() && (
+        {isUserLoggedIn() && currentGoal && (
           <div className="relative z-10 bg-white/80 backdrop-blur-xl border-t border-black/[0.06] px-4 pt-2 pb-0 flex items-center gap-2 overflow-x-auto hide-scrollbar">
-            <button
-              onClick={() => handleQuickAction('my_goal')}
-              className="flex-shrink-0 px-3.5 py-2 rounded-lg text-[12px] font-medium bg-black/[0.04] text-[#4A4A4A] hover:bg-black/[0.08] transition-all"
-            >
-              My Challenge
-            </button>
-            {currentGoal && !currentGoal.completed_today && (
+            {!currentGoal.completed_today && (
               <button
                 onClick={() => handleQuickAction('mark_done')}
                 className="flex-shrink-0 px-3.5 py-2 rounded-lg text-[12px] font-medium bg-[#4A7C59] text-white hover:bg-[#3D6549] transition-all"
@@ -1245,19 +1239,15 @@ Keep it brief and friendly.`
                 ✓ Done
               </button>
             )}
-            {currentGoal && (
-              <button
-                onClick={() => handleQuickAction('adjust')}
-                className="flex-shrink-0 px-3.5 py-2 rounded-lg text-[12px] font-medium bg-black/[0.04] text-[#8A8A8A] hover:text-[#C9A227] transition-all"
-              >
-                Adjust
-              </button>
-            )}
-            {currentGoal && (
-              <div className="flex-shrink-0 px-3 py-1.5 text-[12px] font-semibold text-[#C77B58] flex items-center gap-1 bg-[#C77B58]/10 rounded-lg">
-                {currentGoal.current_streak} streak
-              </div>
-            )}
+            <button
+              onClick={() => handleQuickAction('adjust')}
+              className="flex-shrink-0 px-3.5 py-2 rounded-lg text-[12px] font-medium bg-black/[0.04] text-[#8A8A8A] hover:text-[#C9A227] transition-all"
+            >
+              Adjust
+            </button>
+            <div className="flex-shrink-0 px-3 py-1.5 text-[12px] font-semibold text-[#C77B58] flex items-center gap-1 bg-[#C77B58]/10 rounded-lg">
+              {currentGoal.current_streak} streak
+            </div>
           </div>
         )}
 
@@ -1382,15 +1372,9 @@ Keep it brief and friendly.`
         </div>
 
         {/* Quick Action Buttons - Minimal */}
-        {isUserLoggedIn() && (
+        {isUserLoggedIn() && currentGoal && (
           <div className="relative z-10 px-5 pb-2 pt-2 flex items-center gap-2 overflow-x-auto hide-scrollbar bg-white/90 backdrop-blur-sm border-t border-black/[0.06]">
-            <button
-              onClick={() => handleQuickAction('my_goal')}
-              className="flex-shrink-0 px-3.5 py-2 rounded-lg text-[12px] font-medium bg-black/[0.04] text-[#4A4A4A] hover:bg-black/[0.08] transition-all"
-            >
-              My Challenge
-            </button>
-            {currentGoal && !currentGoal.completed_today && (
+            {!currentGoal.completed_today && (
               <button
                 onClick={() => handleQuickAction('mark_done')}
                 className="flex-shrink-0 px-3.5 py-2 rounded-lg text-[12px] font-medium bg-[#4A7C59] text-white hover:bg-[#3D6549] transition-all"
@@ -1398,19 +1382,15 @@ Keep it brief and friendly.`
                 ✓ Done
               </button>
             )}
-            {currentGoal && (
-              <button
-                onClick={() => handleQuickAction('adjust')}
-                className="flex-shrink-0 px-3.5 py-2 rounded-lg text-[12px] font-medium bg-black/[0.04] text-[#8A8A8A] hover:text-[#C9A227] transition-all"
-              >
-                Adjust
-              </button>
-            )}
-            {currentGoal && (
-              <div className="flex-shrink-0 px-3 py-1.5 text-[12px] font-semibold text-[#C77B58] flex items-center gap-1 bg-[#C77B58]/10 rounded-lg">
-                {currentGoal.current_streak} streak
-              </div>
-            )}
+            <button
+              onClick={() => handleQuickAction('adjust')}
+              className="flex-shrink-0 px-3.5 py-2 rounded-lg text-[12px] font-medium bg-black/[0.04] text-[#8A8A8A] hover:text-[#C9A227] transition-all"
+            >
+              Adjust
+            </button>
+            <div className="flex-shrink-0 px-3 py-1.5 text-[12px] font-semibold text-[#C77B58] flex items-center gap-1 bg-[#C77B58]/10 rounded-lg">
+              {currentGoal.current_streak} streak
+            </div>
           </div>
         )}
 

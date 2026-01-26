@@ -7,7 +7,6 @@ import WaitlistModal from './components/WaitlistModal.tsx';
 import UserMenu from './components/UserMenu.tsx';
 import InfluencerPage from './components/InfluencerPage.tsx';
 import ChatWidget from './components/ChatWidget.tsx';
-import GoalsView from './components/GoalsView.tsx';
 import PathChoiceModal from './components/PathChoiceModal.tsx';
 import { AuthProvider, useAuth } from './lib/auth';
 import { getUserMessageCount, MAX_USER_MESSAGES, hasUnlimitedMessages } from './lib/chatStorage';
@@ -1098,7 +1097,6 @@ const AppContent: React.FC = () => {
   const [choiceModalData, setChoiceModalData] = useState<any>(null);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [isWaitlistModalOpen, setIsWaitlistModalOpen] = useState(false);
-  const [isGoalsOpen, setIsGoalsOpen] = useState(false);
   const [showPathChoiceModal, setShowPathChoiceModal] = useState(false);
   
   const [conversations, setConversations] = useState<Record<string, ConversationHistoryEntry>>({});
@@ -1122,19 +1120,10 @@ const AppContent: React.FC = () => {
     const viewParam = searchParams.get('view');
     if (viewParam === 'chats') {
       setCurrentView('chats');
-      setIsGoalsOpen(false);
-    } else if (viewParam === 'progress') {
-      if (isAuthenticated) {
-        setIsGoalsOpen(true);
-        setCurrentView('discover');
-      } else {
-        setIsAuthModalOpen(true);
-      }
     } else {
       setCurrentView('discover');
-      setIsGoalsOpen(false);
     }
-  }, [searchParams, isAuthenticated]);
+  }, [searchParams]);
 
   // Track viewer on app load
   useEffect(() => {
@@ -1730,10 +1719,9 @@ const AppContent: React.FC = () => {
             <button 
               onClick={() => {
                 setCurrentView('discover');
-                setIsGoalsOpen(false);
                 setSearchParams({});
               }}
-              className={`flex-1 flex flex-col items-center gap-0.5 transition-colors duration-300 ease-in-out justify-center h-full ${currentView === 'discover' && !isGoalsOpen ? 'text-[#4A7C59]' : 'text-[#ACACAC]'}`}
+              className={`flex-1 flex flex-col items-center gap-0.5 transition-colors duration-300 ease-in-out justify-center h-full ${currentView === 'discover' ? 'text-[#4A7C59]' : 'text-[#ACACAC]'}`}
             >
               <svg 
                 viewBox="0 0 24 24" 
@@ -1748,10 +1736,9 @@ const AppContent: React.FC = () => {
             <button 
               onClick={() => {
                 setCurrentView('chats');
-                setIsGoalsOpen(false);
                 setSearchParams({ view: 'chats' });
               }}
-              className={`flex-1 flex flex-col items-center gap-0.5 transition-colors duration-300 ease-in-out justify-center h-full ${currentView === 'chats' && !isGoalsOpen ? 'text-[#4A90A4]' : 'text-[#ACACAC]'}`}
+              className={`flex-1 flex flex-col items-center gap-0.5 transition-colors duration-300 ease-in-out justify-center h-full ${currentView === 'chats' ? 'text-[#4A90A4]' : 'text-[#ACACAC]'}`}
             >
               <div className="relative">
                 <svg viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6 transition-colors duration-300 ease-in-out">
@@ -1764,47 +1751,10 @@ const AppContent: React.FC = () => {
               <span className="text-[10px] font-semibold transition-colors duration-300 ease-in-out">Messages</span>
             </button>
 
-            {/* Challenges Tab */}
-            <button 
-              onClick={() => {
-                if (isAuthenticated) {
-                  setIsGoalsOpen(true);
-                  setSearchParams({ view: 'progress' });
-                } else {
-                  setIsAuthModalOpen(true);
-                }
-              }}
-              className={`flex-1 flex flex-col items-center gap-0.5 transition-colors duration-300 ease-in-out justify-center h-full ${isGoalsOpen ? 'text-[#C9A227]' : 'text-[#ACACAC]'} hover:text-[#C9A227]`}
-            >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-6 h-6 transition-colors duration-300 ease-in-out">
-                <circle cx="12" cy="12" r="10" />
-                <circle cx="12" cy="12" r="6" />
-                <circle cx="12" cy="12" r="2" />
-              </svg>
-              <span className="text-[10px] font-semibold transition-colors duration-300 ease-in-out">Challenges</span>
-            </button>
           </div>
         </nav>
       )}
 
-      {/* Challenges View */}
-      {isGoalsOpen && (
-        <GoalsView 
-          onClose={() => setIsGoalsOpen(false)}
-          onGoalSelect={(goal) => {
-            // Open chat with the creator
-            setIsGoalsOpen(false);
-            handleChatInit({
-              char: goal.creator_id,
-              intro: `Let's check on your challenge: "${goal.title}"`,
-              hook: goal.daily_task,
-              isFromHistory: true,
-              isWhatsApp: true,
-              entryPoint: 'chat_history'
-            });
-          }}
-        />
-      )}
 
       {/* Choice Selection Modal - Minimal Elegance */}
       {choiceModalData && (
