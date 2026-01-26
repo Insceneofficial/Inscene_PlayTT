@@ -1,4 +1,3 @@
-import OpenAI from "openai";
 import React, { useState, useEffect, useRef } from 'react';
 import { trackChatStart, updateChatMessages, trackChatEnd } from '../lib/analytics';
 import { saveMessage, loadChatHistory, isUserLoggedIn, debugListAllMessages, getUserMessageCount, MAX_USER_MESSAGES, hasUnlimitedMessages } from '../lib/chatStorage';
@@ -90,6 +89,44 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
     const minMs = 30 * 1000;      // 30 seconds
     const maxMs = 2 * 60 * 1000; // 2 minutes
     return Math.floor(Math.random() * (maxMs - minMs)) + minMs;
+  };
+
+  // Helper function to call the chat API route
+  const callChatAPI = async (params: {
+    messages: { role: 'system' | 'user' | 'assistant'; content: string }[];
+    model?: string;
+    tools?: any[];
+    tool_choice?: 'auto' | 'none' | { type: 'function'; function: { name: string } };
+    temperature?: number;
+  }) => {
+    const apiUrl = '/api/chat';
+    
+    try {
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          messages: params.messages,
+          model: params.model || 'gpt-4o-mini',
+          tools: params.tools,
+          tool_choice: params.tool_choice || 'auto',
+          temperature: params.temperature || 0.8,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || `API request failed with status ${response.status}`);
+      }
+
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      console.error('[ChatPanel] API call error:', error);
+      throw error;
+    }
   };
   
   // Keep callback ref in sync
@@ -208,14 +245,9 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
       
       // Generate AI message automatically
       const generateAutoMessage = async () => {
-        const apiKey = process.env.API_KEY;
-        if (!apiKey) return;
-        
         setIsTyping(true);
         
         try {
-          const openai = new OpenAI({ apiKey, dangerouslyAllowBrowser: true });
-          
           // Build conversation - use the challenge context in system prompt
           // The system prompt already has instructions about the challenge
           // We just need to trigger the AI to start the conversation
@@ -230,10 +262,10 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
             content: 'Hi!'
           });
           
-          // Get AI response
-          const response = await openai.chat.completions.create({
-            model: 'gpt-4o-mini',
+          // Get AI response via API route
+          const response = await callChatAPI({
             messages: aiMessages,
+            model: 'gpt-4o-mini',
             temperature: 0.95
           });
           
@@ -513,11 +545,7 @@ Do NOT set a new challenge until the previous one is completed.`;
     if (isGeneratingReminder.current || reminderCount.current >= MAX_REMINDERS) return;
     
     isGeneratingReminder.current = true;
-    const apiKey = process.env.API_KEY;
-    
     try {
-      const openai = new OpenAI({ apiKey, dangerouslyAllowBrowser: true });
-      
       // Build context from recent conversation
       const currentMessages = messagesRef.current;
       const recentMessages = currentMessages.slice(-6); // Last 6 messages for context
@@ -544,12 +572,12 @@ Rules:
 Generate ONLY the follow-up message, nothing else.
 `;
 
-      const response = await openai.chat.completions.create({
-        model: 'gpt-4o-mini',
+      const response = await callChatAPI({
         messages: [
           { role: 'system', content: systemPrompt.current },
           { role: 'user', content: dropOffPrompt }
         ],
+        model: 'gpt-4o-mini',
         temperature: 0.95
       });
 
@@ -661,6 +689,10 @@ Generate ONLY the follow-up message, nothing else.
   const handleSend = async () => {
     if (!inputValue.trim() || isTyping) return;
     
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/ac7c5e46-64d1-400e-8ce5-b517901614ef',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ChatPanel.tsx:666',message:'handleSend entry',data:{hasInput:!!inputValue.trim(),isTyping},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H1,H2'})}).catch(()=>{});
+    // #endregion
+    
     // Check message count limit before sending (skip for unlimited users)
     if (isUserLoggedIn() && !hasUnlimitedMessages()) {
       const messageCount = await getUserMessageCount();
@@ -673,7 +705,7 @@ Generate ONLY the follow-up message, nothing else.
       }
     }
     
-    const apiKey = process.env.API_KEY;
+    
     const userText = inputValue.trim();
     const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
@@ -761,8 +793,6 @@ Generate ONLY the follow-up message, nothing else.
     }
 
     try {
-      const openai = new OpenAI({ apiKey, dangerouslyAllowBrowser: true });
-      
       // Build the messages array
       const aiMessages: { role: 'system' | 'user' | 'assistant'; content: string }[] = [
         { role: 'system', content: systemPrompt.current },
@@ -835,11 +865,12 @@ Keep it brief and friendly.`
         messageCount: aiMessages.length
       });
 
-      const response = await openai.chat.completions.create({
-        model: 'gpt-4o-mini',
+      // Call the API route instead of OpenAI directly
+      const response = await callChatAPI({
         messages: aiMessages,
+        model: 'gpt-4o-mini',
         tools: tools,
-        tool_choice: 'auto', // Let the model decide when to use the function
+        tool_choice: 'auto',
         temperature: 0.8,
       });
 
@@ -998,9 +1029,9 @@ Keep it brief and friendly.`
         });
 
         const finalMessages = [...followUpMessages, ...toolResults];
-        const followUpResponse = await openai.chat.completions.create({
-          model: 'gpt-4o-mini',
+        const followUpResponse = await callChatAPI({
           messages: finalMessages,
+          model: 'gpt-4o-mini',
           tools: tools,
           tool_choice: 'auto',
           temperature: 0.8,
@@ -1054,6 +1085,18 @@ Keep it brief and friendly.`
       }
     } catch (error) {
       console.error("AI Error:", error);
+      // #region agent log
+      const errorDetails = {
+        errorType: error?.constructor?.name || typeof error,
+        errorMessage: error instanceof Error ? error.message : String(error),
+        errorStack: error instanceof Error ? error.stack : undefined,
+        errorString: String(error),
+        isNetworkError: error instanceof Error && (error.message.includes('network') || error.message.includes('fetch') || error.message.includes('Failed to fetch')),
+        isCorsError: error instanceof Error && (error.message.includes('CORS') || error.message.includes('cross-origin')),
+        errorName: error instanceof Error ? error.name : 'Unknown'
+      };
+      fetch('http://127.0.0.1:7242/ingest/ac7c5e46-64d1-400e-8ce5-b517901614ef',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ChatPanel.tsx:1071',message:'OpenAI API call failed - catch block',data:errorDetails,timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H1,H2,H3,H4'})}).catch(()=>{});
+      // #endregion
       const errorMessage = "Network issue. Try again later.";
       
       setMessages(prev => [...prev, { 

@@ -4,6 +4,8 @@ import react from '@vitejs/plugin-react';
 
 export default defineConfig(({ mode }) => {
     const env = loadEnv(mode, '.', '');
+    // Use process.env for Vercel/production, fallback to loaded env for local dev
+    const openaiApiKey = process.env.OPENAI_API_KEY || env.OPENAI_API_KEY;
     return {
       server: {
         port: 3000,
@@ -11,8 +13,8 @@ export default defineConfig(({ mode }) => {
       },
       plugins: [react()],
       define: {
-        'process.env.API_KEY': JSON.stringify(env.OPENAI_API_KEY),
-        'process.env.OPENAI_API_KEY': JSON.stringify(env.OPENAI_API_KEY)
+        'process.env.API_KEY': JSON.stringify(openaiApiKey),
+        'process.env.OPENAI_API_KEY': JSON.stringify(openaiApiKey)
       },
       resolve: {
         alias: {
