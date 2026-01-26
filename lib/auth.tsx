@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import { supabase, isSupabaseConfigured } from './supabase';
+import { isDevMode, createDevUser, shouldUseDevAuth } from './devAuth';
 
 // ============================================
 // Types
@@ -101,7 +102,42 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   // Load Google Identity Services script
   useEffect(() => {
-    // Check for existing session
+    // DEVELOPMENT BYPASS: Auto-login in dev mode
+    if (shouldUseDevAuth()) {
+      const existingDevUser = localStorage.getItem('inscene_google_user');
+      if (!existingDevUser) {
+        const devUser = createDevUser();
+        if (devUser) {
+          setUser(devUser);
+          setIsLoading(false);
+          console.warn('[DevAuth] ⚠️ DEVELOPMENT MODE: Auto-logged in with dev user');
+          console.warn('[DevAuth] This bypass is ONLY active in npm run dev');
+          return; // Skip Google script loading in dev mode
+        }
+      } else {
+        // Dev user already exists, just load it
+        try {
+          const parsed = JSON.parse(existingDevUser);
+          // Verify it's actually a dev user (not a real Google user)
+          if (parsed.id === 'dev-user-local-testing' || parsed.email === 'dev@local.test') {
+            setUser(parsed);
+            setIsLoading(false);
+            console.log('[DevAuth] Loaded existing dev user');
+            return; // Skip Google script loading in dev mode
+          }
+        } catch {
+          // If parsing fails, create new dev user
+          const devUser = createDevUser();
+          if (devUser) {
+            setUser(devUser);
+            setIsLoading(false);
+            return; // Skip Google script loading in dev mode
+          }
+        }
+      }
+    }
+    
+    // PRODUCTION CODE: Check for existing session (normal flow)
     const savedUser = localStorage.getItem('inscene_google_user');
     if (savedUser) {
       try {
@@ -112,7 +148,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
     setIsLoading(false);
 
-    // Load Google script
+    // Load Google script (only in production/non-dev)
     if (!GOOGLE_CLIENT_ID) {
       console.warn('Google Client ID not configured');
       return;

@@ -117,14 +117,32 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
       });
 
       if (!response.ok) {
+        // Check if API route doesn't exist (404) - means we're in npm run dev without vercel dev
+        if (response.status === 404) {
+          const devModeError = new Error('API_ROUTE_NOT_FOUND');
+          (devModeError as any).isDevModeIssue = true;
+          throw devModeError;
+        }
+        
         const errorData = await response.json().catch(() => ({}));
         throw new Error(errorData.message || `API request failed with status ${response.status}`);
       }
 
       const data = await response.json();
       return data;
-    } catch (error) {
+    } catch (error: any) {
       console.error('[ChatPanel] API call error:', error);
+      
+      // Check if it's a network/fetch error (API route not available)
+      if (error.message?.includes('Failed to fetch') || 
+          error.message?.includes('network') ||
+          error.name === 'TypeError' ||
+          error.isDevModeIssue) {
+        const devModeError = new Error('API_ROUTE_NOT_FOUND');
+        (devModeError as any).isDevModeIssue = true;
+        throw devModeError;
+      }
+      
       throw error;
     }
   };
@@ -1083,7 +1101,7 @@ Keep it brief and friendly.`
           onClose();
         }, 4000); // Give user time to read the closing message
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("AI Error:", error);
       // #region agent log
       const errorDetails = {
@@ -1097,7 +1115,14 @@ Keep it brief and friendly.`
       };
       fetch('http://127.0.0.1:7242/ingest/ac7c5e46-64d1-400e-8ce5-b517901614ef',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ChatPanel.tsx:1071',message:'OpenAI API call failed - catch block',data:errorDetails,timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H1,H2,H3,H4'})}).catch(()=>{});
       // #endregion
-      const errorMessage = "Network issue. Try again later.";
+      
+      // Check if API route is not available (dev mode issue)
+      let errorMessage = "Network issue. Try again later.";
+      if (error?.isDevModeIssue || error?.message === 'API_ROUTE_NOT_FOUND') {
+        errorMessage = "⚠️ API route not available. Please use 'vercel dev' instead of 'npm run dev' to test the chatbot locally. The /api/chat route only works with Vercel CLI or in production.";
+      } else if (error instanceof Error && (error.message.includes('Failed to fetch') || error.message.includes('network'))) {
+        errorMessage = "Unable to connect to the chat service. Please check your internet connection and try again.";
+      }
       
       setMessages(prev => [...prev, { 
         role: 'assistant', 
@@ -1143,12 +1168,14 @@ Keep it brief and friendly.`
         <div className="relative z-10 flex items-center gap-3 px-4 py-3 bg-white/80 backdrop-blur-xl border-b border-black/[0.06]">
           <button onClick={handleClose} className="p-1 hover:bg-black/[0.04] rounded-xl transition-colors active:scale-95 flex items-center gap-2">
             <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" className="text-[#4A4A4A]"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"></path></svg>
-            <div className="w-10 h-10 rounded-full overflow-hidden">
-              <img src={avatar} alt={character} className="w-full h-full object-cover" />
+            <div className="w-10 h-10 rounded-full bg-[#4A7C59] flex items-center justify-center text-white font-semibold text-lg shadow-sm">
+              {seriesTitle ? seriesTitle.charAt(0).toUpperCase() : character.charAt(0).toUpperCase()}
             </div>
           </button>
           <div className="flex flex-col flex-1" onClick={handleClose}>
-            <h4 className="text-[15px] font-semibold text-[#1A1A1A] leading-tight truncate tracking-tight">{character}</h4>
+            <h4 className="text-[15px] font-semibold text-[#1A1A1A] leading-tight truncate tracking-tight">
+              {character === 'Chirag' ? "Chirag's AI Avatar" : character}
+            </h4>
             <p className="text-[12px] text-[#4A7C59] font-medium">{isTyping ? 'typing...' : 'online'}</p>
           </div>
         </div>
@@ -1157,6 +1184,11 @@ Keep it brief and friendly.`
         <div ref={scrollRef} className="relative z-10 flex-1 overflow-y-auto px-4 py-4 space-y-2.5 flex flex-col hide-scrollbar pb-24">
           <div className="self-center my-3 bg-black/[0.04] text-[#8A8A8A] text-[11px] px-4 py-1.5 rounded-full font-medium">
             Today
+          </div>
+          
+          {/* AI Disclaimer */}
+          <div className="self-center mb-2 bg-[#FAF9F6] border border-black/[0.06] text-[#8A8A8A] text-[11px] px-3 py-1.5 rounded-lg font-medium">
+            It is an AI assisted chat bot
           </div>
 
           {messages.map((m, i) => (
@@ -1297,12 +1329,13 @@ Keep it brief and friendly.`
 
         <div className="relative z-10 px-5 py-4 flex justify-between items-center border-b border-black/[0.06] bg-white/90 backdrop-blur-sm">
           <div className="flex items-center gap-3">
-            <div className="relative w-11 h-11 rounded-full overflow-hidden">
-              <img src={avatar} alt={character} className="w-full h-full object-cover" />
-              <div className="absolute bottom-0 right-0 w-3 h-3 bg-[#4A7C59] border-2 border-white rounded-full" />
+            <div className="relative w-11 h-11 rounded-full bg-[#4A7C59] flex items-center justify-center text-white font-semibold text-lg shadow-sm">
+              {seriesTitle ? seriesTitle.charAt(0).toUpperCase() : character.charAt(0).toUpperCase()}
             </div>
             <div>
-              <h4 className="text-[15px] font-semibold leading-tight text-[#1A1A1A] tracking-tight">{character}</h4>
+              <h4 className="text-[15px] font-semibold leading-tight text-[#1A1A1A] tracking-tight">
+                {character === 'Chirag' ? "Chirag's AI Avatar" : character}
+              </h4>
               <p className="text-[11px] text-[#8A8A8A]">AI Coach</p>
             </div>
           </div>
@@ -1312,6 +1345,11 @@ Keep it brief and friendly.`
         </div>
 
         <div ref={scrollRef} className="relative z-10 flex-1 overflow-y-auto p-5 space-y-3 hide-scrollbar">
+          {/* AI Disclaimer */}
+          <div className="self-center mb-2 bg-[#FAF9F6] border border-black/[0.06] text-[#8A8A8A] text-[11px] px-3 py-1.5 rounded-lg font-medium">
+            It is an AI assisted chat bot
+          </div>
+          
           {messages.map((m, i) => (
             <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'} animate-slide-up`}>
               <div className={`max-w-[80%] px-4 py-2.5 rounded-2xl text-[15px] ${
