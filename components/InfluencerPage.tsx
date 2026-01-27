@@ -1589,6 +1589,7 @@ const InfluencerPage: React.FC = () => {
             setActiveIdx(0);
           }}
           onNavigateToEpisode={handleNavigateToEpisode}
+          isChatOpen={!!chatData}
         />
       )}
 

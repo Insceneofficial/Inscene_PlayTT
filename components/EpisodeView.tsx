@@ -12,6 +12,7 @@ interface EpisodeViewProps {
   onNextEpisode: () => void;
   onExit: () => void;
   onNavigateToEpisode?: (episodeId: number) => void;
+  isChatOpen?: boolean;
 }
 
 const EpisodeView: React.FC<EpisodeViewProps> = ({
@@ -23,6 +24,7 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
   onNextEpisode,
   onExit,
   onNavigateToEpisode,
+  isChatOpen = false,
 }) => {
   const navigate = useNavigate();
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -38,6 +40,8 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
   const [showCTAOverlay, setShowCTAOverlay] = useState(false);
   const [isScrubbing, setIsScrubbing] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
+  const [showChatBubble, setShowChatBubble] = useState(false);
+  const wasPlayingBeforeChatRef = useRef(false);
   
   // Analytics tracking
   const analyticsRecordId = useRef<string | null>(null);
@@ -53,6 +57,23 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
   // Get creator info
   const creatorName = series.avatars ? Object.keys(series.avatars)[0] : null;
   const creatorAvatar = creatorName ? series.avatars[creatorName] : undefined;
+  
+  // Find previous episode ID (for episodes > 1)
+  // This finds the episode with the highest ID that is less than the current episode ID
+  const getPreviousEpisodeId = (): number | null => {
+    if (episode.id <= 1) return null;
+    if (!series.episodes || series.episodes.length === 0) return null;
+    
+    // Find all episodes with ID less than current episode
+    const previousEpisodes = series.episodes
+      .filter((ep: any) => ep.id < episode.id)
+      .sort((a: any, b: any) => b.id - a.id); // Sort descending to get the closest previous episode
+    
+    // Return the episode with the highest ID that's still less than current
+    return previousEpisodes.length > 0 ? previousEpisodes[0].id : null;
+  };
+  
+  const previousEpisodeId = getPreviousEpisodeId();
 
   // Auto-hide overlay after 3 seconds (but not when paused)
   useEffect(() => {
@@ -64,6 +85,45 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
 
     return () => clearTimeout(timer);
   }, [isOverlayVisible, isPaused]);
+
+  // Show chat bubble after video starts playing (with typing indicator delay)
+  useEffect(() => {
+    if (isEnded || !episode.triggers || episode.triggers.length === 0) {
+      setShowChatBubble(false);
+      return;
+    }
+
+    // Show typing indicator first, then bubble text after delay
+    const typingTimer = setTimeout(() => {
+      setShowChatBubble(true);
+    }, 2000); // Show typing indicator for 2 seconds, then show "Talk to [Name]"
+
+    return () => clearTimeout(typingTimer);
+  }, [episode.id, isEnded, episode.triggers]);
+
+  // Pause video when chat opens, resume when chat closes
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    
+    if (isChatOpen) {
+      // Chat opened - pause video if it's playing
+      if (!video.paused) {
+        wasPlayingBeforeChatRef.current = true;
+        video.pause();
+      } else {
+        wasPlayingBeforeChatRef.current = false;
+      }
+    } else {
+      // Chat closed - resume video only if it was playing before chat opened
+      if (wasPlayingBeforeChatRef.current && video.paused && !isEnded) {
+        video.play().catch(() => {
+          // Autoplay might fail, that's okay
+        });
+        wasPlayingBeforeChatRef.current = false;
+      }
+    }
+  }, [isChatOpen, isEnded]);
 
   // Show overlay on tap (but don't auto-hide when paused)
   const handleVideoTap = useCallback(() => {
@@ -140,6 +200,15 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
     wasUnmutedRef.current = false;
     isEndingSession.current = false;
     sessionStartTime.current = null;
+    hasAttemptedAutoplay.current = false;
+    
+    // Reset CTA overlay state when episode changes
+    setShowCTAOverlay(false);
+    setIsEnded(false);
+    setIsPaused(false);
+    setProgress(0);
+    setCurrentTime(0);
+    setDuration(0);
 
     // Start analytics tracking
     if (!analyticsRecordId.current) {
@@ -238,15 +307,26 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
       setProgress((current / total) * 100 || 0);
       setIsPaused(paused);
       
-      // Show CTA overlay in last 7 seconds for Episode 1 (only when playing, not paused)
-      if (!paused && episode.id === 1 && episode.ctaMapping && total > 0 && current >= total - 7 && !isEnded) {
+      // Show CTA overlay in last 4-5 seconds for Episode 1 or 2 (only when playing, not paused)
+      // Only show if video has valid duration, has been playing for at least 1 second, and is in last 4.5 seconds
+      const lastSecondsThreshold = 4.5;
+      const shouldShowInLastSeconds = !paused && 
+                                      (episode.id === 1 || episode.id === 2) && 
+                                      episode.ctaMapping && 
+                                      total > 0 && 
+                                      current >= 1 && // Ensure video has started playing
+                                      current >= total - lastSecondsThreshold && 
+                                      !isEnded;
+      
+      if (shouldShowInLastSeconds) {
         setShowCTAOverlay(true);
-      } else if (!paused && (current < total - 7) && !isEnded) {
-        // Only hide CTA if not paused and not ended (when paused or ended, CTA should stay visible)
+      } else if (!paused && current < total - lastSecondsThreshold && !isEnded && current >= 1) {
+        // Only hide CTA if not paused, not ended, and not in last seconds (when paused or ended, CTA should stay visible)
         setShowCTAOverlay(false);
       }
+      
       // When video ends, keep CTA visible
-      if (isEnded && episode.id === 1 && episode.ctaMapping) {
+      if (isEnded && (episode.id === 1 || episode.id === 2) && episode.ctaMapping) {
         setShowCTAOverlay(true);
       }
     }
@@ -262,7 +342,7 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
       wasUnmutedRef.current = true;
       setIsPaused(false);
       // Hide CTA overlay when playback resumes
-      if (episode.id === 1 && episode.ctaMapping) {
+      if ((episode.id === 1 || episode.id === 2) && episode.ctaMapping) {
         setShowCTAOverlay(false);
       }
     } catch (error) {
@@ -275,11 +355,19 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
   };
 
   const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (videoRef.current) {
-      const newTime = (parseFloat(e.target.value) / 100) * videoRef.current.duration;
-      videoRef.current.currentTime = newTime;
-      setProgress(parseFloat(e.target.value));
+    if (videoRef.current && videoRef.current.duration) {
+      const total = videoRef.current.duration;
+      const newProgress = parseFloat(e.target.value);
+      const newTime = (newProgress / 100) * total;
+      
+      // Ensure newTime is within valid bounds
+      const clampedTime = Math.max(0, Math.min(newTime, total));
+      
+      videoRef.current.currentTime = clampedTime;
+      setProgress(newProgress);
+      setCurrentTime(clampedTime);
       seekCountRef.current += 1;
+      
       // Reset overlay visibility on seek
       setIsOverlayVisible(true);
       if (inactivityTimerRef.current) {
@@ -290,6 +378,21 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
         inactivityTimerRef.current = setTimeout(() => {
           setIsOverlayVisible(false);
         }, 3000);
+      }
+      
+      // Update CTA overlay visibility based on new position
+      // Hide CTA if seeking away from last 4.5 seconds (unless paused or ended)
+      const lastSecondsThreshold = 4.5;
+      if ((episode.id === 1 || episode.id === 2) && episode.ctaMapping) {
+        if (!isPaused && !isEnded && (clampedTime < total - lastSecondsThreshold || clampedTime < 1)) {
+          setShowCTAOverlay(false);
+        } else if (isPaused && !isEnded) {
+          // Keep CTA visible if paused
+          setShowCTAOverlay(true);
+        } else if (clampedTime >= total - lastSecondsThreshold && clampedTime >= 1 && !isPaused && !isEnded) {
+          // Show CTA if in last seconds
+          setShowCTAOverlay(true);
+        }
       }
     }
   };
@@ -365,16 +468,22 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
           setLoading(false);
           setShowPlayButton(false);
           setIsPaused(false);
-          // Hide CTA overlay when playback resumes (unless video has ended)
-          if (episode.id === 1 && episode.ctaMapping && !isEnded) {
-            setShowCTAOverlay(false);
+          // Hide CTA overlay when playback resumes (unless video has ended or in last 4.5 seconds)
+          if ((episode.id === 1 || episode.id === 2) && episode.ctaMapping && !isEnded && videoRef.current) {
+            const current = videoRef.current.currentTime;
+            const total = videoRef.current.duration;
+            const lastSecondsThreshold = 4.5;
+            // Only hide if not in last seconds
+            if (current < total - lastSecondsThreshold || current < 1) {
+              setShowCTAOverlay(false);
+            }
           }
         }}
         onPause={() => {
           handlePause();
           setIsPaused(true);
-          // Show CTA overlay when paused (for Episode 1, but not if video has ended - that's handled by onEnded)
-          if (episode.id === 1 && episode.ctaMapping && !isEnded) {
+          // Show CTA overlay when paused (for Episode 1 or 2, but not if video has ended - that's handled by onEnded)
+          if ((episode.id === 1 || episode.id === 2) && episode.ctaMapping && !isEnded) {
             setShowCTAOverlay(true);
           }
         }}
@@ -385,8 +494,8 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
           if (videoRef.current) {
             videoRef.current.pause();
           }
-          // Show CTA overlay when video ends (for Episode 1 with ctaMapping)
-          if (episode.id === 1 && episode.ctaMapping) {
+          // Show CTA overlay when video ends (for Episode 1 or 2 with ctaMapping)
+          if ((episode.id === 1 || episode.id === 2) && episode.ctaMapping) {
             setShowCTAOverlay(true);
           }
         }}
@@ -401,15 +510,21 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
           if (video?.paused) {
             video.play().catch(() => {});
             setIsPaused(false);
-            // Hide CTA overlay when playback resumes
-            if (episode.id === 1 && episode.ctaMapping) {
-              setShowCTAOverlay(false);
+            // Hide CTA overlay when playback resumes (unless in last 4.5 seconds)
+            if ((episode.id === 1 || episode.id === 2) && episode.ctaMapping) {
+              const current = video.currentTime;
+              const total = video.duration;
+              const lastSecondsThreshold = 4.5;
+              // Only hide if not in last seconds
+              if (current < total - lastSecondsThreshold || current < 1) {
+                setShowCTAOverlay(false);
+              }
             }
           } else {
             video?.pause();
             setIsPaused(true);
-            // Show CTA overlay when paused (for Episode 1)
-            if (episode.id === 1 && episode.ctaMapping) {
+            // Show CTA overlay when paused (for Episode 1 or 2)
+            if ((episode.id === 1 || episode.id === 2) && episode.ctaMapping) {
               setShowCTAOverlay(true);
             }
           }
@@ -454,6 +569,23 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
               <span className="h-0.5 bg-white rounded-full" />
             </div>
           </button>
+
+          {/* Previous Episode Button - Only show for episodes > 1, positioned after sidebar */}
+          {previousEpisodeId !== null && onNavigateToEpisode && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                e.preventDefault();
+                onNavigateToEpisode(previousEpisodeId);
+              }}
+              className="w-10 h-10 rounded-xl bg-white/10 backdrop-blur-sm border border-white/20 flex items-center justify-center active:scale-95 transition-all hover:bg-white/20"
+              aria-label="Go to previous episode"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} className="w-5 h-5 text-white">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 15L3 9m0 0l6-6m-6 6h12a6 6 0 010 12h-3" />
+              </svg>
+            </button>
+          )}
         </div>
       </div>
 
@@ -524,10 +656,66 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
         </div>
       </div>
 
-      {/* Bottom Progress Bar (always visible) */}
+      {/* Floating Chatbot Icon - Bottom Right */}
+      {!isEnded && episode.triggers && episode.triggers.length > 0 && (
+        <div 
+          className="absolute right-4 bottom-24 z-[100] pointer-events-auto"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {episode.triggers.map((t: any, idx: number) => {
+            const characterName = t.char || creatorName || 'Chirag';
+            return (
+              <div
+                key={idx}
+                data-chat-button
+                onClick={(e) => { 
+                  e.stopPropagation(); 
+                  onEnterStory(t.char, t.intro, t.hook, 'video_sidebar'); 
+                }}
+                className="cursor-pointer"
+              >
+                <div className="relative group">
+                  {/* Speech Bubble - Only show when overlay is visible */}
+                  {isOverlayVisible && (
+                    <div className="absolute top-1/2 -translate-y-1/2 right-full z-50 transition-all duration-500 ease-in-out pointer-events-none mr-2">
+                      <div className="relative bg-white/95 backdrop-blur-sm rounded-xl px-3 py-2 shadow-lg transition-all duration-500 ease-in-out">
+                        <div className="text-[#1A1A1A] text-[12px] font-medium leading-tight whitespace-nowrap flex items-center gap-0.5">
+                          {showChatBubble ? (
+                            `Talk to ${characterName}`
+                          ) : (
+                            <>
+                              <span className="inline-block dot-bounce-1 text-[#4A7C59]">.</span>
+                              <span className="inline-block dot-bounce-2 text-[#4A7C59]">.</span>
+                              <span className="inline-block dot-bounce-3 text-[#4A7C59]">.</span>
+                            </>
+                          )}
+                        </div>
+                        {/* Tail pointing right */}
+                        <div className="absolute top-1/2 -translate-y-1/2 right-0 translate-x-full w-0 h-0 border-l-[6px] border-t-[5px] border-b-[5px] border-l-white/95 border-t-transparent border-b-transparent"></div>
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* Character Avatar - Always visible */}
+                  <div className="relative w-12 h-12 rounded-full flex items-center justify-center overflow-hidden shadow-lg transition-all duration-300">
+                    <div className="absolute bottom-0 right-0 w-3 h-3 bg-[#4A7C59] border-2 border-black rounded-full z-30" />
+                    <img 
+                      src={series.avatars[t.char] || creatorAvatar || ''} 
+                      alt={characterName} 
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Bottom Progress Bar (always visible, but lower z-index when CTA is shown) */}
       {!isEnded && (
         <div 
-          className="absolute bottom-0 left-0 right-0 z-40 pt-20"
+          className={`absolute bottom-0 left-0 right-0 pt-20 ${showCTAOverlay ? 'z-[30]' : 'z-40'} pointer-events-auto`}
           onClick={(e) => e.stopPropagation()}
         >
           <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent h-20 pointer-events-none" />
@@ -566,63 +754,146 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
         </div>
       )}
 
-      {/* CTA Overlay - Shows when paused, in last 7 seconds, or when video ends for Episode 1 */}
-      {showCTAOverlay && episode.id === 1 && episode.ctaMapping && (
+      {/* CTA Overlay - Shows when paused, in last 7 seconds, or when video ends for Episode 1 or 2 */}
+      {showCTAOverlay && (episode.id === 1 || episode.id === 2) && episode.ctaMapping && (
         <div 
-          className="absolute bottom-0 left-0 right-0 z-[35] px-4 pb-6 pt-4"
+          className="absolute bottom-0 left-0 right-0 z-[50] px-4 pb-6 pt-4 pointer-events-auto"
           style={{ paddingBottom: (isPaused || isEnded) ? '100px' : '24px' }}
           onClick={(e) => e.stopPropagation()}
         >
-          <div className="bg-gradient-to-t from-black/80 via-black/60 to-transparent backdrop-blur-sm rounded-t-2xl">
-            <div className="px-4 py-3">
-              <p className="text-white text-center text-sm font-medium mb-4">
-                What problems are you facing?
+          <div className="bg-gradient-to-t from-black/80 via-black/60 to-transparent backdrop-blur-sm rounded-t-2xl pointer-events-auto">
+            <div className="px-4 py-3 pointer-events-auto">
+              <p className="text-white text-center text-sm font-medium mb-4 pointer-events-none">
+                {episode.id === 1 ? 'What problems are you facing?' : 'Which shot would you like to learn?'}
               </p>
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    if (onNavigateToEpisode && episode.ctaMapping?.professional) {
-                      onNavigateToEpisode(episode.ctaMapping.professional);
-                    }
-                  }}
-                  className="px-4 py-3 rounded-xl bg-white/10 backdrop-blur-sm border border-white/20 text-white text-xs font-medium hover:bg-white/20 active:scale-95 transition-all text-center min-h-[44px] flex items-center justify-center"
-                >
-                  Need guidance about professional cricket journey
-                </button>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    if (onNavigateToEpisode && episode.ctaMapping?.speed) {
-                      onNavigateToEpisode(episode.ctaMapping.speed);
-                    }
-                  }}
-                  className="px-4 py-3 rounded-xl bg-white/10 backdrop-blur-sm border border-white/20 text-white text-xs font-medium hover:bg-white/20 active:scale-95 transition-all text-center min-h-[44px] flex items-center justify-center"
-                >
-                  Speed
-                </button>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    if (onNavigateToEpisode && episode.ctaMapping?.stamina) {
-                      onNavigateToEpisode(episode.ctaMapping.stamina);
-                    }
-                  }}
-                  className="px-4 py-3 rounded-xl bg-white/10 backdrop-blur-sm border border-white/20 text-white text-xs font-medium hover:bg-white/20 active:scale-95 transition-all text-center min-h-[44px] flex items-center justify-center"
-                >
-                  Stamina
-                </button>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    if (onNavigateToEpisode && episode.ctaMapping?.shots) {
-                      onNavigateToEpisode(episode.ctaMapping.shots);
-                    }
-                  }}
-                  className="px-4 py-3 rounded-xl bg-white/10 backdrop-blur-sm border border-white/20 text-white text-xs font-medium hover:bg-white/20 active:scale-95 transition-all text-center min-h-[44px] flex items-center justify-center"
-                >
-                  Shots
-                </button>
+              <div className="grid grid-cols-2 gap-2 pointer-events-auto">
+                {episode.id === 1 ? (
+                  <>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        e.preventDefault();
+                        // Only navigate if explicitly configured with a valid episode ID
+                        const targetEpisodeId = episode.ctaMapping?.professional;
+                        if (onNavigateToEpisode && targetEpisodeId !== undefined && targetEpisodeId !== null && typeof targetEpisodeId === 'number') {
+                          onNavigateToEpisode(targetEpisodeId);
+                        }
+                      }}
+                      className="relative px-4 py-3 rounded-xl bg-white/10 backdrop-blur-sm border border-white/20 text-white text-xs font-medium hover:bg-white/20 active:scale-95 transition-all text-center min-h-[44px] flex items-center justify-center pointer-events-auto cursor-pointer w-full"
+                      style={{ touchAction: 'manipulation' }}
+                    >
+                      Need guidance about professional cricket journey
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        e.preventDefault();
+                        // Only navigate if explicitly configured with a valid episode ID
+                        const targetEpisodeId = episode.ctaMapping?.speed;
+                        if (onNavigateToEpisode && targetEpisodeId !== undefined && targetEpisodeId !== null && typeof targetEpisodeId === 'number') {
+                          onNavigateToEpisode(targetEpisodeId);
+                        }
+                      }}
+                      className="relative px-4 py-3 rounded-xl bg-white/10 backdrop-blur-sm border border-white/20 text-white text-xs font-medium hover:bg-white/20 active:scale-95 transition-all text-center min-h-[44px] flex items-center justify-center pointer-events-auto cursor-pointer w-full"
+                      style={{ touchAction: 'manipulation' }}
+                    >
+                      Speed
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        e.preventDefault();
+                        // Only navigate if explicitly configured with a valid episode ID
+                        const targetEpisodeId = episode.ctaMapping?.stamina;
+                        if (onNavigateToEpisode && targetEpisodeId !== undefined && targetEpisodeId !== null && typeof targetEpisodeId === 'number') {
+                          onNavigateToEpisode(targetEpisodeId);
+                        }
+                      }}
+                      className="relative px-4 py-3 rounded-xl bg-white/10 backdrop-blur-sm border border-white/20 text-white text-xs font-medium hover:bg-white/20 active:scale-95 transition-all text-center min-h-[44px] flex items-center justify-center pointer-events-auto cursor-pointer w-full"
+                      style={{ touchAction: 'manipulation' }}
+                    >
+                      Stamina
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        e.preventDefault();
+                        // Only navigate if explicitly configured with a valid episode ID
+                        const targetEpisodeId = episode.ctaMapping?.shots;
+                        if (onNavigateToEpisode && targetEpisodeId !== undefined && targetEpisodeId !== null && typeof targetEpisodeId === 'number') {
+                          onNavigateToEpisode(targetEpisodeId);
+                        }
+                      }}
+                      className="relative px-4 py-3 rounded-xl bg-white/10 backdrop-blur-sm border border-white/20 text-white text-xs font-medium hover:bg-white/20 active:scale-95 transition-all text-center min-h-[44px] flex items-center justify-center pointer-events-auto cursor-pointer w-full"
+                      style={{ touchAction: 'manipulation' }}
+                    >
+                      Shots
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        e.preventDefault();
+                        // Only navigate if explicitly configured with a valid episode ID
+                        const targetEpisodeId = episode.ctaMapping?.coverDrive;
+                        if (onNavigateToEpisode && targetEpisodeId !== undefined && targetEpisodeId !== null && typeof targetEpisodeId === 'number') {
+                          onNavigateToEpisode(targetEpisodeId);
+                        }
+                      }}
+                      className="relative px-4 py-3 rounded-xl bg-white/10 backdrop-blur-sm border border-white/20 text-white text-xs font-medium hover:bg-white/20 active:scale-95 transition-all text-center min-h-[44px] flex items-center justify-center pointer-events-auto cursor-pointer w-full"
+                      style={{ touchAction: 'manipulation' }}
+                    >
+                      Cover drive
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        e.preventDefault();
+                        // Only navigate if explicitly configured with a valid episode ID
+                        const targetEpisodeId = episode.ctaMapping?.pullShot;
+                        if (onNavigateToEpisode && targetEpisodeId !== undefined && targetEpisodeId !== null && typeof targetEpisodeId === 'number') {
+                          onNavigateToEpisode(targetEpisodeId);
+                        }
+                      }}
+                      className="relative px-4 py-3 rounded-xl bg-white/10 backdrop-blur-sm border border-white/20 text-white text-xs font-medium hover:bg-white/20 active:scale-95 transition-all text-center min-h-[44px] flex items-center justify-center pointer-events-auto cursor-pointer w-full"
+                      style={{ touchAction: 'manipulation' }}
+                    >
+                      Pull shot
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        e.preventDefault();
+                        // Only navigate if explicitly configured with a valid episode ID
+                        const targetEpisodeId = episode.ctaMapping?.stepOut;
+                        if (onNavigateToEpisode && targetEpisodeId !== undefined && targetEpisodeId !== null && typeof targetEpisodeId === 'number') {
+                          onNavigateToEpisode(targetEpisodeId);
+                        }
+                      }}
+                      className="relative px-4 py-3 rounded-xl bg-white/10 backdrop-blur-sm border border-white/20 text-white text-xs font-medium hover:bg-white/20 active:scale-95 transition-all text-center min-h-[44px] flex items-center justify-center pointer-events-auto cursor-pointer w-full"
+                      style={{ touchAction: 'manipulation' }}
+                    >
+                      Step out
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        e.preventDefault();
+                        // Only navigate if explicitly configured with a valid episode ID
+                        const targetEpisodeId = episode.ctaMapping?.cut;
+                        if (onNavigateToEpisode && targetEpisodeId !== undefined && targetEpisodeId !== null && typeof targetEpisodeId === 'number') {
+                          onNavigateToEpisode(targetEpisodeId);
+                        }
+                      }}
+                      className="relative px-4 py-3 rounded-xl bg-white/10 backdrop-blur-sm border border-white/20 text-white text-xs font-medium hover:bg-white/20 active:scale-95 transition-all text-center min-h-[44px] flex items-center justify-center pointer-events-auto cursor-pointer w-full"
+                      style={{ touchAction: 'manipulation' }}
+                    >
+                      Cut
+                    </button>
+                  </>
+                )}
               </div>
             </div>
           </div>
@@ -658,6 +929,17 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
           onClick={() => setIsSidebarOpen(false)}
         />
       )}
+
+      {/* Animation styles for typing indicator */}
+      <style>{`
+        @keyframes dotBounce {
+          0%, 100% { transform: translateY(0); }
+          50% { transform: translateY(-3px); }
+        }
+        .dot-bounce-1 { animation: dotBounce 1s ease-in-out infinite; }
+        .dot-bounce-2 { animation: dotBounce 1s ease-in-out infinite 0.15s; }
+        .dot-bounce-3 { animation: dotBounce 1s ease-in-out infinite 0.3s; }
+      `}</style>
     </div>
   );
 };

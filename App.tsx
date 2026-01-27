@@ -1060,16 +1060,26 @@ export const SERIES_CATALOG = [
           { char: 'Chirag', intro: "Ready to dominate the pitch? Fitness is 70% of the game. What's holding you back?", hook: "Athlete coaching session focused on cricket performance and doubt clearing." }
         ],
         ctaMapping: {
-          'professional': 2,
-          'speed': 4,
-          'stamina': 4,
-          'shots': 4
+          'shots': 2
+          // Other CTAs (professional, speed, stamina) have no navigation until explicitly configured
         }
       },
       {
         id: 2,
-        label: "Professional Cricket Journey",
-        url: "https://rgmeakgorodicnqgrffu.supabase.co/storage/v1/object/public/inscene-videos/Chirag/Ep2%20Professionalcricket%20Ageselection.mp4",
+        label: "Skill Hub Intro",
+        url: "https://rgmeakgorodicnqgrffu.supabase.co/storage/v1/object/public/inscene-videos/Chirag/Ep4%20Skillhubintro.mp4",
+        triggers: [
+          { char: 'Chirag', intro: "Ready to dominate the pitch? Fitness is 70% of the game. What's holding you back?", hook: "Athlete coaching session focused on cricket performance and doubt clearing." }
+        ],
+        ctaMapping: {
+          'coverDrive': 3
+          // Other CTAs (pullShot, stepOut, cut) have no navigation until explicitly configured
+        }
+      },
+      {
+        id: 3,
+        label: "Cover Drive",
+        url: "https://rgmeakgorodicnqgrffu.supabase.co/storage/v1/object/public/inscene-videos/Chirag/Ep4a%20Coverdrive.mp4",
         triggers: [
           { char: 'Chirag', intro: "Ready to dominate the pitch? Fitness is 70% of the game. What's holding you back?", hook: "Athlete coaching session focused on cricket performance and doubt clearing." }
         ]
@@ -1112,6 +1122,7 @@ const AppContent: React.FC = () => {
   const [choiceModalData, setChoiceModalData] = useState<any>(null);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [isWaitlistModalOpen, setIsWaitlistModalOpen] = useState(false);
+  const [ctaNavigatedEpisodes, setCtaNavigatedEpisodes] = useState<Set<number>>(new Set());
   
   const [conversations, setConversations] = useState<Record<string, ConversationHistoryEntry>>({});
   const [typingStatus, setTypingStatus] = useState<Record<string, boolean>>({});
@@ -1128,6 +1139,13 @@ const AppContent: React.FC = () => {
   useEffect(() => {
     setSeriesCatalog(SERIES_CATALOG);
   }, []);
+
+  // Reset CTA-navigated episodes when series changes
+  useEffect(() => {
+    if (!selectedSeries) {
+      setCtaNavigatedEpisodes(new Set());
+    }
+  }, [selectedSeries]);
 
   // Read URL query parameters to set the view
   useEffect(() => {
@@ -1318,32 +1336,66 @@ const AppContent: React.FC = () => {
   const handleNavigateToEpisode = (episodeId: number) => {
     if (!selectedSeries) return;
     
-    // Filter episodes based on path choice (same logic as in render)
-    const getFilteredEpisodes = (episodes: any[], seriesId: string): any[] => {
+    // Validate episode ID
+    if (episodeId === undefined || episodeId === null || typeof episodeId !== 'number' || isNaN(episodeId)) {
+      console.warn('[handleNavigateToEpisode] Invalid episode ID:', episodeId);
+      return;
+    }
+    
+    // Verify the episode exists in the series
+    const targetEpisode = selectedSeries.episodes.find((ep: any) => ep.id === episodeId);
+    if (!targetEpisode) {
+      console.warn('[handleNavigateToEpisode] Episode not found:', episodeId);
+      return;
+    }
+    
+    // Add episode to CTA-navigated set so it's included in filtered list
+    setCtaNavigatedEpisodes(prev => new Set(prev).add(episodeId));
+    
+    // Filter episodes based on path choice (same logic as in render, but including CTA-navigated episodes)
+    const getFilteredEpisodes = (episodes: any[], seriesId: string, ctaEpisodes: Set<number>): any[] => {
       if (typeof window === 'undefined') return episodes;
       const storageKey = `inscene_path_choice_${seriesId}`;
       const choice = localStorage.getItem(storageKey);
       
+      let filtered: any[] = [];
+      
       if (!choice || (choice !== 'building' && choice !== 'exploring')) {
-        return episodes.filter((ep: any) => ep.id === 1);
+        filtered = episodes.filter((ep: any) => ep.id === 1);
+      } else if (choice === 'building') {
+        filtered = episodes.filter((ep: any) => [1, 2, 3, 4, 5].includes(ep.id));
+      } else if (choice === 'exploring') {
+        filtered = episodes.filter((ep: any) => [1, 3, 5].includes(ep.id));
+      } else {
+        filtered = episodes.filter((ep: any) => ep.id === 1);
       }
       
-      if (choice === 'building') {
-        return episodes.filter((ep: any) => [1, 2, 3, 4, 5].includes(ep.id));
-      }
+      // Add CTA-navigated episodes that aren't already in the filtered list
+      ctaEpisodes.forEach(epId => {
+        if (!filtered.find(ep => ep.id === epId)) {
+          const episode = episodes.find((ep: any) => ep.id === epId);
+          if (episode) {
+            filtered.push(episode);
+          }
+        }
+      });
       
-      if (choice === 'exploring') {
-        return episodes.filter((ep: any) => [1, 3, 5].includes(ep.id));
-      }
-      
-      return episodes.filter((ep: any) => ep.id === 1);
+      return filtered;
     };
     
-    const filteredEpisodes = getFilteredEpisodes(selectedSeries.episodes, selectedSeries.id);
+    const filteredEpisodes = getFilteredEpisodes(selectedSeries.episodes, selectedSeries.id, ctaNavigatedEpisodes);
     const targetIndex = filteredEpisodes.findIndex((ep: any) => ep.id === episodeId);
     
     if (targetIndex !== -1) {
       setActiveIdx(targetIndex);
+    } else {
+      // If still not found, try adding it again and recalculate
+      const newCtaSet = new Set(ctaNavigatedEpisodes).add(episodeId);
+      const newFiltered = getFilteredEpisodes(selectedSeries.episodes, selectedSeries.id, newCtaSet);
+      const newTargetIndex = newFiltered.findIndex((ep: any) => ep.id === episodeId);
+      if (newTargetIndex !== -1) {
+        setActiveIdx(newTargetIndex);
+      }
     }
   };
 
@@ -1742,31 +1794,41 @@ const AppContent: React.FC = () => {
       )}
 
       {selectedSeries && (() => {
-        // Filter episodes based on path choice
-        const getFilteredEpisodes = (episodes: any[], seriesId: string): any[] => {
+        // Filter episodes based on path choice (including CTA-navigated episodes)
+        const getFilteredEpisodes = (episodes: any[], seriesId: string, ctaEpisodes: Set<number>): any[] => {
           if (typeof window === 'undefined') return episodes;
           const storageKey = `inscene_path_choice_${seriesId}`;
           const choice = localStorage.getItem(storageKey);
           
+          let filtered: any[] = [];
+          
           // If no path choice made yet, only show episode 1
           if (!choice || (choice !== 'building' && choice !== 'exploring')) {
-            return episodes.filter((ep: any) => ep.id === 1);
+            filtered = episodes.filter((ep: any) => ep.id === 1);
+          } else if (choice === 'building') {
+            // If building path: show episodes 1, 2, 3, 4, 5
+            filtered = episodes.filter((ep: any) => [1, 2, 3, 4, 5].includes(ep.id));
+          } else if (choice === 'exploring') {
+            // If exploring path: show episodes 1, 3, 5
+            filtered = episodes.filter((ep: any) => [1, 3, 5].includes(ep.id));
+          } else {
+            filtered = episodes.filter((ep: any) => ep.id === 1);
           }
           
-          // If building path: show episodes 1, 2, 3, 4, 5
-          if (choice === 'building') {
-            return episodes.filter((ep: any) => [1, 2, 3, 4, 5].includes(ep.id));
-          }
+          // Add CTA-navigated episodes that aren't already in the filtered list
+          ctaEpisodes.forEach(epId => {
+            if (!filtered.find(ep => ep.id === epId)) {
+              const episode = episodes.find((ep: any) => ep.id === epId);
+              if (episode) {
+                filtered.push(episode);
+              }
+            }
+          });
           
-          // If exploring path: show episodes 1, 3, 5
-          if (choice === 'exploring') {
-            return episodes.filter((ep: any) => [1, 3, 5].includes(ep.id));
-          }
-          
-          return episodes.filter((ep: any) => ep.id === 1);
+          return filtered;
         };
         
-        const filteredEpisodes = getFilteredEpisodes(selectedSeries.episodes, selectedSeries.id);
+        const filteredEpisodes = getFilteredEpisodes(selectedSeries.episodes, selectedSeries.id, ctaNavigatedEpisodes);
         const currentEpisode = filteredEpisodes[activeIdx] || filteredEpisodes[0];
         
         if (!currentEpisode) return null;
@@ -1793,6 +1855,7 @@ const AppContent: React.FC = () => {
               setChatData(null);
             }}
             onNavigateToEpisode={handleNavigateToEpisode}
+            isChatOpen={!!chatData}
           />
         );
       })()}
