@@ -7,7 +7,6 @@ import WaitlistModal from './components/WaitlistModal.tsx';
 import UserMenu from './components/UserMenu.tsx';
 import InfluencerPage from './components/InfluencerPage.tsx';
 import ChatWidget from './components/ChatWidget.tsx';
-import PathChoiceModal from './components/PathChoiceModal.tsx';
 import HamburgerMenu from './components/HamburgerMenu.tsx';
 import LeaderboardDrawer from './components/LeaderboardDrawer.tsx';
 import EpisodeView from './components/EpisodeView.tsx';
@@ -996,15 +995,6 @@ const ReelItem: React.FC<{
         </>
       )}
 
-      {isEnded && (
-        <VideoEndScreen
-          episode={episode}
-          series={series}
-          onEnterStory={onEnterStory}
-          onNextEpisode={onNextEpisode}
-          onShowPathChoice={episode.id === 1 ? onShowPathChoice : undefined}
-        />
-      )}
 
       {!isEnded && (
         <div className={`absolute bottom-0 left-0 right-0 z-[70] pt-20 group/scrubber transition-all pointer-events-none transition-opacity duration-500 ${isUIHidden ? 'opacity-0' : 'opacity-100'}`}>
@@ -1065,10 +1055,32 @@ export const SERIES_CATALOG = [
       { 
         id: 1, 
         label: "Coaching Intro", 
-        url: "https://rgmeakgorodicnqgrffu.supabase.co/storage/v1/object/public/inscene-videos/Chirag/FitMonk.Chirag._Ep0_Demo.mp4", 
+        url: "https://rgmeakgorodicnqgrffu.supabase.co/storage/v1/object/public/inscene-videos/Chirag/Ep1%20Circcourse%20Intro_sv.mp4", 
         triggers: [
           { char: 'Chirag', intro: "Ready to dominate the pitch? Fitness is 70% of the game. What's holding you back?", hook: "Athlete coaching session focused on cricket performance and doubt clearing." }
-        ] 
+        ],
+        ctaMapping: {
+          'professional': 2,
+          'speed': 4,
+          'stamina': 4,
+          'shots': 4
+        }
+      },
+      {
+        id: 2,
+        label: "Professional Cricket Journey",
+        url: "https://rgmeakgorodicnqgrffu.supabase.co/storage/v1/object/public/inscene-videos/Chirag/Ep2%20Professionalcricket%20Ageselection.mp4",
+        triggers: [
+          { char: 'Chirag', intro: "Ready to dominate the pitch? Fitness is 70% of the game. What's holding you back?", hook: "Athlete coaching session focused on cricket performance and doubt clearing." }
+        ]
+      },
+      {
+        id: 4,
+        label: "Skill Hub Intro",
+        url: "https://rgmeakgorodicnqgrffu.supabase.co/storage/v1/object/public/inscene-videos/Chirag/Ep4%20Skillhubintro.mp4",
+        triggers: [
+          { char: 'Chirag', intro: "Ready to dominate the pitch? Fitness is 70% of the game. What's holding you back?", hook: "Athlete coaching session focused on cricket performance and doubt clearing." }
+        ]
       }
     ]
   }
@@ -1100,7 +1112,6 @@ const AppContent: React.FC = () => {
   const [choiceModalData, setChoiceModalData] = useState<any>(null);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [isWaitlistModalOpen, setIsWaitlistModalOpen] = useState(false);
-  const [showPathChoiceModal, setShowPathChoiceModal] = useState(false);
   
   const [conversations, setConversations] = useState<Record<string, ConversationHistoryEntry>>({});
   const [typingStatus, setTypingStatus] = useState<Record<string, boolean>>({});
@@ -1304,6 +1315,38 @@ const AppContent: React.FC = () => {
     }
   };
 
+  const handleNavigateToEpisode = (episodeId: number) => {
+    if (!selectedSeries) return;
+    
+    // Filter episodes based on path choice (same logic as in render)
+    const getFilteredEpisodes = (episodes: any[], seriesId: string): any[] => {
+      if (typeof window === 'undefined') return episodes;
+      const storageKey = `inscene_path_choice_${seriesId}`;
+      const choice = localStorage.getItem(storageKey);
+      
+      if (!choice || (choice !== 'building' && choice !== 'exploring')) {
+        return episodes.filter((ep: any) => ep.id === 1);
+      }
+      
+      if (choice === 'building') {
+        return episodes.filter((ep: any) => [1, 2, 3, 4, 5].includes(ep.id));
+      }
+      
+      if (choice === 'exploring') {
+        return episodes.filter((ep: any) => [1, 3, 5].includes(ep.id));
+      }
+      
+      return episodes.filter((ep: any) => ep.id === 1);
+    };
+    
+    const filteredEpisodes = getFilteredEpisodes(selectedSeries.episodes, selectedSeries.id);
+    const targetIndex = filteredEpisodes.findIndex((ep: any) => ep.id === episodeId);
+    
+    if (targetIndex !== -1) {
+      setActiveIdx(targetIndex);
+    }
+  };
+
   const handleChatUpdate = (char: string, messages: any[]) => {
     setConversations(prev => {
       const existingConversation = prev[char];
@@ -1503,10 +1546,25 @@ const AppContent: React.FC = () => {
                     Featured
                   </h2>
                   <div className="grid grid-cols-2 gap-4 mb-8">
-                    {getAllInfluencers().map((influencer: InfluencerInfo, idx: number) => (
+                    {getAllInfluencers().map((influencer: InfluencerInfo, idx: number) => {
+                      // Find the series for this influencer
+                      const influencerSeries = SERIES_CATALOG.find((s: any) => 
+                        s.avatars && s.avatars[influencer.name]
+                      );
+                      
+                      return (
                       <div
                         key={influencer.id}
-                        onClick={() => navigate(`/${influencer.id}`)}
+                        onClick={() => {
+                          // Directly start episode 1 if series found
+                          if (influencerSeries) {
+                            setSelectedSeries(influencerSeries);
+                            setActiveIdx(0);
+                          } else {
+                            // Fallback to navigation if series not found
+                            navigate(`/${influencer.id}`);
+                          }
+                        }}
                         className="group cursor-pointer relative aspect-[3/4] rounded-2xl overflow-hidden bg-white border border-black/[0.06] shadow-sm transition-all duration-300 hover:shadow-lg hover:-translate-y-1 active:scale-[0.98]"
                         style={{ animationDelay: `${idx * 80}ms` }}
                       >
@@ -1527,7 +1585,8 @@ const AppContent: React.FC = () => {
                           </div>
                         </div>
                       </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
             </div>
@@ -1733,9 +1792,7 @@ const AppContent: React.FC = () => {
               setSelectedSeries(null);
               setChatData(null);
             }}
-            onShowPathChoice={currentEpisode.id === 1 ? () => {
-              setShowPathChoiceModal(true);
-            } : undefined}
+            onNavigateToEpisode={handleNavigateToEpisode}
           />
         );
       })()}
@@ -1905,19 +1962,6 @@ const AppContent: React.FC = () => {
         onClose={() => setIsWaitlistModalOpen(false)} 
       />
 
-      {/* Path Choice Modal - Shows after episode 1 */}
-      {showPathChoiceModal && selectedSeries && (
-        <PathChoiceModal
-          seriesId={selectedSeries.id}
-          seriesTitle={selectedSeries.title}
-          onChoice={(path) => {
-            setShowPathChoiceModal(false);
-            // The episodes will be re-filtered automatically via the filtering logic
-            // Close the video player to let user see the updated episode list
-            setSelectedSeries(null);
-          }}
-        />
-      )}
 
       <Analytics />
 

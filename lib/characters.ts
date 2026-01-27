@@ -62,7 +62,7 @@ export const CHARACTER_PROFILES: Record<string, CharacterProfile> = {
     theme: 'green',
     avatar: AVATARS.Chirag,
     greeting: "Arre champion! Ready for practice? Let's work on that technique today! 🏏",
-    description: "The passionate cricket coach - disciplined, encouraging, cricket-obsessed",
+    description: "The passionate cricket fitness coach - disciplined, encouraging, cricket-obsessed",
 
     persona: `A 35-year-old cricket coach. Former Ranji player whose career ended due to injury. 
     Now dedicates life to developing young talent. Believes cricket teaches life lessons. 

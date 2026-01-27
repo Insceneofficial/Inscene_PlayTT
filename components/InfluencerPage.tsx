@@ -10,7 +10,7 @@ import LeaderboardModal from './LeaderboardModal.tsx';
 import StreakWidget from './StreakWidget.tsx';
 import SeriesProgressCard from './SeriesProgressCard.tsx';
 import GoalsModal from './GoalsModal.tsx';
-import PathChoiceModal from './PathChoiceModal.tsx';
+import EpisodeView from './EpisodeView.tsx';
 import { useAuth } from '../lib/auth';
 import { canProceedToEpisode } from '../lib/challenges';
 import { getUserMessageCount, MAX_USER_MESSAGES, hasUnlimitedMessages } from '../lib/chatStorage';
@@ -1052,17 +1052,6 @@ const ReelItem: React.FC<{
         </div>
       )}
 
-      {/* Video End Screen with auto-redirect to chat or path choice for episode 1 */}
-      {isEnded && showEndScreen && (
-        <VideoEndScreen
-          episode={episode}
-          series={series}
-          influencerName={influencerName}
-          onEnterStory={onEnterStory}
-          onNextEpisode={onNextEpisode}
-          onShowPathChoice={episode.id === 1 ? onShowPathChoice : undefined}
-        />
-      )}
     </div>
   );
 };
@@ -1087,10 +1076,8 @@ const InfluencerPage: React.FC = () => {
   const [selectedGoal, setSelectedGoal] = useState<any>(null);
   const [episodeProgress, setEpisodeProgress] = useState<SeriesProgress | null>(null);
   const [isCloseButtonHidden, setIsCloseButtonHidden] = useState(false);
-  const [showPathChoiceModal, setShowPathChoiceModal] = useState(false);
-  const [pathChoiceEpisode, setPathChoiceEpisode] = useState<any>(null);
-  const [pathChoiceVersion, setPathChoiceVersion] = useState(0); // Force re-render when path choice changes
   const [challengeVersion, setChallengeVersion] = useState(0); // Force re-render when challenge completion changes
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false); // Sidebar closed by default
   const closeButtonInactivityTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const closeButtonActivityHandlerRef = React.useRef<((event?: Event) => void) | null>(null);
   const closeButtonMouseMoveHandlerRef = React.useRef<((event?: Event) => void) | null>(null);
@@ -1219,7 +1206,7 @@ const InfluencerPage: React.FC = () => {
     }
     
     return allEpisodes;
-  }, [series?.episodes, series?.id, influencer?.name, pathChoiceVersion]); // Include pathChoiceVersion to force re-evaluation when path choice changes
+  }, [series?.episodes, series?.id, influencer?.name]);
   
   // Memoize episode IDs to prevent SeriesProgressCard re-renders
   const episodeIds = useMemo(() => {
@@ -1261,61 +1248,31 @@ const InfluencerPage: React.FC = () => {
     loadProgress();
   }, [selectedSeries?.id, isAuthenticated, episodeIds]);
 
-  // Handler to scroll to next episode with debounce to prevent multiple rapid calls
-  const nextEpisodeTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Handler to move to next episode
   const handleNextEpisode = useCallback(() => {
-    // Clear any pending scroll
-    if (nextEpisodeTimeoutRef.current) {
-      clearTimeout(nextEpisodeTimeoutRef.current);
+    if (selectedEpisodeIndex !== null && selectedEpisodeIndex < influencerEpisodes.length - 1) {
+      const nextIdx = selectedEpisodeIndex + 1;
+      setSelectedEpisodeIndex(nextIdx);
+      setActiveIdx(nextIdx);
+    } else {
+      // If no more episodes, exit episode view
+      setSelectedEpisodeIndex(null);
     }
-    
-    // Debounce the scroll to prevent rapid calls
-    nextEpisodeTimeoutRef.current = setTimeout(() => {
-      if (selectedEpisodeIndex !== null && activeIdx < influencerEpisodes.length - 1) {
-        const nextIdx = activeIdx + 1;
-        const nextEl = document.querySelector(`[data-index="${nextIdx}"]`);
-        
-        if (nextEl) {
-          // Use scrollIntoView with smooth behavior
-          nextEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
-          // Update active index immediately so the next video starts playing
-          setActiveIdx(nextIdx);
-        }
-      }
-      nextEpisodeTimeoutRef.current = null;
-    }, 100);
-  }, [selectedEpisodeIndex, activeIdx, influencerEpisodes.length]);
+  }, [selectedEpisodeIndex, influencerEpisodes.length]);
 
-  // Set up IntersectionObserver for reel scrolling and scroll to selected episode
+  // Handler to navigate to specific episode by ID
+  const handleNavigateToEpisode = useCallback((episodeId: number) => {
+    const targetIndex = influencerEpisodes.findIndex((ep: any) => ep.id === episodeId);
+    if (targetIndex !== -1) {
+      setSelectedEpisodeIndex(targetIndex);
+      setActiveIdx(targetIndex);
+    }
+  }, [influencerEpisodes]);
+
+  // Update activeIdx when selectedEpisodeIndex changes
   useEffect(() => {
     if (selectedEpisodeIndex !== null) {
-      // Scroll to the selected episode
-      const timer = setTimeout(() => {
-        const targetEl = document.querySelector(`[data-index="${selectedEpisodeIndex}"]`);
-        if (targetEl) {
-          targetEl.scrollIntoView({ behavior: 'instant' });
-          setActiveIdx(selectedEpisodeIndex);
-        }
-      }, 100);
-
-      const observer = new IntersectionObserver((entries) => {
-        entries.forEach(entry => {
-          if (entry.isIntersecting) {
-            const index = parseInt(entry.target.getAttribute('data-index') || '0');
-            setActiveIdx(index);
-          }
-        });
-      }, { threshold: 0.6 });
-      
-      const observerTimer = setTimeout(() => {
-        document.querySelectorAll('.reel-item-wrapper').forEach(i => observer.observe(i));
-      }, 300);
-      
-      return () => {
-        clearTimeout(timer);
-        clearTimeout(observerTimer);
-        observer.disconnect();
-      };
+      setActiveIdx(selectedEpisodeIndex);
     }
   }, [selectedEpisodeIndex]);
 
@@ -1349,13 +1306,41 @@ const InfluencerPage: React.FC = () => {
   }
 
   return (
-    <div className="flex flex-col min-h-[100dvh] h-[100dvh] overflow-y-auto" style={{ background: CREAM_BG, color: '#1A1A1A' }}>
+    <div className="flex flex-col min-h-[100dvh] h-[100dvh] overflow-hidden" style={{ background: CREAM_BG, color: '#1A1A1A' }}>
       <header className="fixed top-0 left-0 right-0 z-[1000] px-6 py-4 transition-all duration-500 bg-[#FAF9F6]/80 backdrop-blur-xl border-b border-black/[0.06]">
         <div className="flex justify-between items-center max-w-6xl mx-auto">
-          {/* Home button */}
-          <div className="flex items-center gap-3 cursor-pointer group active:scale-[0.98] transition-transform" onClick={() => navigate('/')}>
-            <Logo size={32} isPulsing={false} src="/icon_purple.png" />
-            <span className="text-[#8A8A8A] text-sm font-medium">Home</span>
+          {/* Left side - Hamburger and Home */}
+          <div className="flex items-center gap-3">
+            {/* Hamburger Menu Button */}
+            <button
+              onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+              className="w-10 h-10 rounded-xl bg-white/80 backdrop-blur-sm border border-black/[0.08] flex items-center justify-center active:scale-95 hover:bg-white transition-all shadow-sm"
+              aria-label="Toggle sidebar"
+              aria-expanded={isSidebarOpen}
+            >
+              <div className="flex flex-col gap-1.5 w-5">
+                <span
+                  className={`h-0.5 bg-[#4A4A4A] rounded-full transition-all duration-300 ${
+                    isSidebarOpen ? 'rotate-45 translate-y-2' : ''
+                  }`}
+                />
+                <span
+                  className={`h-0.5 bg-[#4A4A4A] rounded-full transition-all duration-300 ${
+                    isSidebarOpen ? 'opacity-0' : ''
+                  }`}
+                />
+                <span
+                  className={`h-0.5 bg-[#4A4A4A] rounded-full transition-all duration-300 ${
+                    isSidebarOpen ? '-rotate-45 -translate-y-2' : ''
+                  }`}
+                />
+              </div>
+            </button>
+            {/* Home button */}
+            <div className="flex items-center gap-3 cursor-pointer group active:scale-[0.98] transition-transform" onClick={() => navigate('/')}>
+              <Logo size={32} isPulsing={false} src="/icon_purple.png" />
+              <span className="text-[#8A8A8A] text-sm font-medium">Home</span>
+            </div>
           </div>
           <div className="flex items-center gap-2">
             <UserMenu onSignInClick={() => setIsAuthModalOpen(true)} />
@@ -1363,93 +1348,135 @@ const InfluencerPage: React.FC = () => {
         </div>
       </header>
 
-      <main className="pt-28 pb-28 px-6 max-w-6xl mx-auto w-full">
-        {/* Influencer Header */}
-        <div className="flex flex-col md:flex-row items-center md:items-start gap-6 mb-10">
-          <CharacterDP 
-            src={influencer.avatar} 
-            name={influencer.name} 
-            theme="green"
-            size="w-24 h-24"
-            isOnline={true}
+      <div className="flex flex-1 pt-28 overflow-hidden relative">
+        {/* Overlay for mobile when sidebar is open */}
+        {isSidebarOpen && (
+          <div
+            className="fixed inset-0 bg-black/30 backdrop-blur-sm z-[999] md:hidden transition-opacity duration-300"
+            onClick={() => setIsSidebarOpen(false)}
           />
-          <div className="flex-1 text-center md:text-left">
-            <h1 className="text-2xl md:text-3xl font-semibold tracking-tight mb-1">{influencer.name}</h1>
-            <p className="text-[#8A8A8A] text-[14px] max-w-xl leading-relaxed mb-4">{influencer.description}</p>
-            
-            {/* Streak Widget - Shows user's progress */}
-            {isAuthenticated && (
-              <div className="mb-4 max-w-sm">
-                <StreakWidget
-                  creatorId={influencer.name}
-                  creatorName={influencer.name}
-                  onOpenLeaderboard={() => setIsLeaderboardOpen(true)}
-                  compact={false}
-                />
-              </div>
-            )}
-            
-            {/* Leaderboard Button for non-authenticated users */}
-            {!isAuthenticated && (
-              <button
-                onClick={() => setIsAuthModalOpen(true)}
-                className="mb-4 flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-[#4A7C59]/10 to-[#C9A227]/10 rounded-xl border border-black/[0.06] text-[#4A4A4A] hover:border-[#4A7C59]/30 transition-all"
+        )}
+
+        {/* Left Sidebar - Profile Details */}
+        <aside
+          className={`fixed md:absolute top-28 md:top-0 left-0 h-[calc(100vh-7rem)] md:h-full w-[320px] flex-shrink-0 overflow-y-auto bg-[#FAF9F6] border-r border-black/[0.06] px-6 py-6 z-[1000] transform transition-transform duration-300 ease-out shadow-xl md:shadow-none ${
+            isSidebarOpen ? 'translate-x-0' : '-translate-x-full'
+          }`}
+          style={{ willChange: 'transform' }}
+        >
+          {/* Close Button - Visible on all screens */}
+          <div className="flex justify-end mb-4">
+            <button
+              onClick={() => setIsSidebarOpen(false)}
+              className="w-8 h-8 rounded-lg bg-black/[0.04] hover:bg-black/[0.08] flex items-center justify-center transition-all active:scale-95"
+              aria-label="Close sidebar"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                fill="none"
+                viewBox="0 0 24 24"
+                strokeWidth={2}
+                stroke="currentColor"
+                className="w-4 h-4 text-[#8A8A8A]"
               >
-                <span className="text-lg">🏆</span>
-                <span className="text-[14px] font-medium">View Leaderboard</span>
-              </button>
-            )}
-            
-            {/* Chat Widget - Always visible */}
-            {(() => {
-              const firstSeries = influencerSeries[0];
-              const firstEp = firstSeries?.episodes?.find((ep: any) => 
-                ep.triggers?.some((t: any) => t.char === influencer.name)
-              );
-              const firstTrigger = firstEp?.triggers?.find((t: any) => t.char === influencer.name);
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+
+          {/* Influencer Header */}
+          <div className="flex flex-col items-center gap-6 mb-6">
+            <CharacterDP 
+              src={influencer.avatar} 
+              name={influencer.name} 
+              theme="green"
+              size="w-24 h-24"
+              isOnline={true}
+            />
+            <div className="flex-1 text-center w-full">
+              <h1 className="text-2xl font-semibold tracking-tight mb-1">{influencer.name}</h1>
+              <p className="text-[#8A8A8A] text-[14px] leading-relaxed mb-4">{influencer.description}</p>
               
-              if (!firstTrigger) return null;
-              
-              return (
-                <div className="max-w-sm">
-                  <ChatWidget
-                    characterName={influencer.name}
-                    avatar={influencer.avatar}
-                    onClick={() => handleChatInit({
-                      char: firstTrigger.char,
-                      intro: firstTrigger.intro,
-                      hook: firstTrigger.hook,
-                      isFromHistory: false,
-                      isWhatsApp: true,
-                      entryPoint: 'influencer_page',
-                      seriesId: firstSeries.id,
-                      seriesTitle: firstSeries.title
-                    })}
-                    isOnline={true}
+              {/* Streak Widget - Shows user's progress */}
+              {isAuthenticated && (
+                <div className="mb-4 w-full">
+                  <StreakWidget
+                    creatorId={influencer.name}
+                    creatorName={influencer.name}
+                    onOpenLeaderboard={() => setIsLeaderboardOpen(true)}
+                    compact={false}
                   />
                 </div>
-              );
-            })()}
+              )}
+              
+              {/* Leaderboard Button for non-authenticated users */}
+              {!isAuthenticated && (
+                <button
+                  onClick={() => setIsAuthModalOpen(true)}
+                  className="mb-4 w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-r from-[#4A7C59]/10 to-[#C9A227]/10 rounded-xl border border-black/[0.06] text-[#4A4A4A] hover:border-[#4A7C59]/30 transition-all"
+                >
+                  <span className="text-lg">🏆</span>
+                  <span className="text-[14px] font-medium">View Leaderboard</span>
+                </button>
+              )}
+              
+              {/* Chat Widget - Always visible */}
+              {(() => {
+                const firstSeries = influencerSeries[0];
+                const firstEp = firstSeries?.episodes?.find((ep: any) => 
+                  ep.triggers?.some((t: any) => t.char === influencer.name)
+                );
+                const firstTrigger = firstEp?.triggers?.find((t: any) => t.char === influencer.name);
+                
+                if (!firstTrigger) return null;
+                
+                return (
+                  <div className="w-full">
+                    <ChatWidget
+                      characterName={influencer.name}
+                      avatar={influencer.avatar}
+                      onClick={() => handleChatInit({
+                        char: firstTrigger.char,
+                        intro: firstTrigger.intro,
+                        hook: firstTrigger.hook,
+                        isFromHistory: false,
+                        isWhatsApp: true,
+                        entryPoint: 'influencer_page',
+                        seriesId: firstSeries.id,
+                        seriesTitle: firstSeries.title
+                      })}
+                      isOnline={true}
+                    />
+                  </div>
+                );
+              })()}
+            </div>
           </div>
-        </div>
 
-        {/* EPISODES VIEW */}
-        {selectedSeries && (
-          <>
-            {/* Series Progress & Goals */}
-            <SeriesProgressCard
-              seriesId={selectedSeries.id}
-              seriesTitle={selectedSeries.title}
-              creatorId={influencer?.name || ''}
-              episodeIds={episodeIds}
-              onGoalClick={(goal) => {
-                setSelectedGoal(goal);
-                setIsGoalsModalOpen(true);
-              }}
-            />
-            
-            <h3 className="text-[13px] font-semibold tracking-wide text-[#8A8A8A] mb-4 uppercase">Episodes</h3>
-            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+          {/* Series Progress & Goals - In Sidebar */}
+          {selectedSeries && (
+            <div className="mb-6">
+              <SeriesProgressCard
+                seriesId={selectedSeries.id}
+                seriesTitle={selectedSeries.title}
+                creatorId={influencer?.name || ''}
+                episodeIds={episodeIds}
+                onGoalClick={(goal) => {
+                  setSelectedGoal(goal);
+                  setIsGoalsModalOpen(true);
+                }}
+              />
+            </div>
+          )}
+        </aside>
+
+        {/* Main Content - Episodes */}
+        <main className="flex-1 overflow-y-auto px-6 py-6">
+          {/* EPISODES VIEW */}
+          {selectedSeries && (
+            <>
+              <h3 className="text-[13px] font-semibold tracking-wide text-[#8A8A8A] mb-4 uppercase">Episodes</h3>
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
               {influencerEpisodes.map((ep: any, idx: number) => {
                 const thumbnailUrl = selectedSeries.thumbnail;
                 const epProgress = episodeProgress?.episodeStatuses?.find(s => s.episodeId === ep.id);
@@ -1532,67 +1559,37 @@ const InfluencerPage: React.FC = () => {
                 <p className="text-[15px]">No episodes available yet</p>
               </div>
             )}
-          </>
-        )}
-      </main>
+            </>
+          )}
+        </main>
+      </div>
 
-      {/* Video Reel Player */}
-      {selectedSeries && selectedEpisodeIndex !== null && (
-        <div className={`fixed inset-0 ${chatData ? 'z-[4000]' : 'z-[5000]'} bg-[#0a0a0f]`}>
-          {/* Close button */}
-          <button
-            onClick={() => {
-              setIsCloseButtonHidden(false);
-              if (closeButtonInactivityTimerRef.current) {
-                clearTimeout(closeButtonInactivityTimerRef.current);
-                closeButtonInactivityTimerRef.current = setTimeout(() => {
-                  setIsCloseButtonHidden(true);
-                }, 5000);
-              }
-              setSelectedEpisodeIndex(null);
-            }}
-            className={`absolute top-6 left-6 z-[6000] w-10 h-10 rounded-xl bg-white/10 backdrop-blur-sm flex items-center justify-center text-white transition-all hover:bg-white/20 active:scale-95 transition-opacity duration-500 ${isCloseButtonHidden ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-
-          <div className="reel-snap-container fixed inset-0 z-[5000] hide-scrollbar overflow-y-scroll snap-y snap-mandatory">
-            {influencerEpisodes.map((ep: any, i: number) => (
-              <div key={ep.id} data-index={i} className="reel-item-wrapper reel-item snap-start h-[100dvh]">
-                <ReelItem 
-                  episode={ep} 
-                  series={series} 
-                  influencerName={influencer.name}
-                  influencerTheme={influencer.theme}
-                  isActive={activeIdx === i} 
-                  isMuted={isMuted} 
-                  toggleMute={() => setIsMuted(!isMuted)} 
-                  onEnterStory={(char, intro, hook, entryPoint) => {
-                    handleChatInit({
-                      char, intro, hook, 
-                      isFromHistory: false, 
-                      isWhatsApp: false,
-                      entryPoint,
-                      seriesId: series.id,
-                      seriesTitle: series.title,
-                      episodeId: ep.id,
-                      episodeLabel: ep.label
-                    });
-                  }}
-                  onNextEpisode={handleNextEpisode}
-                  isChatOpen={!!chatData}
-                  onShowPathChoice={ep.id === 1 ? () => {
-                    console.log('[InfluencerPage] Showing path choice modal for episode 1');
-                    setPathChoiceEpisode(ep);
-                    setShowPathChoiceModal(true);
-                  } : undefined}
-                />
-              </div>
-            ))}
-          </div>
-        </div>
+      {/* Video Player - Mobile-first EpisodeView */}
+      {selectedSeries && selectedEpisodeIndex !== null && influencerEpisodes[selectedEpisodeIndex] && (
+        <EpisodeView
+          episode={influencerEpisodes[selectedEpisodeIndex]}
+          series={selectedSeries}
+          isMuted={isMuted}
+          toggleMute={() => setIsMuted(!isMuted)}
+          onEnterStory={(char, intro, hook, entryPoint) => {
+            handleChatInit({
+              char, intro, hook, 
+              isFromHistory: false, 
+              isWhatsApp: false,
+              entryPoint,
+              seriesId: selectedSeries.id,
+              seriesTitle: selectedSeries.title,
+              episodeId: influencerEpisodes[selectedEpisodeIndex].id,
+              episodeLabel: influencerEpisodes[selectedEpisodeIndex].label
+            });
+          }}
+          onNextEpisode={handleNextEpisode}
+          onExit={() => {
+            setSelectedEpisodeIndex(null);
+            setActiveIdx(0);
+          }}
+          onNavigateToEpisode={handleNavigateToEpisode}
+        />
       )}
 
       {chatData && (
@@ -1684,24 +1681,6 @@ const InfluencerPage: React.FC = () => {
         />
       )}
 
-      {/* Path Choice Modal - Shows after episode 1 */}
-      {showPathChoiceModal && series && (
-        <PathChoiceModal
-          seriesId={series.id}
-          seriesTitle={series.title}
-          onChoice={(path) => {
-            console.log('[InfluencerPage] Path choice selected:', path);
-            setShowPathChoiceModal(false);
-            setPathChoiceEpisode(null);
-            // Force re-render by incrementing pathChoiceVersion to trigger useMemo re-evaluation
-            setPathChoiceVersion(prev => prev + 1);
-            // Close the video player to let user see the updated episode list
-            if (selectedEpisodeIndex !== null) {
-              setSelectedEpisodeIndex(null);
-            }
-          }}
-        />
-      )}
 
       {/* Bottom Navigation Bar - visible on series/episodes view */}
       {selectedEpisodeIndex === null && (

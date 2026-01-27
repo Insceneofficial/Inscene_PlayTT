@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import EpisodeSidebar from './EpisodeSidebar';
 import { trackVideoStart, updateVideoProgress, trackVideoEnd } from '../lib/analytics';
 
@@ -10,7 +11,7 @@ interface EpisodeViewProps {
   onEnterStory: (char: string, intro: string, hook: string, entryPoint: string) => void;
   onNextEpisode: () => void;
   onExit: () => void;
-  onShowPathChoice?: () => void;
+  onNavigateToEpisode?: (episodeId: number) => void;
 }
 
 const EpisodeView: React.FC<EpisodeViewProps> = ({
@@ -21,8 +22,9 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
   onEnterStory,
   onNextEpisode,
   onExit,
-  onShowPathChoice,
+  onNavigateToEpisode,
 }) => {
+  const navigate = useNavigate();
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -33,6 +35,9 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
   const [progress, setProgress] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
+  const [showCTAOverlay, setShowCTAOverlay] = useState(false);
+  const [isScrubbing, setIsScrubbing] = useState(false);
+  const [isPaused, setIsPaused] = useState(false);
   
   // Analytics tracking
   const analyticsRecordId = useRef<string | null>(null);
@@ -49,27 +54,29 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
   const creatorName = series.avatars ? Object.keys(series.avatars)[0] : null;
   const creatorAvatar = creatorName ? series.avatars[creatorName] : undefined;
 
-  // Auto-hide overlay after 3 seconds
+  // Auto-hide overlay after 3 seconds (but not when paused)
   useEffect(() => {
-    if (!isOverlayVisible) return;
+    if (!isOverlayVisible || isPaused) return;
     
     const timer = setTimeout(() => {
       setIsOverlayVisible(false);
     }, 3000);
 
     return () => clearTimeout(timer);
-  }, [isOverlayVisible]);
+  }, [isOverlayVisible, isPaused]);
 
-  // Show overlay on tap
+  // Show overlay on tap (but don't auto-hide when paused)
   const handleVideoTap = useCallback(() => {
     setIsOverlayVisible(true);
     if (inactivityTimerRef.current) {
       clearTimeout(inactivityTimerRef.current);
     }
-    inactivityTimerRef.current = setTimeout(() => {
-      setIsOverlayVisible(false);
-    }, 3000);
-  }, []);
+    if (!isPaused) {
+      inactivityTimerRef.current = setTimeout(() => {
+        setIsOverlayVisible(false);
+      }, 3000);
+    }
+  }, [isPaused]);
 
   // End video session helper
   const endVideoSession = useCallback(async (isCompleted: boolean = false) => {
@@ -178,10 +185,12 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
         await video.play();
         setShowPlayButton(false);
         setLoading(false);
+        setIsPaused(false);
       } catch (error) {
         console.log('[EpisodeView] Autoplay failed, showing play button');
         setShowPlayButton(true);
         setLoading(false);
+        setIsPaused(true);
       }
     };
 
@@ -221,9 +230,25 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
 
   const handleTimeUpdate = () => {
     if (videoRef.current) {
-      setCurrentTime(videoRef.current.currentTime);
-      setDuration(videoRef.current.duration);
-      setProgress((videoRef.current.currentTime / videoRef.current.duration) * 100 || 0);
+      const current = videoRef.current.currentTime;
+      const total = videoRef.current.duration;
+      const paused = videoRef.current.paused;
+      setCurrentTime(current);
+      setDuration(total);
+      setProgress((current / total) * 100 || 0);
+      setIsPaused(paused);
+      
+      // Show CTA overlay in last 7 seconds for Episode 1 (only when playing, not paused)
+      if (!paused && episode.id === 1 && episode.ctaMapping && total > 0 && current >= total - 7 && !isEnded) {
+        setShowCTAOverlay(true);
+      } else if (!paused && (current < total - 7) && !isEnded) {
+        // Only hide CTA if not paused and not ended (when paused or ended, CTA should stay visible)
+        setShowCTAOverlay(false);
+      }
+      // When video ends, keep CTA visible
+      if (isEnded && episode.id === 1 && episode.ctaMapping) {
+        setShowCTAOverlay(true);
+      }
     }
   };
 
@@ -235,6 +260,11 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
       await video.play();
       setShowPlayButton(false);
       wasUnmutedRef.current = true;
+      setIsPaused(false);
+      // Hide CTA overlay when playback resumes
+      if (episode.id === 1 && episode.ctaMapping) {
+        setShowCTAOverlay(false);
+      }
     } catch (error) {
       console.error('[EpisodeView] Play failed:', error);
     }
@@ -242,6 +272,26 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
 
   const handlePause = () => {
     pauseCountRef.current += 1;
+  };
+
+  const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (videoRef.current) {
+      const newTime = (parseFloat(e.target.value) / 100) * videoRef.current.duration;
+      videoRef.current.currentTime = newTime;
+      setProgress(parseFloat(e.target.value));
+      seekCountRef.current += 1;
+      // Reset overlay visibility on seek
+      setIsOverlayVisible(true);
+      if (inactivityTimerRef.current) {
+        clearTimeout(inactivityTimerRef.current);
+      }
+      // Only auto-hide overlay if video is not paused
+      if (!isPaused) {
+        inactivityTimerRef.current = setTimeout(() => {
+          setIsOverlayVisible(false);
+        }, 3000);
+      }
+    }
   };
 
   const formatTime = (seconds: number) => {
@@ -303,36 +353,109 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
         }}
         onCanPlay={() => {
           if (!hasAttemptedAutoplay.current && videoRef.current) {
-            videoRef.current.play().catch(() => {
+            videoRef.current.play().then(() => {
+              setIsPaused(false);
+            }).catch(() => {
               setShowPlayButton(true);
+              setIsPaused(true);
             });
           }
         }}
         onPlaying={() => {
           setLoading(false);
           setShowPlayButton(false);
+          setIsPaused(false);
+          // Hide CTA overlay when playback resumes (unless video has ended)
+          if (episode.id === 1 && episode.ctaMapping && !isEnded) {
+            setShowCTAOverlay(false);
+          }
         }}
-        onPause={handlePause}
+        onPause={() => {
+          handlePause();
+          setIsPaused(true);
+          // Show CTA overlay when paused (for Episode 1, but not if video has ended - that's handled by onEnded)
+          if (episode.id === 1 && episode.ctaMapping && !isEnded) {
+            setShowCTAOverlay(true);
+          }
+        }}
         onEnded={() => {
           setIsEnded(true);
-          // For episode 1, show path choice modal
-          if (episode.id === 1 && onShowPathChoice) {
-            setTimeout(() => {
-              onShowPathChoice();
-            }, 500);
+          setIsPaused(true);
+          // Ensure video stays paused on end frame
+          if (videoRef.current) {
+            videoRef.current.pause();
+          }
+          // Show CTA overlay when video ends (for Episode 1 with ctaMapping)
+          if (episode.id === 1 && episode.ctaMapping) {
+            setShowCTAOverlay(true);
           }
         }}
         onTimeUpdate={handleTimeUpdate}
         onClick={(e) => {
           e.stopPropagation();
           const video = videoRef.current;
+          // Don't allow play/pause if video has ended - keep it paused on end frame
+          if (isEnded) {
+            return;
+          }
           if (video?.paused) {
             video.play().catch(() => {});
+            setIsPaused(false);
+            // Hide CTA overlay when playback resumes
+            if (episode.id === 1 && episode.ctaMapping) {
+              setShowCTAOverlay(false);
+            }
           } else {
             video?.pause();
+            setIsPaused(true);
+            // Show CTA overlay when paused (for Episode 1)
+            if (episode.id === 1 && episode.ctaMapping) {
+              setShowCTAOverlay(true);
+            }
           }
         }}
       />
+
+      {/* Always-Visible Controls (Home & Sidebar Toggle) */}
+      <div 
+        className="absolute top-0 left-0 z-40 px-6 py-4"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center gap-2">
+          {/* Home Button */}
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onExit();
+              navigate('/');
+            }}
+            className="w-10 h-10 rounded-xl bg-white/10 backdrop-blur-sm border border-white/20 flex items-center justify-center active:scale-95 transition-all"
+            aria-label="Go to homepage"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-5 h-5 text-white">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+            </svg>
+          </button>
+
+          {/* Hamburger Menu */}
+          <button
+            data-sidebar-toggle
+            onClick={(e) => {
+              e.stopPropagation();
+              setIsSidebarOpen(true);
+              setIsOverlayVisible(true);
+            }}
+            className="w-10 h-10 rounded-xl bg-white/10 backdrop-blur-sm border border-white/20 flex items-center justify-center active:scale-95 transition-all"
+            aria-label="Open menu"
+          >
+            <div className="flex flex-col gap-1.5 w-5">
+              <span className="h-0.5 bg-white rounded-full" />
+              <span className="h-0.5 bg-white rounded-full" />
+              <span className="h-0.5 bg-white rounded-full" />
+            </div>
+          </button>
+        </div>
+      </div>
 
       {/* Loading Spinner */}
       {loading && !isEnded && (
@@ -369,25 +492,7 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="bg-gradient-to-b from-black/60 to-transparent px-6 py-4">
-          <div className="flex items-center justify-between">
-            {/* Hamburger Menu */}
-            <button
-              data-sidebar-toggle
-              onClick={(e) => {
-                e.stopPropagation();
-                setIsSidebarOpen(true);
-                setIsOverlayVisible(true);
-              }}
-              className="w-10 h-10 rounded-xl bg-white/10 backdrop-blur-sm border border-white/20 flex items-center justify-center active:scale-95 transition-all"
-              aria-label="Open menu"
-            >
-              <div className="flex flex-col gap-1.5 w-5">
-                <span className="h-0.5 bg-white rounded-full" />
-                <span className="h-0.5 bg-white rounded-full" />
-                <span className="h-0.5 bg-white rounded-full" />
-              </div>
-            </button>
-
+          <div className="flex items-center justify-between pl-[104px]">
             {/* Episode Title */}
             <div className="flex-1 px-4">
               <h3 className="text-sm font-medium text-white/90 text-center truncate">
@@ -419,21 +524,41 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
         </div>
       </div>
 
-      {/* Bottom Progress Bar (only when overlay is visible) */}
-      {isOverlayVisible && !isEnded && (
+      {/* Bottom Progress Bar (always visible) */}
+      {!isEnded && (
         <div 
-          className="absolute bottom-0 left-0 right-0 z-30 px-6 pb-4"
+          className="absolute bottom-0 left-0 right-0 z-40 pt-20"
           onClick={(e) => e.stopPropagation()}
         >
-          <div className="bg-gradient-to-t from-black/60 to-transparent pt-8 pb-2">
-            <div className="relative h-1 bg-white/20 rounded-full">
+          <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent h-20 pointer-events-none" />
+          <div className={`relative px-5 pb-5 transition-all duration-300 ${isScrubbing ? 'translate-y-[-8px]' : 'translate-y-0'}`}>
+            <div className="relative h-5 flex items-center">
+              <input 
+                type="range" 
+                min="0" 
+                max="100" 
+                step="0.1" 
+                value={progress} 
+                onChange={handleSeek} 
+                onMouseDown={() => {
+                  setIsScrubbing(true);
+                  setIsOverlayVisible(true);
+                }}
+                onMouseUp={() => setIsScrubbing(false)}
+                onTouchStart={() => {
+                  setIsScrubbing(true);
+                  setIsOverlayVisible(true);
+                }}
+                onTouchEnd={() => setIsScrubbing(false)}
+                className="scrub-range w-full h-1.5 bg-white/20 rounded-full appearance-none cursor-pointer pointer-events-auto z-10"
+              />
               <div 
-                className="absolute left-0 top-0 h-full bg-white rounded-full transition-all duration-75" 
+                className="absolute left-0 top-1/2 -translate-y-1/2 h-1.5 bg-white rounded-full transition-all duration-75 pointer-events-none" 
                 style={{ width: `${progress}%` }} 
               />
             </div>
-            <div className="flex justify-between items-center mt-2">
-              <div className="text-[11px] text-white/80 tabular-nums">
+            <div className={`mt-1.5 flex justify-between items-center transition-all duration-500 ${isScrubbing ? 'opacity-100' : 'opacity-70'}`}>
+              <div className="text-[11px] text-white/90 tabular-nums font-medium">
                 {formatTime(currentTime)} / {formatTime(duration)}
               </div>
             </div>
@@ -441,45 +566,69 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
         </div>
       )}
 
-      {/* Video End Screen */}
-      {isEnded && (
-        <div className="absolute inset-0 z-40 flex flex-col items-center justify-center p-8 bg-black/60 backdrop-blur-xl">
-          <h3 className="text-2xl font-semibold text-white mb-3 tracking-tight">Continue your journey</h3>
-          
-          {episode.triggers && episode.triggers.length > 0 && (
-            <div className="flex flex-col gap-3 mb-10 w-full max-w-[280px]">
-              {episode.triggers.map((trigger: any, idx: number) => (
+      {/* CTA Overlay - Shows when paused, in last 7 seconds, or when video ends for Episode 1 */}
+      {showCTAOverlay && episode.id === 1 && episode.ctaMapping && (
+        <div 
+          className="absolute bottom-0 left-0 right-0 z-[35] px-4 pb-6 pt-4"
+          style={{ paddingBottom: (isPaused || isEnded) ? '100px' : '24px' }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="bg-gradient-to-t from-black/80 via-black/60 to-transparent backdrop-blur-sm rounded-t-2xl">
+            <div className="px-4 py-3">
+              <p className="text-white text-center text-sm font-medium mb-4">
+                What problems are you facing?
+              </p>
+              <div className="grid grid-cols-2 gap-2">
                 <button
-                  key={idx}
-                  onClick={() => {
-                    onEnterStory(trigger.char, trigger.intro, trigger.hook, 'video_end_screen');
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (onNavigateToEpisode && episode.ctaMapping?.professional) {
+                      onNavigateToEpisode(episode.ctaMapping.professional);
+                    }
                   }}
-                  className="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/10 backdrop-blur-sm text-white hover:bg-white/20 active:scale-95 transition-all"
+                  className="px-4 py-3 rounded-xl bg-white/10 backdrop-blur-sm border border-white/20 text-white text-xs font-medium hover:bg-white/20 active:scale-95 transition-all text-center min-h-[44px] flex items-center justify-center"
                 >
-                  <img 
-                    src={series.avatars[trigger.char]} 
-                    alt={trigger.char}
-                    className="w-10 h-10 rounded-full object-cover"
-                  />
-                  <span className="font-semibold">Chat with {trigger.char}</span>
+                  Need guidance about professional cricket journey
                 </button>
-              ))}
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (onNavigateToEpisode && episode.ctaMapping?.speed) {
+                      onNavigateToEpisode(episode.ctaMapping.speed);
+                    }
+                  }}
+                  className="px-4 py-3 rounded-xl bg-white/10 backdrop-blur-sm border border-white/20 text-white text-xs font-medium hover:bg-white/20 active:scale-95 transition-all text-center min-h-[44px] flex items-center justify-center"
+                >
+                  Speed
+                </button>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (onNavigateToEpisode && episode.ctaMapping?.stamina) {
+                      onNavigateToEpisode(episode.ctaMapping.stamina);
+                    }
+                  }}
+                  className="px-4 py-3 rounded-xl bg-white/10 backdrop-blur-sm border border-white/20 text-white text-xs font-medium hover:bg-white/20 active:scale-95 transition-all text-center min-h-[44px] flex items-center justify-center"
+                >
+                  Stamina
+                </button>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (onNavigateToEpisode && episode.ctaMapping?.shots) {
+                      onNavigateToEpisode(episode.ctaMapping.shots);
+                    }
+                  }}
+                  className="px-4 py-3 rounded-xl bg-white/10 backdrop-blur-sm border border-white/20 text-white text-xs font-medium hover:bg-white/20 active:scale-95 transition-all text-center min-h-[44px] flex items-center justify-center"
+                >
+                  Shots
+                </button>
+              </div>
             </div>
-          )}
-
-          <button 
-            onClick={onNextEpisode}
-            className="flex flex-col items-center gap-2 group"
-          >
-            <div className="w-12 h-12 rounded-xl bg-white/10 backdrop-blur-sm text-white flex items-center justify-center hover:bg-white/20 active:scale-95 transition-all">
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 13.5L12 21m0 0l-7.5-7.5M12 21V3" />
-              </svg>
-            </div>
-            <span className="text-[13px] text-white/50 group-hover:text-white/80 transition-colors">Next</span>
-          </button>
+          </div>
         </div>
       )}
+
 
       {/* Sidebar */}
       <div
