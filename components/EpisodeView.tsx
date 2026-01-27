@@ -307,11 +307,11 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
       setProgress((current / total) * 100 || 0);
       setIsPaused(paused);
       
-      // Show CTA overlay in last 4-5 seconds for Episode 1 or 2 (only when playing, not paused)
+      // Show CTA overlay in last 4-5 seconds for Episode 1, 2, or 3 (only when playing, not paused)
       // Only show if video has valid duration, has been playing for at least 1 second, and is in last 4.5 seconds
       const lastSecondsThreshold = 4.5;
       const shouldShowInLastSeconds = !paused && 
-                                      (episode.id === 1 || episode.id === 2) && 
+                                      (episode.id === 1 || episode.id === 2 || episode.id === 3) && 
                                       episode.ctaMapping && 
                                       total > 0 && 
                                       current >= 1 && // Ensure video has started playing
@@ -326,7 +326,7 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
       }
       
       // When video ends, keep CTA visible
-      if (isEnded && (episode.id === 1 || episode.id === 2) && episode.ctaMapping) {
+      if (isEnded && (episode.id === 1 || episode.id === 2 || episode.id === 3) && episode.ctaMapping) {
         setShowCTAOverlay(true);
       }
     }
@@ -383,7 +383,7 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
       // Update CTA overlay visibility based on new position
       // Hide CTA if seeking away from last 4.5 seconds (unless paused or ended)
       const lastSecondsThreshold = 4.5;
-      if ((episode.id === 1 || episode.id === 2) && episode.ctaMapping) {
+      if ((episode.id === 1 || episode.id === 2 || episode.id === 3) && episode.ctaMapping) {
         if (!isPaused && !isEnded && (clampedTime < total - lastSecondsThreshold || clampedTime < 1)) {
           setShowCTAOverlay(false);
         } else if (isPaused && !isEnded) {
@@ -469,7 +469,7 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
           setShowPlayButton(false);
           setIsPaused(false);
           // Hide CTA overlay when playback resumes (unless video has ended or in last 4.5 seconds)
-          if ((episode.id === 1 || episode.id === 2) && episode.ctaMapping && !isEnded && videoRef.current) {
+          if ((episode.id === 1 || episode.id === 2 || episode.id === 3) && episode.ctaMapping && !isEnded && videoRef.current) {
             const current = videoRef.current.currentTime;
             const total = videoRef.current.duration;
             const lastSecondsThreshold = 4.5;
@@ -482,8 +482,8 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
         onPause={() => {
           handlePause();
           setIsPaused(true);
-          // Show CTA overlay when paused (for Episode 1 or 2, but not if video has ended - that's handled by onEnded)
-          if ((episode.id === 1 || episode.id === 2) && episode.ctaMapping && !isEnded) {
+          // Show CTA overlay when paused (for Episode 1, 2, or 3, but not if video has ended - that's handled by onEnded)
+          if ((episode.id === 1 || episode.id === 2 || episode.id === 3) && episode.ctaMapping && !isEnded) {
             setShowCTAOverlay(true);
           }
         }}
@@ -494,8 +494,8 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
           if (videoRef.current) {
             videoRef.current.pause();
           }
-          // Show CTA overlay when video ends (for Episode 1 or 2 with ctaMapping)
-          if ((episode.id === 1 || episode.id === 2) && episode.ctaMapping) {
+          // Show CTA overlay when video ends (for Episode 1, 2, or 3 with ctaMapping)
+          if ((episode.id === 1 || episode.id === 2 || episode.id === 3) && episode.ctaMapping) {
             setShowCTAOverlay(true);
           }
         }}
@@ -523,8 +523,8 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
           } else {
             video?.pause();
             setIsPaused(true);
-            // Show CTA overlay when paused (for Episode 1 or 2)
-            if ((episode.id === 1 || episode.id === 2) && episode.ctaMapping) {
+            // Show CTA overlay when paused (for Episode 1, 2, or 3)
+            if ((episode.id === 1 || episode.id === 2 || episode.id === 3) && episode.ctaMapping) {
               setShowCTAOverlay(true);
             }
           }
@@ -754,8 +754,8 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
         </div>
       )}
 
-      {/* CTA Overlay - Shows when paused, in last 7 seconds, or when video ends for Episode 1 or 2 */}
-      {showCTAOverlay && (episode.id === 1 || episode.id === 2) && episode.ctaMapping && (
+      {/* CTA Overlay - Shows when paused, in last 7 seconds, or when video ends for Episode 1, 2, or 3 */}
+      {showCTAOverlay && (episode.id === 1 || episode.id === 2 || episode.id === 3) && episode.ctaMapping && (
         <div 
           className="absolute bottom-0 left-0 right-0 z-[50] px-4 pb-6 pt-4 pointer-events-auto"
           style={{ paddingBottom: (isPaused || isEnded) ? '100px' : '24px' }}
@@ -764,7 +764,7 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
           <div className="bg-gradient-to-t from-black/80 via-black/60 to-transparent backdrop-blur-sm rounded-t-2xl pointer-events-auto">
             <div className="px-4 py-3 pointer-events-auto">
               <p className="text-white text-center text-sm font-medium mb-4 pointer-events-none">
-                {episode.id === 1 ? 'What problems are you facing?' : 'Which shot would you like to learn?'}
+                {episode.id === 1 ? 'What problems are you facing?' : episode.id === 3 ? 'What would you like to explore?' : 'Which shot would you like to learn?'}
               </p>
               <div className="grid grid-cols-2 gap-2 pointer-events-auto">
                 {episode.id === 1 ? (
@@ -828,6 +828,39 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
                       style={{ touchAction: 'manipulation' }}
                     >
                       Shots
+                    </button>
+                  </>
+                ) : episode.id === 3 ? (
+                  <>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        e.preventDefault();
+                        // Only navigate if explicitly configured with a valid episode ID
+                        const targetEpisodeId = episode.ctaMapping?.applicationProcess;
+                        if (onNavigateToEpisode && targetEpisodeId !== undefined && targetEpisodeId !== null && typeof targetEpisodeId === 'number') {
+                          onNavigateToEpisode(targetEpisodeId);
+                        }
+                      }}
+                      className="relative px-4 py-3 rounded-xl bg-white/10 backdrop-blur-sm border border-white/20 text-white text-xs font-medium hover:bg-white/20 active:scale-95 transition-all text-center min-h-[44px] flex items-center justify-center pointer-events-auto cursor-pointer w-full"
+                      style={{ touchAction: 'manipulation' }}
+                    >
+                      Application process
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        e.preventDefault();
+                        // Only navigate if explicitly configured with a valid episode ID
+                        const targetEpisodeId = episode.ctaMapping?.mindset;
+                        if (onNavigateToEpisode && targetEpisodeId !== undefined && targetEpisodeId !== null && typeof targetEpisodeId === 'number') {
+                          onNavigateToEpisode(targetEpisodeId);
+                        }
+                      }}
+                      className="relative px-4 py-3 rounded-xl bg-white/10 backdrop-blur-sm border border-white/20 text-white text-xs font-medium hover:bg-white/20 active:scale-95 transition-all text-center min-h-[44px] flex items-center justify-center pointer-events-auto cursor-pointer w-full"
+                      style={{ touchAction: 'manipulation' }}
+                    >
+                      Mindset
                     </button>
                   </>
                 ) : (

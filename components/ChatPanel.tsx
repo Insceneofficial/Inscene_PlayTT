@@ -25,6 +25,10 @@ interface ChatPanelProps {
   episodeId?: number;
   onWaitlistRequired?: () => void;
   onChallengeCompleted?: (seriesId: string, episodeId: number) => void;
+  // Guided chat props
+  isGuidedChat?: boolean;
+  guidedChatDuration?: number; // in seconds
+  onGuidedChatComplete?: () => void;
 }
 
 const ChatPanel: React.FC<ChatPanelProps> = ({ 
@@ -43,13 +47,20 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
   seriesTitle,
   episodeId,
   onWaitlistRequired,
-  onChallengeCompleted
+  onChallengeCompleted,
+  isGuidedChat = false,
+  guidedChatDuration = 45,
+  onGuidedChatComplete
 }) => {
   const [messages, setMessages] = useState<{ role: 'user' | 'assistant'; content: string; time: string }[]>([]);
   const [inputValue, setInputValue] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const [isLoadingHistory, setIsLoadingHistory] = useState(true);
   const scrollRef = useRef<HTMLDivElement>(null);
+  
+  // Guided chat timer
+  const [guidedChatTimeRemaining, setGuidedChatTimeRemaining] = useState<number | null>(null);
+  const guidedChatTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   
   // Goal state
   const [currentGoal, setCurrentGoal] = useState<GoalWithStreak | null>(null);
@@ -197,6 +208,11 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
             }
           }
           
+          // For guided chat, use special greeting
+          if (isGuidedChat && episodeId === 3 && episodeLabel === "Cover Drive") {
+            firstMessage = "Hi! I see you just finished the Cover Drive lesson. I'd love to help you improve your technique. Can you briefly explain what problem you're facing with your cover drive? Also, please upload an image of your cover drive so I can review it. We have 45 seconds for this quick review session.";
+          }
+          
           setMessages([{
             role: 'assistant',
             content: firstMessage,
@@ -206,30 +222,35 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
           saveMessage(character, 'assistant', firstMessage, seriesId, episodeId);
           initialMessagesSaved.current = true;
         }
-      } else {
-        // Not logged in - use existing messages or greeting
-        if (existingMessages && existingMessages.length > 0) {
-          setMessages(existingMessages.map(m => ({
-            ...m,
-            time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-          })));
         } else {
-          // Not logged in - check if we should send challenge message first
-          let firstMessage = instantGreeting;
-          if (entryPoint === 'video_end_screen' && seriesId && episodeId && episodeId > 1) {
-            const challengeMessage = getFirstChallengeMessage(seriesId, episodeId);
-            if (challengeMessage) {
-              firstMessage = challengeMessage;
+          // Not logged in - use existing messages or greeting
+          if (existingMessages && existingMessages.length > 0) {
+            setMessages(existingMessages.map(m => ({
+              ...m,
+              time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            })));
+          } else {
+            // Not logged in - check if we should send challenge message first
+            let firstMessage = instantGreeting;
+            if (entryPoint === 'video_end_screen' && seriesId && episodeId && episodeId > 1) {
+              const challengeMessage = getFirstChallengeMessage(seriesId, episodeId);
+              if (challengeMessage) {
+                firstMessage = challengeMessage;
+              }
             }
+            
+            // For guided chat, use special greeting
+            if (isGuidedChat && episodeId === 3 && episodeLabel === "Cover Drive") {
+              firstMessage = "Hi! I see you just finished the Cover Drive lesson. I'd love to help you improve your technique. Can you briefly explain what problem you're facing with your cover drive? Also, please upload an image of your cover drive so I can review it. We have 45 seconds for this quick review session.";
+            }
+            
+            setMessages([{
+              role: 'assistant',
+              content: firstMessage,
+              time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            }]);
           }
-          
-          setMessages([{
-            role: 'assistant',
-            content: firstMessage,
-            time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-          }]);
         }
-      }
       
       setIsLoadingHistory(false);
     };
@@ -455,6 +476,38 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
     };
   }, [character, seriesId, seriesTitle, episodeId, episodeLabel, isWhatsApp, entryPoint]);
 
+  // Initialize guided chat timer
+  useEffect(() => {
+    if (isGuidedChat && guidedChatDuration > 0) {
+      setGuidedChatTimeRemaining(guidedChatDuration);
+      
+      guidedChatTimerRef.current = setInterval(() => {
+        setGuidedChatTimeRemaining(prev => {
+          if (prev === null || prev <= 1) {
+            // Timer expired - close chat and trigger completion callback
+            if (guidedChatTimerRef.current) {
+              clearInterval(guidedChatTimerRef.current);
+              guidedChatTimerRef.current = null;
+            }
+            if (onGuidedChatComplete) {
+              onGuidedChatComplete();
+            }
+            onClose();
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+      
+      return () => {
+        if (guidedChatTimerRef.current) {
+          clearInterval(guidedChatTimerRef.current);
+          guidedChatTimerRef.current = null;
+        }
+      };
+    }
+  }, [isGuidedChat, guidedChatDuration, onGuidedChatComplete, onClose]);
+
   useEffect(() => {
     conversationHistory.current = messages.map(m => ({
       role: m.role as 'user' | 'assistant',
@@ -524,6 +577,20 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
     // Get system prompt from centralized character config, including goal context
     let basePrompt = getCharacterPrompt(character, episodeLabel, goalContext);
     
+    // Add guided chat instructions for Cover Drive episode
+    if (isGuidedChat && episodeId === 3 && episodeLabel === "Cover Drive") {
+      basePrompt += `\n\nIMPORTANT: This is a GUIDED CHAT SESSION for Cover Drive review. You have 45 seconds total.
+
+Your role:
+1. Prompt the user to briefly explain their problem with their cover drive technique
+2. Ask them to upload an image of their cover drive for review
+3. Keep responses concise and focused - you have limited time
+4. Guide them through the process efficiently
+5. After they provide their explanation and image, acknowledge receipt and let them know you'll review it
+
+The session will automatically end after 45 seconds. Make every message count!`;
+    }
+    
     // Add challenge prompt if episode has a challenge
     // Only add if previous challenge is complete (or episode 2, which has no previous challenge)
     if (seriesId && episodeId && episodeId > 1) {
@@ -555,7 +622,7 @@ Do NOT set a new challenge until the previous one is completed.`;
     }
     
     systemPrompt.current = basePrompt;
-  }, [character, episodeLabel, goalContext, seriesId, episodeId]);
+  }, [character, episodeLabel, goalContext, seriesId, episodeId, isGuidedChat]);
 
   // Generate personalized drop-off reminder using OpenAI
   const generateDropOffReminder = async () => {
@@ -1178,6 +1245,14 @@ Keep it brief and friendly.`
             </h4>
             <p className="text-[12px] text-[#4A7C59] font-medium">{isTyping ? 'typing...' : 'online'}</p>
           </div>
+          {isGuidedChat && guidedChatTimeRemaining !== null && (
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[#4A7C59]/10 border border-[#4A7C59]/20">
+              <div className="w-2 h-2 rounded-full bg-[#4A7C59] animate-pulse" />
+              <span className="text-[12px] font-semibold text-[#4A7C59] tabular-nums">
+                {guidedChatTimeRemaining}s
+              </span>
+            </div>
+          )}
         </div>
 
         {/* Messages Scroll Area */}
@@ -1329,9 +1404,19 @@ Keep it brief and friendly.`
               <p className="text-[11px] text-[#8A8A8A]">AI Coach</p>
             </div>
           </div>
-          <button onClick={handleClose} className="w-9 h-9 flex items-center justify-center hover:bg-black/[0.04] rounded-xl transition-all active:scale-95">
-             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4 text-[#8A8A8A]"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
-          </button>
+          <div className="flex items-center gap-3">
+            {isGuidedChat && guidedChatTimeRemaining !== null && (
+              <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[#4A7C59]/10 border border-[#4A7C59]/20">
+                <div className="w-2 h-2 rounded-full bg-[#4A7C59] animate-pulse" />
+                <span className="text-[12px] font-semibold text-[#4A7C59] tabular-nums">
+                  {guidedChatTimeRemaining}s
+                </span>
+              </div>
+            )}
+            <button onClick={handleClose} className="w-9 h-9 flex items-center justify-center hover:bg-black/[0.04] rounded-xl transition-all active:scale-95">
+               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4 text-[#8A8A8A]"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+            </button>
+          </div>
         </div>
 
         <div ref={scrollRef} className="relative z-10 flex-1 overflow-y-auto p-5 space-y-3 hide-scrollbar">

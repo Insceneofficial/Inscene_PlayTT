@@ -1060,8 +1060,9 @@ export const SERIES_CATALOG = [
           { char: 'Chirag', intro: "Ready to dominate the pitch? Fitness is 70% of the game. What's holding you back?", hook: "Athlete coaching session focused on cricket performance and doubt clearing." }
         ],
         ctaMapping: {
-          'shots': 2
-          // Other CTAs (professional, speed, stamina) have no navigation until explicitly configured
+          'shots': 2,
+          'professional': 3
+          // Other CTAs (speed, stamina) have no navigation until explicitly configured
         }
       },
       {
@@ -1078,16 +1079,28 @@ export const SERIES_CATALOG = [
       },
       {
         id: 3,
-        label: "Cover Drive",
-        url: "https://rgmeakgorodicnqgrffu.supabase.co/storage/v1/object/public/inscene-videos/Chirag/Ep4a%20Coverdrive.mp4",
+        label: "Professional Cricket Journey",
+        url: "https://rgmeakgorodicnqgrffu.supabase.co/storage/v1/object/public/inscene-videos/Chirag/Ep2%20Professionalcricket%20Ageselection.mp4",
         triggers: [
           { char: 'Chirag', intro: "Ready to dominate the pitch? Fitness is 70% of the game. What's holding you back?", hook: "Athlete coaching session focused on cricket performance and doubt clearing." }
-        ]
+        ],
+        ctaMapping: {
+          'mindset': 5
+          // Application process CTA - navigation to be configured later
+        }
       },
       {
         id: 4,
         label: "Skill Hub Intro",
         url: "https://rgmeakgorodicnqgrffu.supabase.co/storage/v1/object/public/inscene-videos/Chirag/Ep4%20Skillhubintro.mp4",
+        triggers: [
+          { char: 'Chirag', intro: "Ready to dominate the pitch? Fitness is 70% of the game. What's holding you back?", hook: "Athlete coaching session focused on cricket performance and doubt clearing." }
+        ]
+      },
+      {
+        id: 5,
+        label: "Professional Cricket Mindset",
+        url: "https://rgmeakgorodicnqgrffu.supabase.co/storage/v1/object/public/inscene-videos/Chirag/Ep3%20Professionalcricket%20Mindset.mp4",
         triggers: [
           { char: 'Chirag', intro: "Ready to dominate the pitch? Fitness is 70% of the game. What's holding you back?", hook: "Athlete coaching session focused on cricket performance and doubt clearing." }
         ]
@@ -1319,6 +1332,12 @@ const AppContent: React.FC = () => {
         setIsWaitlistModalOpen(true);
         return;
       }
+    }
+    
+    // Check if this is a guided chat for Cover Drive (Episode 3)
+    if (chatDataConfig.episodeId === 3 && chatDataConfig.episodeLabel === "Cover Drive") {
+      chatDataConfig.isGuidedChat = true;
+      chatDataConfig.guidedChatDuration = 45;
     }
     
     // User is authenticated and under limit - proceed with chat
@@ -2010,6 +2029,15 @@ const AppContent: React.FC = () => {
           seriesTitle={chatData.seriesTitle}
           episodeId={chatData.episodeId}
           onWaitlistRequired={() => setIsWaitlistModalOpen(true)}
+          isGuidedChat={chatData.isGuidedChat || false}
+          guidedChatDuration={chatData.guidedChatDuration || 45}
+          onGuidedChatComplete={() => {
+            // Redirect to episode 2 after guided chat completes
+            if (chatData.episodeId === 3 && selectedSeries) {
+              handleNavigateToEpisode(2);
+            }
+            setChatData(null);
+          }}
         />
       )}
 
