@@ -1797,7 +1797,7 @@ const AppContent: React.FC = () => {
         );
       })()}
 
-      {!selectedSeries && currentView !== 'chats' && (
+      {!selectedSeries && (
         <nav className="fixed bottom-0 left-0 right-0 z-[1001] px-4 pb-6 pt-2">
           <div className="max-w-md mx-auto h-14 rounded-2xl border border-black/[0.06] flex items-center shadow-lg relative overflow-hidden bg-white/80 backdrop-blur-xl">
             <button 
