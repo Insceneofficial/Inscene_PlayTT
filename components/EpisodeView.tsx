@@ -60,16 +60,41 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
   
   // Find previous episode ID (for episodes > 1)
   // This finds the episode with the highest ID that is less than the current episode ID
+  // BUT only from the filtered episodes based on user's path choice
   const getPreviousEpisodeId = (): number | null => {
     if (episode.id <= 1) return null;
     if (!series.episodes || series.episodes.length === 0) return null;
     
-    // Find all episodes with ID less than current episode
-    const previousEpisodes = series.episodes
+    // Get filtered episodes based on path choice (same logic as in App.tsx)
+    const getFilteredEpisodes = (episodes: any[], seriesId: string): any[] => {
+      if (typeof window === 'undefined') return episodes;
+      const storageKey = `inscene_path_choice_${seriesId}`;
+      const choice = localStorage.getItem(storageKey);
+      
+      let filtered: any[] = [];
+      
+      if (!choice || (choice !== 'building' && choice !== 'exploring')) {
+        filtered = episodes.filter((ep: any) => ep.id === 1);
+      } else if (choice === 'building') {
+        filtered = episodes.filter((ep: any) => [1, 2, 3, 4, 5].includes(ep.id));
+      } else if (choice === 'exploring') {
+        filtered = episodes.filter((ep: any) => [1, 3, 5].includes(ep.id));
+      } else {
+        filtered = episodes.filter((ep: any) => ep.id === 1);
+      }
+      
+      return filtered;
+    };
+    
+    // Get filtered episodes based on user's path choice
+    const filteredEpisodes = getFilteredEpisodes(series.episodes, series.id);
+    
+    // Find all episodes in the filtered list with ID less than current episode
+    const previousEpisodes = filteredEpisodes
       .filter((ep: any) => ep.id < episode.id)
       .sort((a: any, b: any) => b.id - a.id); // Sort descending to get the closest previous episode
     
-    // Return the episode with the highest ID that's still less than current
+    // Return the episode with the highest ID that's still less than current AND in the filtered list
     return previousEpisodes.length > 0 ? previousEpisodes[0].id : null;
   };
   
