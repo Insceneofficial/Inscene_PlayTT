@@ -8,6 +8,9 @@ import UserMenu from './components/UserMenu.tsx';
 import InfluencerPage from './components/InfluencerPage.tsx';
 import ChatWidget from './components/ChatWidget.tsx';
 import PathChoiceModal from './components/PathChoiceModal.tsx';
+import HamburgerMenu from './components/HamburgerMenu.tsx';
+import LeaderboardDrawer from './components/LeaderboardDrawer.tsx';
+import EpisodeView from './components/EpisodeView.tsx';
 import { AuthProvider, useAuth } from './lib/auth';
 import { getUserMessageCount, MAX_USER_MESSAGES, hasUnlimitedMessages } from './lib/chatStorage';
 import { Analytics } from "@vercel/analytics/react";
@@ -1403,26 +1406,49 @@ const AppContent: React.FC = () => {
 
   return (
     <div className="flex flex-col min-h-[100dvh] h-[100dvh] overflow-hidden" style={{ background: CREAM_BG, color: '#1A1A1A' }}>
-      <header className={`fixed top-0 left-0 right-0 z-[1000] px-6 py-4 transition-all duration-500 ${selectedSeries ? 'bg-gradient-to-b from-[#FAF9F6]/98 to-transparent backdrop-blur-sm' : 'bg-[#FAF9F6] border-b border-black/[0.06]'} ${currentView === 'chats' ? 'hidden' : ''}`}>
+      <header className={`fixed top-0 left-0 right-0 z-[1000] px-6 py-4 transition-all duration-500 ${selectedSeries ? 'hidden' : 'bg-[#FAF9F6] border-b border-black/[0.06]'} ${currentView === 'chats' ? 'hidden' : ''}`}>
         <div className="flex justify-between items-center max-w-4xl mx-auto">
           {selectedSeries ? (
             <>
-              <div 
-                className={`flex items-center gap-3 cursor-pointer group active:scale-[0.98] transition-all duration-500 ${isHeaderUIHidden ? 'opacity-0 pointer-events-none' : 'opacity-100'}`} 
-                onClick={() => { 
-                  setIsHeaderUIHidden(false);
-                  if (headerInactivityTimerRef.current) {
-                    clearTimeout(headerInactivityTimerRef.current);
-                    headerInactivityTimerRef.current = setTimeout(() => {
-                      setIsHeaderUIHidden(true);
-                    }, 5000);
-                  }
-                  setSelectedSeries(null); 
-                  setChatData(null); 
-                }}
-              >
-                <div className="w-10 h-10 rounded-xl bg-purple-600 flex items-center justify-center shadow-sm hover:shadow-md transition-shadow">
-                  <Logo size={22} isPulsing={false} />
+              <div className="flex items-center gap-3">
+                {(() => {
+                  // Get the first character name from avatars to use as creatorId
+                  const creatorName = selectedSeries.avatars ? Object.keys(selectedSeries.avatars)[0] : null;
+                  const creatorAvatar = creatorName ? selectedSeries.avatars[creatorName] : undefined;
+                  
+                  return (
+                    <HamburgerMenu>
+                      {creatorName ? (
+                        <LeaderboardDrawer
+                          creatorId={creatorName}
+                          creatorName={creatorName}
+                          creatorAvatar={creatorAvatar}
+                        />
+                      ) : (
+                        <div className="p-6">
+                          <p className="text-[#8A8A8A] text-sm">No leaderboard available</p>
+                        </div>
+                      )}
+                    </HamburgerMenu>
+                  );
+                })()}
+                <div 
+                  className={`flex items-center gap-3 cursor-pointer group active:scale-[0.98] transition-all duration-500 ${isHeaderUIHidden ? 'opacity-0 pointer-events-none' : 'opacity-100'}`} 
+                  onClick={() => { 
+                    setIsHeaderUIHidden(false);
+                    if (headerInactivityTimerRef.current) {
+                      clearTimeout(headerInactivityTimerRef.current);
+                      headerInactivityTimerRef.current = setTimeout(() => {
+                        setIsHeaderUIHidden(true);
+                      }, 5000);
+                    }
+                    setSelectedSeries(null); 
+                    setChatData(null); 
+                  }}
+                >
+                  <div className="w-10 h-10 rounded-xl bg-purple-600 flex items-center justify-center shadow-sm hover:shadow-md transition-shadow">
+                    <Logo size={22} isPulsing={false} />
+                  </div>
                 </div>
               </div>
               <div className={`flex items-center gap-2 transition-opacity duration-500 ${isHeaderUIHidden ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
@@ -1682,38 +1708,39 @@ const AppContent: React.FC = () => {
         };
         
         const filteredEpisodes = getFilteredEpisodes(selectedSeries.episodes, selectedSeries.id);
+        const currentEpisode = filteredEpisodes[activeIdx] || filteredEpisodes[0];
+        
+        if (!currentEpisode) return null;
         
         return (
-          <div className={`reel-snap-container fixed inset-0 ${chatData ? 'z-[400]' : 'z-[500]'} hide-scrollbar overflow-y-scroll snap-y snap-mandatory`}>
-            {filteredEpisodes.map((ep: any, i: number) => (
-            <div key={ep.id} data-index={i} className="reel-item-wrapper reel-item snap-start h-[100dvh]">
-              <ReelItem 
-                episode={ep} series={selectedSeries} 
-                isActive={activeIdx === i} isMuted={isMuted} 
-                toggleMute={() => setIsMuted(!isMuted)} 
-                onEnterStory={(char, intro, hook, entryPoint) => handleChatInit({
-                  char, intro, hook, 
-                  isFromHistory: false, 
-                  isWhatsApp: false,
-                  entryPoint,
-                  seriesId: selectedSeries.id,
-                  seriesTitle: selectedSeries.title,
-                  episodeId: ep.id,
-                  episodeLabel: ep.label
-                })}
-                onNextEpisode={handleNext}
-                isChatOpen={!!chatData}
-                onShowPathChoice={ep.id === 1 ? () => {
-                  setShowPathChoiceModal(true);
-                } : undefined}
-              />
-            </div>
-          ))}
-        </div>
+          <EpisodeView
+            episode={currentEpisode}
+            series={selectedSeries}
+            isMuted={isMuted}
+            toggleMute={() => setIsMuted(!isMuted)}
+            onEnterStory={(char, intro, hook, entryPoint) => handleChatInit({
+              char, intro, hook, 
+              isFromHistory: false, 
+              isWhatsApp: false,
+              entryPoint,
+              seriesId: selectedSeries.id,
+              seriesTitle: selectedSeries.title,
+              episodeId: currentEpisode.id,
+              episodeLabel: currentEpisode.label
+            })}
+            onNextEpisode={handleNext}
+            onExit={() => {
+              setSelectedSeries(null);
+              setChatData(null);
+            }}
+            onShowPathChoice={currentEpisode.id === 1 ? () => {
+              setShowPathChoiceModal(true);
+            } : undefined}
+          />
         );
       })()}
 
-      {!selectedSeries && (
+      {!selectedSeries && currentView !== 'chats' && (
         <nav className="fixed bottom-0 left-0 right-0 z-[1001] px-4 pb-6 pt-2">
           <div className="max-w-md mx-auto h-14 rounded-2xl border border-black/[0.06] flex items-center shadow-lg relative overflow-hidden bg-white/80 backdrop-blur-xl">
             <button 
