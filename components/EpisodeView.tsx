@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import EpisodeSidebar from './EpisodeSidebar';
 import { trackVideoStart, updateVideoProgress, trackVideoEnd } from '../lib/analytics';
-import { getGlobalRules, getFirstInSequence, getNumericId, isEp3OrStep } from '../lib/episodeFlow';
+import { getGlobalRules, getFirstInSequence, getNumericId, isEp3OrStep, shouldTriggerChatOnComplete, shouldTriggerChatOnSkip } from '../lib/episodeFlow';
 
 interface EpisodeViewProps {
   episode: any;
@@ -180,6 +180,31 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
     const video = videoRef.current;
     if (!video || isEnded || video.paused) return;
     
+    // Check if episode requires chat on skip
+    if (shouldTriggerChatOnSkip(episode)) {
+      // Pause the video immediately
+      video.pause();
+      setIsPaused(true);
+      setIsEnded(true); // Treat as completed
+      
+      // Trigger chat after a short delay
+      setTimeout(() => {
+        if (episode?.postAction?.chat) {
+          const chatConfig = episode.postAction.chat;
+          const globalRules = getGlobalRules();
+          const chatbotName = globalRules.chatbot?.name || 'Chirag AI';
+          
+          onEnterStory(
+            chatbotName,
+            chatConfig.prompt || '',
+            chatConfig.prompt || '',
+            'video_skip_auto'
+          );
+        }
+      }, 100);
+      return;
+    }
+    
     // Pause the video
     video.pause();
     setIsPaused(true);
@@ -195,7 +220,7 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
     if (inactivityTimerRef.current) {
       clearTimeout(inactivityTimerRef.current);
     }
-  }, [isEnded, episode.id, episode.ctas, episode.ctaMapping]);
+  }, [isEnded, episode, onEnterStory]);
   
   // Touch event handlers for swipe detection
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
@@ -833,6 +858,27 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
           if (videoRef.current) {
             videoRef.current.pause();
           }
+          
+          // Check if episode requires chat on completion
+          if (shouldTriggerChatOnComplete(episode)) {
+            // Trigger chat after a short delay
+            setTimeout(() => {
+              if (episode?.postAction?.chat) {
+                const chatConfig = episode.postAction.chat;
+                const globalRules = getGlobalRules();
+                const chatbotName = globalRules.chatbot?.name || 'Chirag AI';
+                
+                onEnterStory(
+                  chatbotName,
+                  chatConfig.prompt || '',
+                  chatConfig.prompt || '',
+                  'video_end_auto'
+                );
+              }
+            }, 100);
+            return;
+          }
+          
           // Show CTA overlay when video ends (if episode has CTAs)
           const hasCTAs = (episode.ctas && episode.ctas.length > 0) || episode.ctaMapping;
           if (hasCTAs) {
@@ -1104,6 +1150,14 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
                       onClick={(e) => {
                         e.stopPropagation();
                         e.preventDefault();
+                        // Handle chat action
+                        if (cta.action === 'openChat') {
+                          const char = creatorName || 'Chirag';
+                          const defaultIntro = "Ready to dominate the pitch? Fitness is 70% of the game. What's holding you back?";
+                          const defaultHook = "Athlete coaching session focused on cricket performance and doubt clearing.";
+                          onEnterStory(char, defaultIntro, defaultHook, 'video_sidebar');
+                          return;
+                        }
                         // Use targetEpisodeId from merged config (converted from string ID)
                         const targetEpisodeId = cta.targetEpisodeId;
                         if (onNavigateToEpisode && targetEpisodeId !== undefined && targetEpisodeId !== null && typeof targetEpisodeId === 'number') {

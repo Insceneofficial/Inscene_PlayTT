@@ -18,6 +18,7 @@ import { getInfluencerBySlug, getSeriesForInfluencer, setSeriesCatalog } from '.
 import { getCharacterAvatar } from '../lib/characters';
 import { SERIES_CATALOG } from '../App';
 import { trackPageView, trackVideoStart, updateVideoProgress, trackVideoEnd, getSeriesProgress, SeriesProgress } from '../lib/analytics';
+import { shouldTriggerChatOnComplete, shouldTriggerChatOnSkip, getGlobalRules, getStringId, getReturnToEpisodeId } from '../lib/episodeFlow';
 
 /**
  * Utility function to get user's path choice for a series
@@ -785,6 +786,30 @@ const ReelItem: React.FC<{
     const video = videoRef.current;
     if (!video || isEnded || video.paused || !isActive) return;
     
+    // Check if episode requires chat on skip
+    if (shouldTriggerChatOnSkip(episode)) {
+      // Pause the video immediately
+      video.pause();
+      setIsEnded(true); // Treat as completed
+      
+      // Trigger chat after a short delay
+      setTimeout(() => {
+        if (episode?.postAction?.chat) {
+          const chatConfig = episode.postAction.chat;
+          const globalRules = getGlobalRules();
+          const chatbotName = globalRules.chatbot?.name || 'Chirag AI';
+          
+          onEnterStory(
+            chatbotName,
+            chatConfig.prompt || '',
+            chatConfig.prompt || '',
+            'video_skip_auto'
+          );
+        }
+      }, 100);
+      return;
+    }
+    
     // Pause the video
     video.pause();
     
@@ -796,7 +821,7 @@ const ReelItem: React.FC<{
         setIsUIHidden(true);
       }, 5000);
     }
-  }, [isEnded, isActive]);
+  }, [isEnded, isActive, episode, onEnterStory]);
   
   // Touch event handlers for swipe detection
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
@@ -938,6 +963,27 @@ const ReelItem: React.FC<{
         onEnded={() => {
           console.log('[Video] Ended - Episode:', episode.label, 'Episode ID:', episode.id);
           setIsEnded(true);
+          
+          // Check if episode requires chat on completion
+          if (shouldTriggerChatOnComplete(episode)) {
+            // Trigger chat after a short delay
+            setTimeout(() => {
+              if (episode?.postAction?.chat) {
+                const chatConfig = episode.postAction.chat;
+                const globalRules = getGlobalRules();
+                const chatbotName = globalRules.chatbot?.name || 'Chirag AI';
+                
+                onEnterStory(
+                  chatbotName,
+                  chatConfig.prompt || '',
+                  chatConfig.prompt || '',
+                  'video_end_auto'
+                );
+              }
+            }, 100);
+            return;
+          }
+          
           // For episode 1, immediately trigger path choice modal when video ends
           if (episode.id === 1 && onShowPathChoice) {
             console.log('[Video] onEnded - Episode 1 detected, triggering path choice modal');
@@ -1410,6 +1456,38 @@ const InfluencerPage: React.FC = () => {
       }
     }
     
+    // Get global rules for chat configuration
+    const globalRules = getGlobalRules();
+    
+    // Check if episode has postAction.chat config (from JSON flow)
+    if (chatDataConfig.episodeId && series) {
+      const episode = series.episodes.find((ep: any) => ep.id === chatDataConfig.episodeId);
+      if (episode?.postAction?.chat) {
+        chatDataConfig.isGuidedChat = true;
+        // Use timerSeconds from globalRules if available, otherwise default to 45
+        chatDataConfig.guidedChatDuration = globalRules.chatbot?.ui?.timerSeconds || 45;
+        chatDataConfig.timerSeconds = globalRules.chatbot?.ui?.timerSeconds || 45;
+        
+        // Get chat UI config from globalRules
+        chatDataConfig.closeEnabled = globalRules.chatbot?.ui?.closeEnabled ?? false;
+        chatDataConfig.startImmediately = globalRules.chatbot?.startImmediately ?? true;
+        chatDataConfig.showTimer = globalRules.chatbot?.ui?.showTimer ?? true;
+        chatDataConfig.nextSessionButton = globalRules.chatbot?.ui?.nextSessionButton;
+      } else {
+        // No postAction.chat, use globalRules defaults
+        chatDataConfig.closeEnabled = globalRules.chatbot?.ui?.closeEnabled ?? false;
+        chatDataConfig.startImmediately = globalRules.chatbot?.startImmediately ?? true;
+        chatDataConfig.showTimer = globalRules.chatbot?.ui?.showTimer ?? false;
+        chatDataConfig.nextSessionButton = globalRules.chatbot?.ui?.nextSessionButton;
+      }
+    } else {
+      // No episode context, use globalRules defaults
+      chatDataConfig.closeEnabled = globalRules.chatbot?.ui?.closeEnabled ?? false;
+      chatDataConfig.startImmediately = globalRules.chatbot?.startImmediately ?? true;
+      chatDataConfig.showTimer = globalRules.chatbot?.ui?.showTimer ?? false;
+      chatDataConfig.nextSessionButton = globalRules.chatbot?.ui?.nextSessionButton;
+    }
+    
     setChatData(chatDataConfig);
   };
 
@@ -1731,6 +1809,26 @@ const InfluencerPage: React.FC = () => {
             console.log('[InfluencerPage] Challenge completed callback - seriesId:', seriesId, 'episodeId:', episodeId);
             // Force re-render to update episode list
             setChallengeVersion(prev => prev + 1);
+          }}
+          isGuidedChat={chatData.isGuidedChat || false}
+          guidedChatDuration={chatData.guidedChatDuration || 45}
+          closeEnabled={chatData.closeEnabled !== undefined ? chatData.closeEnabled : true}
+          startImmediately={chatData.startImmediately !== undefined ? chatData.startImmediately : true}
+          showTimer={chatData.showTimer}
+          timerSeconds={chatData.timerSeconds}
+          nextSessionButton={chatData.nextSessionButton}
+          onGuidedChatComplete={() => {
+            // Navigate to returnTo episode after guided chat completes
+            if (series && chatData.episodeId) {
+              const currentEpisode = series.episodes.find((ep: any) => ep.id === chatData.episodeId);
+              if (currentEpisode) {
+                const returnToId = getReturnToEpisodeId(currentEpisode);
+                if (returnToId !== null) {
+                  handleNavigateToEpisode(returnToId);
+                }
+              }
+            }
+            setChatData(null);
           }}
         />
       )}

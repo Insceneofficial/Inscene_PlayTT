@@ -25,14 +25,16 @@ export interface EpisodeConfig {
   videoUrl: string;
   type: 'hub' | 'leaf' | 'sequence' | 'step' | 'single';
   ctas?: Array<{ label: string; target: string }>;
+  chatRequired?: boolean;
+  triggerChatOn?: ('complete' | 'skip')[];
   postAction?: {
     chat?: {
-      durationSeconds: number;
       prompt: string;
     };
     returnTo?: string;
   };
   sequence?: string[];
+  next?: string;
 }
 
 // Map JSON string IDs to numeric IDs for compatibility
@@ -123,6 +125,9 @@ export function mergeEpisodeConfig(existingEpisode: any, stringId: string): any 
   merged.ctas = config.ctas;
   merged.postAction = config.postAction;
   merged.sequence = config.sequence;
+  merged.chatRequired = config.chatRequired;
+  merged.triggerChatOn = config.triggerChatOn;
+  merged.next = config.next;
 
   // Convert CTA targets from string IDs to numeric IDs
   if (merged.ctas) {
@@ -279,4 +284,55 @@ export function isEp3OrStep(episode: any): boolean {
   }
   
   return false;
+}
+
+/**
+ * Check if episode requires chat
+ */
+export function requiresChat(episode: any): boolean {
+  // Check if episode has chatRequired flag
+  if (episode?.chatRequired === true) {
+    return true;
+  }
+  
+  // Also check by string ID
+  const currentStringId = getStringId(episode?.id);
+  if (currentStringId) {
+    const config = getEpisodeConfig(currentStringId);
+    return config?.chatRequired === true;
+  }
+  
+  return false;
+}
+
+/**
+ * Check if chat should be triggered on video completion
+ */
+export function shouldTriggerChatOnComplete(episode: any): boolean {
+  if (!requiresChat(episode)) return false;
+  
+  const currentStringId = getStringId(episode?.id);
+  if (currentStringId) {
+    const config = getEpisodeConfig(currentStringId);
+    return config?.triggerChatOn?.includes('complete') ?? false;
+  }
+  
+  // Fallback: check episode object directly
+  return episode?.triggerChatOn?.includes('complete') ?? false;
+}
+
+/**
+ * Check if chat should be triggered on swipe/skip
+ */
+export function shouldTriggerChatOnSkip(episode: any): boolean {
+  if (!requiresChat(episode)) return false;
+  
+  const currentStringId = getStringId(episode?.id);
+  if (currentStringId) {
+    const config = getEpisodeConfig(currentStringId);
+    return config?.triggerChatOn?.includes('skip') ?? false;
+  }
+  
+  // Fallback: check episode object directly
+  return episode?.triggerChatOn?.includes('skip') ?? false;
 }

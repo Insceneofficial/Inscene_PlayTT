@@ -3,8 +3,30 @@
 
   "globalRules": {
     "defaultReturn": "ep1",
+
+    "navigation": {
+      "episodesOnly": true,
+      "onSkip": "triggerPostChat"
+    },
+
     "chatbot": {
       "name": "Chirag AI",
+      "mandatory": true,
+      "startImmediately": true,
+
+      "ui": {
+        "showTimer": true,
+        "timerSeconds": 45,
+
+        "nextSessionButton": {
+          "enabled": true,
+          "style": "cross",
+          "label": "Next Session"
+        },
+
+        "closeEnabled": false
+      },
+
       "imageUpload": {
         "enabled": true,
         "analyze": false
@@ -42,10 +64,11 @@
       "title": "Cover Drive",
       "videoUrl": "https://rgmeakgorodicnqgrffu.supabase.co/storage/v1/object/public/inscene-videos/Chirag/Ep4a%20Coverdrive.mp4",
       "type": "leaf",
+      "chatRequired": true,
+      "triggerChatOn": ["complete", "skip"],
       "postAction": {
         "chat": {
-          "durationSeconds": 45,
-          "prompt": "Tell me where you struggle with your cover drive. You may upload an image of your stance."
+          "prompt": "Tell me where you struggle with your cover drive."
         },
         "returnTo": "ep1"
       }
@@ -55,10 +78,11 @@
       "title": "Cut Shot",
       "videoUrl": "https://rgmeakgorodicnqgrffu.supabase.co/storage/v1/object/public/inscene-videos/Chirag/Episode2b%20Cutshot.mp4",
       "type": "leaf",
+      "chatRequired": true,
+      "triggerChatOn": ["complete", "skip"],
       "postAction": {
         "chat": {
-          "durationSeconds": 45,
-          "prompt": "Tell me what feels difficult in your cut shot. Upload an image if you want."
+          "prompt": "Tell me what feels difficult in your cut shot."
         },
         "returnTo": "ep1"
       }
@@ -68,10 +92,11 @@
       "title": "On Drive",
       "videoUrl": "https://rgmeakgorodicnqgrffu.supabase.co/storage/v1/object/public/inscene-videos/Chirag/Episode2b%20Cutshot.mp4",
       "type": "leaf",
+      "chatRequired": true,
+      "triggerChatOn": ["complete", "skip"],
       "postAction": {
         "chat": {
-          "durationSeconds": 45,
-          "prompt": "Share your issue with the on drive. Image upload optional."
+          "prompt": "Share your issue with the on drive."
         },
         "returnTo": "ep1"
       }
@@ -81,10 +106,11 @@
       "title": "Power Shot",
       "videoUrl": "https://rgmeakgorodicnqgrffu.supabase.co/storage/v1/object/public/inscene-videos/Chirag/Episode2d%20Powershot.mp4",
       "type": "leaf",
+      "chatRequired": true,
+      "triggerChatOn": ["complete", "skip"],
       "postAction": {
         "chat": {
-          "durationSeconds": 45,
-          "prompt": "Where do you lose power? Upload an image if you want."
+          "prompt": "Where do you lose power?"
         },
         "returnTo": "ep1"
       }
@@ -94,10 +120,11 @@
       "title": "Pull Shot",
       "videoUrl": "https://rgmeakgorodicnqgrffu.supabase.co/storage/v1/object/public/inscene-videos/Chirag/Episode2e%20Pullshot.mp4",
       "type": "leaf",
+      "chatRequired": true,
+      "triggerChatOn": ["complete", "skip"],
       "postAction": {
         "chat": {
-          "durationSeconds": 45,
-          "prompt": "Tell me your difficulty with the pull shot. Image upload optional."
+          "prompt": "Tell me your difficulty with the pull shot."
         },
         "returnTo": "ep1"
       }
@@ -107,9 +134,7 @@
       "title": "Speed",
       "videoUrl": "https://rgmeakgorodicnqgrffu.supabase.co/storage/v1/object/public/inscene-videos/Chirag/Ep3%20Speed.mp4",
       "type": "sequence",
-      "ctas": [
-        { "label": "Start Exercise", "target": "ep3a", "align": "center" }
-      ],
+      "ctas": [{ "label": "Start Exercises", "target": "ep3a" }],
       "sequence": ["ep3a", "ep3b", "ep3c", "ep3d", "ep3e"]
     },
 
@@ -117,28 +142,26 @@
       "title": "Speed Exercise 1",
       "videoUrl": "https://rgmeakgorodicnqgrffu.supabase.co/storage/v1/object/public/inscene-videos/Chirag/Ep3_Ex1.mov",
       "type": "step",
-      "ctas": [
-        { "label": "Next Exercise", "target": "ep3b" }
-      ],
+      "chatRequired": true,
+      "triggerChatOn": ["complete", "skip"],
+      "next": "ep3b",
       "postAction": {
         "chat": {
-          "durationSeconds": 45,
-          "prompt": "Have you completed your exercise?"
+          "prompt": "Did you complete this speed exercise?"
         }
       }
     },
 
     "ep3b": {
       "title": "Speed Exercise 2",
-      "videoUrl": "https://rgmeakgorodicnqgrffu.supabase.co/storage/v1/object/public/inscene-videos/Chirag/Ep3_Ex1.mov",
+      "videoUrl": "https://rgmeakgorodicnqgrffu.supabase.co/storage/v1/object/public/inscene-videos/Chirag/Ep3%20Ex2.mp4",
       "type": "step",
-      "ctas": [
-        { "label": "Next Exercise", "target": "ep3c" }
-      ],
+      "chatRequired": true,
+      "triggerChatOn": ["complete", "skip"],
+      "next": "ep3c",
       "postAction": {
         "chat": {
-          "durationSeconds": 45,
-          "prompt": "Have you completed your exercise?"
+          "prompt": "How did this exercise feel?"
         }
       }
     },
@@ -147,13 +170,12 @@
       "title": "Speed Exercise 3",
       "videoUrl": "https://rgmeakgorodicnqgrffu.supabase.co/storage/v1/object/public/inscene-videos/Chirag/Ep3%20Ex3.mp4",
       "type": "step",
-      "ctas": [
-        { "label": "Next Exercise", "target": "ep3d" }
-      ],
+      "chatRequired": true,
+      "triggerChatOn": ["complete", "skip"],
+      "next": "ep3d",
       "postAction": {
         "chat": {
-          "durationSeconds": 45,
-          "prompt": "Have you completed your exercise?"
+          "prompt": "Any difficulty with footwork?"
         }
       }
     },
@@ -162,13 +184,12 @@
       "title": "Speed Exercise 4",
       "videoUrl": "https://rgmeakgorodicnqgrffu.supabase.co/storage/v1/object/public/inscene-videos/Chirag/Ep3_Ex4.mov",
       "type": "step",
-      "ctas": [
-        { "label": "Next Exercise", "target": "ep3e" }
-      ],
+      "chatRequired": true,
+      "triggerChatOn": ["complete", "skip"],
+      "next": "ep3e",
       "postAction": {
         "chat": {
-          "durationSeconds": 45,
-          "prompt": "Have you completed your exercise?"
+          "prompt": "Did you maintain consistency?"
         }
       }
     },
@@ -177,9 +198,10 @@
       "title": "Speed Exercise 5",
       "videoUrl": "https://rgmeakgorodicnqgrffu.supabase.co/storage/v1/object/public/inscene-videos/Chirag/Ep3_Ex5.mov",
       "type": "step",
+      "chatRequired": true,
+      "triggerChatOn": ["complete", "skip"],
       "postAction": {
         "chat": {
-          "durationSeconds": 45,
           "prompt": "Great work completing all speed exercises."
         },
         "returnTo": "ep1"
@@ -190,10 +212,11 @@
       "title": "Stamina (Yo-Yo Test)",
       "videoUrl": "https://rgmeakgorodicnqgrffu.supabase.co/storage/v1/object/public/inscene-videos/Chirag/Ep4%20Stamina(Yoyo).mp4",
       "type": "single",
+      "chatRequired": true,
+      "triggerChatOn": ["complete", "skip"],
       "postAction": {
         "chat": {
-          "durationSeconds": 45,
-          "prompt": "What is your current Yo-Yo / Euro Test benchmark? Let me help you improve it."
+          "prompt": "What is your current Yo-Yo / Euro Test benchmark?"
         },
         "returnTo": "ep1"
       }
@@ -213,10 +236,11 @@
       "title": "Professional Mindset",
       "videoUrl": "https://rgmeakgorodicnqgrffu.supabase.co/storage/v1/object/public/inscene-videos/Chirag/Ep3%20Professionalcricket%20Mindset.mp4",
       "type": "leaf",
+      "chatRequired": true,
+      "triggerChatOn": ["complete", "skip"],
       "postAction": {
         "chat": {
-          "durationSeconds": 45,
-          "prompt": "Tell me your doubts about pursuing professional cricket. I'll help you plan."
+          "prompt": "Tell me your doubts about pursuing professional cricket."
         },
         "returnTo": "ep1"
       }
@@ -226,10 +250,11 @@
       "title": "Age Selection & Applications",
       "videoUrl": "https://rgmeakgorodicnqgrffu.supabase.co/storage/v1/object/public/inscene-videos/Chirag/Agewise.mp4",
       "type": "leaf",
+      "chatRequired": true,
+      "triggerChatOn": ["complete", "skip"],
       "postAction": {
         "chat": {
-          "durationSeconds": 45,
-          "prompt": "Based on your age, I'll tell you where and how to apply for cricket opportunities in India."
+          "prompt": "Based on your age, I'll tell you where and how to apply."
         },
         "returnTo": "ep1"
       }

@@ -29,6 +29,16 @@ interface ChatPanelProps {
   isGuidedChat?: boolean;
   guidedChatDuration?: number; // in seconds
   onGuidedChatComplete?: () => void;
+  // Chat UI configuration
+  closeEnabled?: boolean; // Whether close button should be enabled
+  startImmediately?: boolean; // Whether timer should start immediately
+  showTimer?: boolean; // Whether to show timer
+  timerSeconds?: number; // Timer duration in seconds
+  nextSessionButton?: {
+    enabled: boolean;
+    style: string;
+    label: string;
+  };
 }
 
 const ChatPanel: React.FC<ChatPanelProps> = ({ 
@@ -50,7 +60,12 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
   onChallengeCompleted,
   isGuidedChat = false,
   guidedChatDuration = 45,
-  onGuidedChatComplete
+  onGuidedChatComplete,
+  closeEnabled = true, // Default to enabled
+  startImmediately = true, // Default to immediate start
+  showTimer = false,
+  timerSeconds = 45,
+  nextSessionButton
 }) => {
   const [messages, setMessages] = useState<{ role: 'user' | 'assistant'; content: string; time: string }[]>([]);
   const [inputValue, setInputValue] = useState('');
@@ -479,7 +494,9 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
   // Initialize guided chat timer
   useEffect(() => {
     if (isGuidedChat && guidedChatDuration > 0) {
-      setGuidedChatTimeRemaining(guidedChatDuration);
+      // Use timerSeconds from props if provided, otherwise use guidedChatDuration
+      const durationToUse = timerSeconds > 0 ? timerSeconds : guidedChatDuration;
+      setGuidedChatTimeRemaining(durationToUse);
       
       guidedChatTimerRef.current = setInterval(() => {
         setGuidedChatTimeRemaining(prev => {
@@ -1233,13 +1250,19 @@ Keep it brief and friendly.`
 
         {/* Header - Minimal Elegance */}
         <div className="relative z-10 flex items-center gap-3 px-4 py-3 bg-white/80 backdrop-blur-xl border-b border-black/[0.06]">
-          <button onClick={handleClose} className="p-1 hover:bg-black/[0.04] rounded-xl transition-colors active:scale-95 flex items-center gap-2">
-            <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" className="text-[#4A4A4A]"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"></path></svg>
+          {closeEnabled ? (
+            <button onClick={handleClose} className="p-1 hover:bg-black/[0.04] rounded-xl transition-colors active:scale-95 flex items-center gap-2">
+              <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" className="text-[#4A4A4A]"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"></path></svg>
+              <div className="w-10 h-10 rounded-full bg-[#4A7C59] flex items-center justify-center text-white font-semibold text-lg shadow-sm">
+                {seriesTitle ? seriesTitle.charAt(0).toUpperCase() : character.charAt(0).toUpperCase()}
+              </div>
+            </button>
+          ) : (
             <div className="w-10 h-10 rounded-full bg-[#4A7C59] flex items-center justify-center text-white font-semibold text-lg shadow-sm">
               {seriesTitle ? seriesTitle.charAt(0).toUpperCase() : character.charAt(0).toUpperCase()}
             </div>
-          </button>
-          <div className="flex flex-col flex-1" onClick={handleClose}>
+          )}
+          <div className={`flex flex-col flex-1 ${closeEnabled ? 'cursor-pointer' : ''}`} onClick={closeEnabled ? handleClose : undefined}>
             <h4 className="text-[15px] font-semibold text-[#1A1A1A] leading-tight truncate tracking-tight">
               {character === 'Chirag' ? "Chirag's AI Avatar" : character}
             </h4>
@@ -1405,7 +1428,7 @@ Keep it brief and friendly.`
             </div>
           </div>
           <div className="flex items-center gap-3">
-            {isGuidedChat && guidedChatTimeRemaining !== null && (
+            {showTimer && isGuidedChat && guidedChatTimeRemaining !== null && (
               <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[#4A7C59]/10 border border-[#4A7C59]/20">
                 <div className="w-2 h-2 rounded-full bg-[#4A7C59] animate-pulse" />
                 <span className="text-[12px] font-semibold text-[#4A7C59] tabular-nums">
@@ -1413,9 +1436,22 @@ Keep it brief and friendly.`
                 </span>
               </div>
             )}
-            <button onClick={handleClose} className="w-9 h-9 flex items-center justify-center hover:bg-black/[0.04] rounded-xl transition-all active:scale-95">
-               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4 text-[#8A8A8A]"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
-            </button>
+            {nextSessionButton?.enabled && onGuidedChatComplete && (
+              <button
+                onClick={onGuidedChatComplete}
+                className="w-9 h-9 flex items-center justify-center hover:bg-black/[0.04] rounded-xl transition-all active:scale-95"
+                title={nextSessionButton.label || "Next Session"}
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-5 h-5 text-[#8A8A8A]">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            )}
+            {closeEnabled && (
+              <button onClick={handleClose} className="w-9 h-9 flex items-center justify-center hover:bg-black/[0.04] rounded-xl transition-all active:scale-95">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4 text-[#8A8A8A]"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+            )}
           </div>
         </div>
 
