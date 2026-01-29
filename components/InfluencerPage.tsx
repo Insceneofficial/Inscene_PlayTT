@@ -872,7 +872,7 @@ const ReelItem: React.FC<{
       ref={containerRef} 
       className="reel-item flex items-center justify-center overflow-hidden bg-[#0a0a0f]"
       style={{
-        transform: isSlidingDown ? 'translateY(100vh)' : 'translateY(0)',
+        transform: isSlidingDown ? 'translateY(100dvh)' : 'translateY(0)',
         transition: isSlidingDown ? 'transform 0.5s cubic-bezier(0.4, 0, 0.2, 1)' : 'none'
       }}
       onTouchStart={handleTouchStart}
