@@ -23,6 +23,18 @@ import {
 import { loadAllChatHistories } from './lib/chatStorage';
 import { AVATARS, getCharacterAvatar, getAllCharacterNames, CHARACTER_PROFILES } from './lib/characters';
 import { setSeriesCatalog, getAllInfluencers, getInfluencerSlug, InfluencerInfo } from './lib/influencerMapping';
+import { 
+  mergeEpisodeConfig, 
+  getReturnToEpisodeId, 
+  getGlobalRules,
+  getNumericId,
+  getStringId,
+  isSequenceEpisode,
+  getNextInSequence,
+  isValidSequenceTarget,
+  getAllEpisodeIds,
+  isEp3OrStep
+} from './lib/episodeFlow';
 
 // Re-export for backward compatibility with existing code
 const CHIRAG_AVATAR = AVATARS.Chirag;
@@ -751,6 +763,29 @@ const ReelItem: React.FC<{
     }
   }, [isEnded]);
 
+  // Auto-open chat after video ends if postAction.chat exists
+  useEffect(() => {
+    if (isEnded && isActive && episode?.postAction?.chat) {
+      const chatConfig = episode.postAction.chat;
+      const globalRules = getGlobalRules();
+      const chatbotName = globalRules.chatbot.name || 'Chirag';
+      
+      // Small delay to ensure video end screen doesn't conflict
+      const timer = setTimeout(() => {
+        // Call onEnterStory which will trigger handleChatInit
+        // handleChatInit will check episode.postAction.chat and set guided chat config
+        onEnterStory(
+          chatbotName,
+          chatConfig.prompt || '',
+          chatConfig.prompt || '',
+          'video_end_auto'
+        );
+      }, 500);
+      
+      return () => clearTimeout(timer);
+    }
+  }, [isEnded, isActive, episode, onEnterStory]);
+
   const handleTimeUpdate = () => {
     if (videoRef.current) {
       setCurrentTime(videoRef.current.currentTime);
@@ -1159,7 +1194,8 @@ const ReelItem: React.FC<{
 /**
  * SERIES CATALOG
  */
-export const SERIES_CATALOG = [
+// Base series catalog - will be merged with JSON flow data
+const BASE_SERIES_CATALOG = [
   {
     id: 'cricket-coaching',
     title: 'Cricket Coaching',
@@ -1228,6 +1264,52 @@ export const SERIES_CATALOG = [
   }
 ];
 
+// Merge JSON episode flow data into series catalog
+// This preserves all existing episodes and adds/updates from JSON
+function mergeSeriesCatalogWithFlow(baseCatalog: typeof BASE_SERIES_CATALOG) {
+  const mergedCatalog = baseCatalog.map(series => {
+    const mergedEpisodes = series.episodes.map(episode => {
+      // Get string ID for this episode
+      const stringId = getStringId(episode.id);
+      if (!stringId) {
+        // Episode not in JSON flow, return as-is
+        return episode;
+      }
+      
+      // Merge JSON config into existing episode
+      return mergeEpisodeConfig(episode, stringId);
+    });
+    
+    // Add any new episodes from JSON that don't exist in base catalog
+    // (Episodes with IDs beyond the base catalog range)
+    const allStringIds = getAllEpisodeIds();
+    allStringIds.forEach(stringId => {
+      const numericId = getNumericId(stringId);
+      if (numericId && !mergedEpisodes.find(ep => ep.id === numericId)) {
+        // Create new episode from JSON
+        const newEpisode = mergeEpisodeConfig({
+          id: numericId,
+          label: '',
+          url: '',
+          triggers: [
+            { char: 'Chirag', intro: "Ready to dominate the pitch? Fitness is 70% of the game. What's holding you back?", hook: "Athlete coaching session focused on cricket performance and doubt clearing." }
+          ]
+        }, stringId);
+        mergedEpisodes.push(newEpisode);
+      }
+    });
+    
+    return {
+      ...series,
+      episodes: mergedEpisodes
+    };
+  });
+  
+  return mergedCatalog;
+}
+
+export const SERIES_CATALOG = mergeSeriesCatalogWithFlow(BASE_SERIES_CATALOG);
+
 // Premium cream/off-white theme - Steve Jobs approved
 const CREAM_BG = '#FAF9F6';
 const SAGE_GREEN = '#4A7C59';
@@ -1260,6 +1342,10 @@ const AppContent: React.FC = () => {
   const [previousEpisode, setPreviousEpisode] = useState<any>(null);
   const [transitionDirection, setTransitionDirection] = useState<'forward' | 'backward'>('forward');
   
+  // Video history stack to track playback order
+  const [videoHistory, setVideoHistory] = useState<number[]>([]);
+  const isNavigatingBackRef = useRef(false);
+  
   const [conversations, setConversations] = useState<Record<string, ConversationHistoryEntry>>({});
   const [typingStatus, setTypingStatus] = useState<Record<string, boolean>>({});
   const [unseenCounts, setUnseenCounts] = useState<Record<string, number>>({});
@@ -1280,7 +1366,47 @@ const AppContent: React.FC = () => {
   useEffect(() => {
     if (!selectedSeries) {
       setCtaNavigatedEpisodes(new Set());
+      setVideoHistory([]);
+      isNavigatingBackRef.current = false;
+    } else {
+      // Initialize history with first episode if starting fresh
+      const getFilteredEpisodes = (episodes: any[], seriesId: string, ctaEpisodes: Set<number>): any[] => {
+        if (typeof window === 'undefined') return episodes;
+        const storageKey = `inscene_path_choice_${seriesId}`;
+        const choice = localStorage.getItem(storageKey);
+        
+        let filtered: any[] = [];
+        
+        if (!choice || (choice !== 'building' && choice !== 'exploring')) {
+          filtered = episodes.filter((ep: any) => ep.id === 1);
+        } else if (choice === 'building') {
+          filtered = episodes.filter((ep: any) => [1, 2, 3, 4, 5].includes(ep.id));
+        } else if (choice === 'exploring') {
+          filtered = episodes.filter((ep: any) => [1, 3, 5].includes(ep.id));
+        } else {
+          filtered = episodes.filter((ep: any) => ep.id === 1);
+        }
+        
+        ctaEpisodes.forEach(epId => {
+          if (!filtered.find(ep => ep.id === epId)) {
+            const episode = episodes.find((ep: any) => ep.id === epId);
+            if (episode) {
+              filtered.push(episode);
+            }
+          }
+        });
+        
+        return filtered;
+      };
+      
+      const filteredEpisodes = getFilteredEpisodes(selectedSeries.episodes, selectedSeries.id, ctaNavigatedEpisodes);
+      if (filteredEpisodes.length > 0 && videoHistory.length === 0) {
+        // Initialize history with the first episode in the filtered list
+        const firstEpisodeId = filteredEpisodes[0].id;
+        setVideoHistory([firstEpisodeId]);
+      }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedSeries]);
 
   // Read URL query parameters to set the view
@@ -1457,8 +1583,17 @@ const AppContent: React.FC = () => {
       }
     }
     
-    // Check if this is a guided chat for Cover Drive (Episode 3)
-    if (chatDataConfig.episodeId === 3 && chatDataConfig.episodeLabel === "Cover Drive") {
+    // Check if episode has postAction.chat config (from JSON flow)
+    if (chatDataConfig.episodeId && selectedSeries) {
+      const episode = selectedSeries.episodes.find((ep: any) => ep.id === chatDataConfig.episodeId);
+      if (episode?.postAction?.chat) {
+        chatDataConfig.isGuidedChat = true;
+        chatDataConfig.guidedChatDuration = episode.postAction.chat.durationSeconds || 45;
+      }
+    }
+    
+    // Legacy: Check if this is a guided chat for Cover Drive (Episode 3)
+    if (chatDataConfig.episodeId === 3 && chatDataConfig.episodeLabel === "Cover Drive" && !chatDataConfig.isGuidedChat) {
       chatDataConfig.isGuidedChat = true;
       chatDataConfig.guidedChatDuration = 45;
     }
@@ -1468,14 +1603,73 @@ const AppContent: React.FC = () => {
   };
 
   const handleNext = () => {
-    const nextIdx = (activeIdx + 1) % selectedSeries.episodes.length;
+    if (!selectedSeries) return;
+    
+    // Get current episode
+    const getFilteredEpisodes = (episodes: any[], seriesId: string, ctaEpisodes: Set<number>): any[] => {
+      if (typeof window === 'undefined') return episodes;
+      const storageKey = `inscene_path_choice_${seriesId}`;
+      const choice = localStorage.getItem(storageKey);
+      
+      let filtered: any[] = [];
+      
+      if (!choice || (choice !== 'building' && choice !== 'exploring')) {
+        filtered = episodes.filter((ep: any) => ep.id === 1);
+      } else if (choice === 'building') {
+        filtered = episodes.filter((ep: any) => [1, 2, 3, 4, 5].includes(ep.id));
+      } else if (choice === 'exploring') {
+        filtered = episodes.filter((ep: any) => [1, 3, 5].includes(ep.id));
+      } else {
+        filtered = episodes.filter((ep: any) => ep.id === 1);
+      }
+      
+      ctaEpisodes.forEach(epId => {
+        if (!filtered.find(ep => ep.id === epId)) {
+          const episode = episodes.find((ep: any) => ep.id === epId);
+          if (episode) {
+            filtered.push(episode);
+          }
+        }
+      });
+      
+      return filtered;
+    };
+    
+    const filteredEpisodes = getFilteredEpisodes(selectedSeries.episodes, selectedSeries.id, ctaNavigatedEpisodes);
+    const currentEpisode = filteredEpisodes[activeIdx] || filteredEpisodes[0];
+    
+    // Sequence enforcement: If current episode is part of a sequence, only allow next in sequence
+    // Exception: ep3 requires CTA-only progression, so skip auto-progression
+    if (currentEpisode && isSequenceEpisode(currentEpisode)) {
+      // Skip auto-progression for ep3 and its steps (requires CTA-only progression)
+      if (isEp3OrStep(currentEpisode)) {
+        console.log('[handleNext] Ep3 requires CTA-only progression, skipping auto-progression');
+        return;
+      }
+      
+      const nextInSequence = getNextInSequence(currentEpisode);
+      if (nextInSequence) {
+        const nextNumericId = getNumericId(nextInSequence);
+        if (nextNumericId) {
+          handleNavigateToEpisode(nextNumericId);
+          return;
+        }
+      } else {
+        // End of sequence, don't allow next
+        console.log('[handleNext] End of sequence reached');
+        return;
+      }
+    }
+    
+    // Normal navigation for non-sequence episodes
+    const nextIdx = (activeIdx + 1) % filteredEpisodes.length;
     const nextEl = document.querySelector(`[data-index="${nextIdx}"]`);
     if (nextEl) {
       nextEl.scrollIntoView({ behavior: 'smooth' });
     }
   };
 
-  const handleNavigateToEpisode = (episodeId: number) => {
+  const handleNavigateToEpisode = (episodeId: number, isBackNavigation: boolean = false) => {
     if (!selectedSeries) return;
     
     // Validate episode ID
@@ -1490,7 +1684,7 @@ const AppContent: React.FC = () => {
       console.warn('[handleNavigateToEpisode] Episode not found:', episodeId);
       return;
     }
-    
+
     // Filter episodes based on path choice (same logic as in render, but including CTA-navigated episodes)
     const getFilteredEpisodes = (episodes: any[], seriesId: string, ctaEpisodes: Set<number>): any[] => {
       if (typeof window === 'undefined') return episodes;
@@ -1526,6 +1720,63 @@ const AppContent: React.FC = () => {
     const currentFilteredEpisodes = getFilteredEpisodes(selectedSeries.episodes, selectedSeries.id, ctaNavigatedEpisodes);
     const currentEpisode = currentFilteredEpisodes[activeIdx] || currentFilteredEpisodes[0];
     
+    // Update video history based on navigation direction
+    if (isBackNavigation) {
+      // When going back, we're popping from history (already handled by caller)
+      isNavigatingBackRef.current = true;
+    } else {
+      // When going forward, add current episode to history if it's not already the last one
+      setVideoHistory(prev => {
+        const lastEpisode = prev[prev.length - 1];
+        if (lastEpisode !== currentEpisode?.id && currentEpisode?.id) {
+          // Remove any future history if we're navigating forward from a back position
+          // This implements browser-like back/forward behavior
+          const currentIndex = prev.indexOf(currentEpisode.id);
+          if (currentIndex !== -1) {
+            // We're navigating forward from a point in history, remove everything after
+            return prev.slice(0, currentIndex + 1).concat(episodeId);
+          } else {
+            // Normal forward navigation, just add to history
+            return [...prev, episodeId];
+          }
+        } else {
+          // Current episode is already last in history, just update if needed
+          if (lastEpisode !== episodeId) {
+            return [...prev, episodeId];
+          }
+          return prev;
+        }
+      });
+      isNavigatingBackRef.current = false;
+    }
+    
+    // Sequence enforcement: Check if current episode is part of a sequence
+    if (currentEpisode && isSequenceEpisode(currentEpisode)) {
+      const targetStringId = getStringId(episodeId);
+      if (targetStringId && !isValidSequenceTarget(currentEpisode, targetStringId)) {
+        console.warn('[handleNavigateToEpisode] Cannot skip sequence steps. Current:', currentEpisode.id, 'Target:', episodeId);
+        // Allow navigation only to next in sequence
+        const nextInSequence = getNextInSequence(currentEpisode);
+        if (nextInSequence) {
+          const nextNumericId = getNumericId(nextInSequence);
+          if (nextNumericId) {
+            episodeId = nextNumericId;
+            // Update targetEpisode to the next in sequence
+            const updatedTarget = selectedSeries.episodes.find((ep: any) => ep.id === episodeId);
+            if (updatedTarget) {
+              // Continue with next in sequence
+            } else {
+              console.warn('[handleNavigateToEpisode] Next in sequence not found:', nextInSequence);
+              return;
+            }
+          }
+        } else {
+          console.warn('[handleNavigateToEpisode] No next episode in sequence');
+          return;
+        }
+      }
+    }
+    
     // Add episode to CTA-navigated set so it's included in filtered list
     const newCtaSet = new Set(ctaNavigatedEpisodes).add(episodeId);
     setCtaNavigatedEpisodes(newCtaSet);
@@ -1539,8 +1790,8 @@ const AppContent: React.FC = () => {
       return;
     }
     
-    // Determine transition direction: backward if going to lower index, forward if going to higher index
-    const isBackward = targetIndex < activeIdx;
+    // Determine transition direction: backward if going to lower index or back navigation, forward if going to higher index
+    const isBackward = targetIndex < activeIdx || isBackNavigation;
     setTransitionDirection(isBackward ? 'backward' : 'forward');
     
     // Preload the target video to prevent blanks (targetEpisode already declared above)
@@ -1598,6 +1849,21 @@ const AppContent: React.FC = () => {
         });
       });
     }, 550);
+  };
+
+  // Handle back navigation using video history
+  const handleNavigateBack = () => {
+    if (!selectedSeries || videoHistory.length <= 1) return;
+    
+    // Get the previous episode from history (second to last, since last is current)
+    const previousEpisodeId = videoHistory[videoHistory.length - 2];
+    if (!previousEpisodeId) return;
+    
+    // Remove current episode from history (pop it)
+    setVideoHistory(prev => prev.slice(0, -1));
+    
+    // Navigate to previous episode
+    handleNavigateToEpisode(previousEpisodeId, true);
   };
 
   const handleChatUpdate = (char: string, messages: any[]) => {
@@ -2062,9 +2328,11 @@ const AppContent: React.FC = () => {
                   setChatData(null);
                 }}
                 onNavigateToEpisode={handleNavigateToEpisode}
+                onNavigateBack={handleNavigateBack}
                 isChatOpen={!!chatData}
                 currentIndex={activeIdx}
                 ctaNavigatedEpisodes={ctaNavigatedEpisodes}
+                videoHistory={videoHistory}
               />
             );
           }
@@ -2096,11 +2364,13 @@ const AppContent: React.FC = () => {
                   setChatData(null);
                 }}
                 onNavigateToEpisode={handleNavigateToEpisode}
+                onNavigateBack={handleNavigateBack}
                 isChatOpen={!!chatData}
                 containerClassName={transitionDirection === 'backward' ? 'video-transition-out-down' : 'video-transition-out'}
                 preventAutoplay={true}
                 currentIndex={activeIdx}
                 ctaNavigatedEpisodes={ctaNavigatedEpisodes}
+                videoHistory={videoHistory}
               />
               {/* New video - sliding in based on direction */}
               <EpisodeView
@@ -2124,11 +2394,13 @@ const AppContent: React.FC = () => {
                   setChatData(null);
                 }}
                 onNavigateToEpisode={handleNavigateToEpisode}
+                onNavigateBack={handleNavigateBack}
                 isChatOpen={!!chatData}
                 containerClassName={transitionDirection === 'backward' ? 'video-transition-in-up' : 'video-transition-in'}
                 preventAutoplay={true}
                 currentIndex={activeIdx}
                 ctaNavigatedEpisodes={ctaNavigatedEpisodes}
+                videoHistory={videoHistory}
               />
             </div>
           );
@@ -2157,9 +2429,11 @@ const AppContent: React.FC = () => {
               setChatData(null);
             }}
             onNavigateToEpisode={handleNavigateToEpisode}
+            onNavigateBack={handleNavigateBack}
             isChatOpen={!!chatData}
             currentIndex={activeIdx}
             ctaNavigatedEpisodes={ctaNavigatedEpisodes}
+            videoHistory={videoHistory}
           />
         );
       })()}
@@ -2317,9 +2591,15 @@ const AppContent: React.FC = () => {
           isGuidedChat={chatData.isGuidedChat || false}
           guidedChatDuration={chatData.guidedChatDuration || 45}
           onGuidedChatComplete={() => {
-            // Redirect to episode 2 after guided chat completes
-            if (chatData.episodeId === 3 && selectedSeries) {
-              handleNavigateToEpisode(2);
+            // Navigate to returnTo episode after guided chat completes
+            if (selectedSeries && chatData.episodeId) {
+              const currentEpisode = selectedSeries.episodes.find((ep: any) => ep.id === chatData.episodeId);
+              if (currentEpisode) {
+                const returnToId = getReturnToEpisodeId(currentEpisode);
+                if (returnToId !== null) {
+                  handleNavigateToEpisode(returnToId);
+                }
+              }
             }
             setChatData(null);
           }}

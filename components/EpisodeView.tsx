@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import EpisodeSidebar from './EpisodeSidebar';
 import { trackVideoStart, updateVideoProgress, trackVideoEnd } from '../lib/analytics';
+import { getGlobalRules, getFirstInSequence, getNumericId, isEp3OrStep } from '../lib/episodeFlow';
 
 interface EpisodeViewProps {
   episode: any;
@@ -12,11 +13,13 @@ interface EpisodeViewProps {
   onNextEpisode: () => void;
   onExit: () => void;
   onNavigateToEpisode?: (episodeId: number) => void;
+  onNavigateBack?: () => void; // Add this new prop for history-based back navigation
   isChatOpen?: boolean;
   containerClassName?: string;
   preventAutoplay?: boolean;
   currentIndex?: number; // Current position in filtered episodes list
   ctaNavigatedEpisodes?: Set<number>; // CTA-navigated episodes to include in filtered list
+  videoHistory?: number[]; // Add this to know if back is available
 }
 
 const EpisodeView: React.FC<EpisodeViewProps> = ({
@@ -28,11 +31,13 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
   onNextEpisode,
   onExit,
   onNavigateToEpisode,
+  onNavigateBack, // Add this
   isChatOpen = false,
   containerClassName = '',
   preventAutoplay = false,
   currentIndex,
   ctaNavigatedEpisodes = new Set(),
+  videoHistory = [], // Add this
 }) => {
   const navigate = useNavigate();
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -77,57 +82,9 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
   const creatorName = series.avatars ? Object.keys(series.avatars)[0] : null;
   const creatorAvatar = creatorName ? series.avatars[creatorName] : undefined;
   
-  // Find previous episode ID by position in filtered list, not by episode ID
-  // This ensures we navigate to the immediate previous video in the sequence
-  const getPreviousEpisodeId = (): number | null => {
-    if (!series.episodes || series.episodes.length === 0) return null;
-    if (currentIndex === undefined || currentIndex === null) return null;
-    if (currentIndex <= 0) return null; // Already at first episode
-    
-    // Get filtered episodes based on path choice (same logic as in App.tsx)
-    const getFilteredEpisodes = (episodes: any[], seriesId: string, ctaEpisodes: Set<number>): any[] => {
-      if (typeof window === 'undefined') return episodes;
-      const storageKey = `inscene_path_choice_${seriesId}`;
-      const choice = localStorage.getItem(storageKey);
-      
-      let filtered: any[] = [];
-      
-      if (!choice || (choice !== 'building' && choice !== 'exploring')) {
-        filtered = episodes.filter((ep: any) => ep.id === 1);
-      } else if (choice === 'building') {
-        filtered = episodes.filter((ep: any) => [1, 2, 3, 4, 5].includes(ep.id));
-      } else if (choice === 'exploring') {
-        filtered = episodes.filter((ep: any) => [1, 3, 5].includes(ep.id));
-      } else {
-        filtered = episodes.filter((ep: any) => ep.id === 1);
-      }
-      
-      // Add CTA-navigated episodes that aren't already in the filtered list
-      ctaEpisodes.forEach(epId => {
-        if (!filtered.find(ep => ep.id === epId)) {
-          const episode = episodes.find((ep: any) => ep.id === epId);
-          if (episode) {
-            filtered.push(episode);
-          }
-        }
-      });
-      
-      return filtered;
-    };
-    
-    // Get filtered episodes based on user's path choice and CTA navigation
-    const filteredEpisodes = getFilteredEpisodes(series.episodes, series.id, ctaNavigatedEpisodes);
-    
-    // Get the previous episode by position (index - 1) in the filtered list
-    const previousIndex = currentIndex - 1;
-    if (previousIndex >= 0 && previousIndex < filteredEpisodes.length) {
-      return filteredEpisodes[previousIndex].id;
-    }
-    
-    return null;
-  };
-  
-  const previousEpisodeId = getPreviousEpisodeId();
+  // Check if we can navigate back using video history
+  // Back navigation is available if we have more than 1 episode in history and onNavigateBack is provided
+  const canNavigateBack = videoHistory.length > 1 && onNavigateBack !== undefined;
 
   // Auto-hide overlay after 3 seconds (but not when paused)
   useEffect(() => {
@@ -193,15 +150,16 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
     if (video.paused) {
       video.play().catch(() => {});
       setIsPaused(false);
-      // Hide CTA overlay when playback resumes (unless in last 4.5 seconds)
-      if ((episode.id === 1 || episode.id === 2 || episode.id === 3) && episode.ctaMapping) {
-        const current = video.currentTime;
-        const total = video.duration;
-        const lastSecondsThreshold = 4.5;
-        if (current < total - lastSecondsThreshold || current < 1) {
-          setShowCTAOverlay(false);
-        }
-      }
+          // Hide CTA overlay when playback resumes (unless in last 4.5 seconds)
+          const hasCTAs = (episode.ctas && episode.ctas.length > 0) || episode.ctaMapping;
+          if (hasCTAs) {
+            const current = video.currentTime;
+            const total = video.duration;
+            const lastSecondsThreshold = 4.5;
+            if (current < total - lastSecondsThreshold || current < 1) {
+              setShowCTAOverlay(false);
+            }
+          }
       // Auto-hide overlay after 3 seconds when playing
       inactivityTimerRef.current = setTimeout(() => {
         setIsOverlayVisible(false);
@@ -209,12 +167,13 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
     } else {
       video.pause();
       setIsPaused(true);
-      // Show CTA overlay when paused (for Episode 1, 2, or 3)
-      if ((episode.id === 1 || episode.id === 2 || episode.id === 3) && episode.ctaMapping) {
-        setShowCTAOverlay(true);
-      }
+        // Show CTA overlay when paused
+        const hasCTAs = (episode.ctas && episode.ctas.length > 0) || episode.ctaMapping;
+        if (hasCTAs) {
+          setShowCTAOverlay(true);
+        }
     }
-  }, [isPaused, isEnded, episode.id, episode.ctaMapping]);
+  }, [isPaused, isEnded, episode.id, episode.ctas, episode.ctaMapping]);
   
   // Handle swipe gestures - pause video and show CTA
   const handleSwipe = useCallback(() => {
@@ -225,17 +184,18 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
     video.pause();
     setIsPaused(true);
     
-    // Show overlay and CTA
-    setIsOverlayVisible(true);
-    if ((episode.id === 1 || episode.id === 2 || episode.id === 3) && episode.ctaMapping) {
-      setShowCTAOverlay(true);
-    }
+      // Show overlay and CTA
+      setIsOverlayVisible(true);
+      const hasCTAs = (episode.ctas && episode.ctas.length > 0) || episode.ctaMapping;
+      if (hasCTAs) {
+        setShowCTAOverlay(true);
+      }
     
     // Clear inactivity timer since we're paused
     if (inactivityTimerRef.current) {
       clearTimeout(inactivityTimerRef.current);
     }
-  }, [isEnded, episode.id, episode.ctaMapping]);
+  }, [isEnded, episode.id, episode.ctas, episode.ctaMapping]);
   
   // Touch event handlers for swipe detection
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
@@ -582,6 +542,51 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
     }
   }, [isEnded, endVideoSession]);
 
+  // Auto-navigate to first step when sequence container ends
+  // Exception: ep3 requires CTA-only progression, so skip auto-navigation
+  useEffect(() => {
+    if (isEnded && onNavigateToEpisode) {
+      // Skip auto-navigation for ep3 (requires CTA-only progression)
+      if (isEp3OrStep(episode)) {
+        return;
+      }
+      
+      // Check if this is a sequence container
+      const firstStep = getFirstInSequence(episode);
+      if (firstStep) {
+        const firstStepNumericId = getNumericId(firstStep);
+        if (firstStepNumericId) {
+          // Small delay to ensure smooth transition
+          const timer = setTimeout(() => {
+            onNavigateToEpisode(firstStepNumericId);
+          }, 500);
+          return () => clearTimeout(timer);
+        }
+      }
+    }
+  }, [isEnded, episode, onNavigateToEpisode]);
+
+  // Auto-open chat after video ends if postAction.chat exists
+  useEffect(() => {
+    if (isEnded && episode?.postAction?.chat) {
+      const chatConfig = episode.postAction.chat;
+      const globalRules = getGlobalRules();
+      const chatbotName = globalRules.chatbot.name || 'Chirag';
+      
+      // Small delay to ensure video end screen doesn't conflict
+      const timer = setTimeout(() => {
+        onEnterStory(
+          chatbotName,
+          chatConfig.prompt || '',
+          chatConfig.prompt || '',
+          'video_end_auto'
+        );
+      }, 500);
+      
+      return () => clearTimeout(timer);
+    }
+  }, [isEnded, episode, onEnterStory]);
+
   const handleTimeUpdate = () => {
     if (videoRef.current) {
       const current = videoRef.current.currentTime;
@@ -592,12 +597,12 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
       setProgress((current / total) * 100 || 0);
       setIsPaused(paused);
       
-      // Show CTA overlay in last 4-5 seconds for Episode 1, 2, or 3 (only when playing, not paused)
-      // Only show if video has valid duration, has been playing for at least 1 second, and is in last 4.5 seconds
+      // Show CTA overlay in last 4-5 seconds (only when playing, not paused)
+      // Check for both ctas array (JSON) and ctaMapping (legacy)
+      const hasCTAs = (episode.ctas && episode.ctas.length > 0) || episode.ctaMapping;
       const lastSecondsThreshold = 4.5;
       const shouldShowInLastSeconds = !paused && 
-                                      (episode.id === 1 || episode.id === 2 || episode.id === 3) && 
-                                      episode.ctaMapping && 
+                                      hasCTAs && 
                                       total > 0 && 
                                       current >= 1 && // Ensure video has started playing
                                       current >= total - lastSecondsThreshold && 
@@ -610,8 +615,8 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
         setShowCTAOverlay(false);
       }
       
-      // When video ends, keep CTA visible
-      if (isEnded && (episode.id === 1 || episode.id === 2 || episode.id === 3) && episode.ctaMapping) {
+      // When video ends, keep CTA visible if it exists
+      if (isEnded && hasCTAs) {
         setShowCTAOverlay(true);
       }
     }
@@ -626,9 +631,15 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
       setShowPlayButton(false);
       wasUnmutedRef.current = true;
       setIsPaused(false);
-      // Hide CTA overlay when playback resumes
-      if ((episode.id === 1 || episode.id === 2) && episode.ctaMapping) {
-        setShowCTAOverlay(false);
+      // Hide CTA overlay when playback resumes (unless in last seconds)
+      const hasCTAs = (episode.ctas && episode.ctas.length > 0) || episode.ctaMapping;
+      if (hasCTAs && video) {
+        const current = video.currentTime;
+        const total = video.duration;
+        const lastSecondsThreshold = 4.5;
+        if (current < total - lastSecondsThreshold || current < 1) {
+          setShowCTAOverlay(false);
+        }
       }
     } catch (error) {
       console.error('[EpisodeView] Play failed:', error);
@@ -667,8 +678,9 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
       
       // Update CTA overlay visibility based on new position
       // Hide CTA if seeking away from last 4.5 seconds (unless paused or ended)
+      const hasCTAs = (episode.ctas && episode.ctas.length > 0) || episode.ctaMapping;
       const lastSecondsThreshold = 4.5;
-      if ((episode.id === 1 || episode.id === 2 || episode.id === 3) && episode.ctaMapping) {
+      if (hasCTAs) {
         if (!isPaused && !isEnded && (clampedTime < total - lastSecondsThreshold || clampedTime < 1)) {
           setShowCTAOverlay(false);
         } else if (isPaused && !isEnded) {
@@ -794,7 +806,8 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
           setShowPlayButton(false);
           setIsPaused(false);
           // Hide CTA overlay when playback resumes (unless video has ended or in last 4.5 seconds)
-          if ((episode.id === 1 || episode.id === 2 || episode.id === 3) && episode.ctaMapping && !isEnded && videoRef.current) {
+          const hasCTAs = (episode.ctas && episode.ctas.length > 0) || episode.ctaMapping;
+          if (hasCTAs && !isEnded && videoRef.current) {
             const current = videoRef.current.currentTime;
             const total = videoRef.current.duration;
             const lastSecondsThreshold = 4.5;
@@ -807,8 +820,9 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
         onPause={() => {
           handlePause();
           setIsPaused(true);
-          // Show CTA overlay when paused (for Episode 1, 2, or 3, but not if video has ended - that's handled by onEnded)
-          if ((episode.id === 1 || episode.id === 2 || episode.id === 3) && episode.ctaMapping && !isEnded) {
+          // Show CTA overlay when paused (but not if video has ended - that's handled by onEnded)
+          const hasCTAs = (episode.ctas && episode.ctas.length > 0) || episode.ctaMapping;
+          if (hasCTAs && !isEnded) {
             setShowCTAOverlay(true);
           }
         }}
@@ -819,8 +833,9 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
           if (videoRef.current) {
             videoRef.current.pause();
           }
-          // Show CTA overlay when video ends (for Episode 1, 2, or 3 with ctaMapping)
-          if ((episode.id === 1 || episode.id === 2 || episode.id === 3) && episode.ctaMapping) {
+          // Show CTA overlay when video ends (if episode has CTAs)
+          const hasCTAs = (episode.ctas && episode.ctas.length > 0) || episode.ctaMapping;
+          if (hasCTAs) {
             setShowCTAOverlay(true);
           }
         }}
@@ -878,13 +893,13 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
             </div>
           </button>
 
-          {/* Previous Episode Button - Only show for episodes > 1, positioned after sidebar */}
-          {previousEpisodeId !== null && onNavigateToEpisode && (
+          {/* Previous Episode Button - Show if we have history to go back to */}
+          {canNavigateBack && (
             <button
               onClick={(e) => {
                 e.stopPropagation();
                 e.preventDefault();
-                onNavigateToEpisode(previousEpisodeId);
+                onNavigateBack?.();
               }}
               className="w-10 h-10 rounded-xl bg-white/10 backdrop-blur-sm border border-white/20 flex items-center justify-center active:scale-95 transition-all hover:bg-white/20"
               aria-label="Go to previous episode"
@@ -1062,8 +1077,8 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
         </div>
       )}
 
-      {/* CTA Overlay - Shows when paused, in last 7 seconds, or when video ends for Episode 1, 2, or 3 */}
-      {showCTAOverlay && (episode.id === 1 || episode.id === 2 || episode.id === 3) && episode.ctaMapping && (
+      {/* CTA Overlay - Shows when paused, in last seconds, or when video ends */}
+      {showCTAOverlay && ((episode.ctas && episode.ctas.length > 0) || episode.ctaMapping) && (
         <div 
           className="absolute bottom-0 left-0 right-0 z-[50] px-4 pb-6 pt-4 pointer-events-auto"
           style={{ paddingBottom: (isPaused || isEnded) ? '100px' : '24px' }}
@@ -1072,17 +1087,25 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
           <div className="bg-gradient-to-t from-black/80 via-black/60 to-transparent backdrop-blur-sm rounded-t-2xl pointer-events-auto">
             <div className="px-4 py-3 pointer-events-auto">
               <p className="text-white text-center text-sm font-medium mb-4 pointer-events-none">
-                {episode.id === 1 ? 'What problems are you facing?' : episode.id === 3 ? 'What would you like to explore?' : 'Which shot would you like to learn?'}
+                {episode.ctas && episode.ctas.length > 0 
+                  ? (episode.ctas.length === 1 ? 'Continue?' : 'What would you like to do?')
+                  : episode.id === 1 
+                    ? 'What problems are you facing?' 
+                    : episode.id === 3 
+                      ? 'What would you like to explore?' 
+                      : 'Which shot would you like to learn?'}
               </p>
               <div className="grid grid-cols-2 gap-2 pointer-events-auto">
-                {episode.id === 1 ? (
-                  <>
+                {/* Render CTAs from JSON ctas array (single source of truth) */}
+                {episode.ctas && episode.ctas.length > 0 ? (
+                  episode.ctas.map((cta: any, idx: number) => (
                     <button
+                      key={idx}
                       onClick={(e) => {
                         e.stopPropagation();
                         e.preventDefault();
-                        // Only navigate if explicitly configured with a valid episode ID
-                        const targetEpisodeId = episode.ctaMapping?.professional;
+                        // Use targetEpisodeId from merged config (converted from string ID)
+                        const targetEpisodeId = cta.targetEpisodeId;
                         if (onNavigateToEpisode && targetEpisodeId !== undefined && targetEpisodeId !== null && typeof targetEpisodeId === 'number') {
                           onNavigateToEpisode(targetEpisodeId);
                         }
@@ -1090,150 +1113,161 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
                       className="relative px-4 py-3 rounded-xl bg-white/10 backdrop-blur-sm border border-white/20 text-white text-xs font-medium hover:bg-white/20 active:scale-95 transition-all text-center min-h-[44px] flex items-center justify-center pointer-events-auto cursor-pointer w-full"
                       style={{ touchAction: 'manipulation' }}
                     >
-                      Need guidance about professional cricket journey
+                      {cta.label}
                     </button>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        e.preventDefault();
-                        // Only navigate if explicitly configured with a valid episode ID
-                        const targetEpisodeId = episode.ctaMapping?.speed;
-                        if (onNavigateToEpisode && targetEpisodeId !== undefined && targetEpisodeId !== null && typeof targetEpisodeId === 'number') {
-                          onNavigateToEpisode(targetEpisodeId);
-                        }
-                      }}
-                      className="relative px-4 py-3 rounded-xl bg-white/10 backdrop-blur-sm border border-white/20 text-white text-xs font-medium hover:bg-white/20 active:scale-95 transition-all text-center min-h-[44px] flex items-center justify-center pointer-events-auto cursor-pointer w-full"
-                      style={{ touchAction: 'manipulation' }}
-                    >
-                      Speed
-                    </button>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        e.preventDefault();
-                        // Only navigate if explicitly configured with a valid episode ID
-                        const targetEpisodeId = episode.ctaMapping?.stamina;
-                        if (onNavigateToEpisode && targetEpisodeId !== undefined && targetEpisodeId !== null && typeof targetEpisodeId === 'number') {
-                          onNavigateToEpisode(targetEpisodeId);
-                        }
-                      }}
-                      className="relative px-4 py-3 rounded-xl bg-white/10 backdrop-blur-sm border border-white/20 text-white text-xs font-medium hover:bg-white/20 active:scale-95 transition-all text-center min-h-[44px] flex items-center justify-center pointer-events-auto cursor-pointer w-full"
-                      style={{ touchAction: 'manipulation' }}
-                    >
-                      Stamina
-                    </button>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        e.preventDefault();
-                        // Only navigate if explicitly configured with a valid episode ID
-                        const targetEpisodeId = episode.ctaMapping?.shots;
-                        if (onNavigateToEpisode && targetEpisodeId !== undefined && targetEpisodeId !== null && typeof targetEpisodeId === 'number') {
-                          onNavigateToEpisode(targetEpisodeId);
-                        }
-                      }}
-                      className="relative px-4 py-3 rounded-xl bg-white/10 backdrop-blur-sm border border-white/20 text-white text-xs font-medium hover:bg-white/20 active:scale-95 transition-all text-center min-h-[44px] flex items-center justify-center pointer-events-auto cursor-pointer w-full"
-                      style={{ touchAction: 'manipulation' }}
-                    >
-                      Shots
-                    </button>
-                  </>
-                ) : episode.id === 3 ? (
-                  <>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        e.preventDefault();
-                        // Only navigate if explicitly configured with a valid episode ID
-                        const targetEpisodeId = episode.ctaMapping?.applicationProcess;
-                        if (onNavigateToEpisode && targetEpisodeId !== undefined && targetEpisodeId !== null && typeof targetEpisodeId === 'number') {
-                          onNavigateToEpisode(targetEpisodeId);
-                        }
-                      }}
-                      className="relative px-4 py-3 rounded-xl bg-white/10 backdrop-blur-sm border border-white/20 text-white text-xs font-medium hover:bg-white/20 active:scale-95 transition-all text-center min-h-[44px] flex items-center justify-center pointer-events-auto cursor-pointer w-full"
-                      style={{ touchAction: 'manipulation' }}
-                    >
-                      Application process
-                    </button>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        e.preventDefault();
-                        // Only navigate if explicitly configured with a valid episode ID
-                        const targetEpisodeId = episode.ctaMapping?.mindset;
-                        if (onNavigateToEpisode && targetEpisodeId !== undefined && targetEpisodeId !== null && typeof targetEpisodeId === 'number') {
-                          onNavigateToEpisode(targetEpisodeId);
-                        }
-                      }}
-                      className="relative px-4 py-3 rounded-xl bg-white/10 backdrop-blur-sm border border-white/20 text-white text-xs font-medium hover:bg-white/20 active:scale-95 transition-all text-center min-h-[44px] flex items-center justify-center pointer-events-auto cursor-pointer w-full"
-                      style={{ touchAction: 'manipulation' }}
-                    >
-                      Mindset
-                    </button>
-                  </>
+                  ))
                 ) : (
-                  <>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        e.preventDefault();
-                        // Only navigate if explicitly configured with a valid episode ID
-                        const targetEpisodeId = episode.ctaMapping?.coverDrive;
-                        if (onNavigateToEpisode && targetEpisodeId !== undefined && targetEpisodeId !== null && typeof targetEpisodeId === 'number') {
-                          onNavigateToEpisode(targetEpisodeId);
-                        }
-                      }}
-                      className="relative px-4 py-3 rounded-xl bg-white/10 backdrop-blur-sm border border-white/20 text-white text-xs font-medium hover:bg-white/20 active:scale-95 transition-all text-center min-h-[44px] flex items-center justify-center pointer-events-auto cursor-pointer w-full"
-                      style={{ touchAction: 'manipulation' }}
-                    >
-                      Cover drive
-                    </button>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        e.preventDefault();
-                        // Only navigate if explicitly configured with a valid episode ID
-                        const targetEpisodeId = episode.ctaMapping?.pullShot;
-                        if (onNavigateToEpisode && targetEpisodeId !== undefined && targetEpisodeId !== null && typeof targetEpisodeId === 'number') {
-                          onNavigateToEpisode(targetEpisodeId);
-                        }
-                      }}
-                      className="relative px-4 py-3 rounded-xl bg-white/10 backdrop-blur-sm border border-white/20 text-white text-xs font-medium hover:bg-white/20 active:scale-95 transition-all text-center min-h-[44px] flex items-center justify-center pointer-events-auto cursor-pointer w-full"
-                      style={{ touchAction: 'manipulation' }}
-                    >
-                      Pull shot
-                    </button>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        e.preventDefault();
-                        // Only navigate if explicitly configured with a valid episode ID
-                        const targetEpisodeId = episode.ctaMapping?.stepOut;
-                        if (onNavigateToEpisode && targetEpisodeId !== undefined && targetEpisodeId !== null && typeof targetEpisodeId === 'number') {
-                          onNavigateToEpisode(targetEpisodeId);
-                        }
-                      }}
-                      className="relative px-4 py-3 rounded-xl bg-white/10 backdrop-blur-sm border border-white/20 text-white text-xs font-medium hover:bg-white/20 active:scale-95 transition-all text-center min-h-[44px] flex items-center justify-center pointer-events-auto cursor-pointer w-full"
-                      style={{ touchAction: 'manipulation' }}
-                    >
-                      Step out
-                    </button>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        e.preventDefault();
-                        // Only navigate if explicitly configured with a valid episode ID
-                        const targetEpisodeId = episode.ctaMapping?.cut;
-                        if (onNavigateToEpisode && targetEpisodeId !== undefined && targetEpisodeId !== null && typeof targetEpisodeId === 'number') {
-                          onNavigateToEpisode(targetEpisodeId);
-                        }
-                      }}
-                      className="relative px-4 py-3 rounded-xl bg-white/10 backdrop-blur-sm border border-white/20 text-white text-xs font-medium hover:bg-white/20 active:scale-95 transition-all text-center min-h-[44px] flex items-center justify-center pointer-events-auto cursor-pointer w-full"
-                      style={{ touchAction: 'manipulation' }}
-                    >
-                      Cut
-                    </button>
-                  </>
+                  /* Fallback to legacy ctaMapping for backward compatibility */
+                  episode.id === 1 ? (
+                    <>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          e.preventDefault();
+                          const targetEpisodeId = episode.ctaMapping?.professional;
+                          if (onNavigateToEpisode && targetEpisodeId !== undefined && targetEpisodeId !== null && typeof targetEpisodeId === 'number') {
+                            onNavigateToEpisode(targetEpisodeId);
+                          }
+                        }}
+                        className="relative px-4 py-3 rounded-xl bg-white/10 backdrop-blur-sm border border-white/20 text-white text-xs font-medium hover:bg-white/20 active:scale-95 transition-all text-center min-h-[44px] flex items-center justify-center pointer-events-auto cursor-pointer w-full"
+                        style={{ touchAction: 'manipulation' }}
+                      >
+                        Need guidance about professional cricket journey
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          e.preventDefault();
+                          const targetEpisodeId = episode.ctaMapping?.speed;
+                          if (onNavigateToEpisode && targetEpisodeId !== undefined && targetEpisodeId !== null && typeof targetEpisodeId === 'number') {
+                            onNavigateToEpisode(targetEpisodeId);
+                          }
+                        }}
+                        className="relative px-4 py-3 rounded-xl bg-white/10 backdrop-blur-sm border border-white/20 text-white text-xs font-medium hover:bg-white/20 active:scale-95 transition-all text-center min-h-[44px] flex items-center justify-center pointer-events-auto cursor-pointer w-full"
+                        style={{ touchAction: 'manipulation' }}
+                      >
+                        Speed
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          e.preventDefault();
+                          const targetEpisodeId = episode.ctaMapping?.stamina;
+                          if (onNavigateToEpisode && targetEpisodeId !== undefined && targetEpisodeId !== null && typeof targetEpisodeId === 'number') {
+                            onNavigateToEpisode(targetEpisodeId);
+                          }
+                        }}
+                        className="relative px-4 py-3 rounded-xl bg-white/10 backdrop-blur-sm border border-white/20 text-white text-xs font-medium hover:bg-white/20 active:scale-95 transition-all text-center min-h-[44px] flex items-center justify-center pointer-events-auto cursor-pointer w-full"
+                        style={{ touchAction: 'manipulation' }}
+                      >
+                        Stamina
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          e.preventDefault();
+                          const targetEpisodeId = episode.ctaMapping?.shots;
+                          if (onNavigateToEpisode && targetEpisodeId !== undefined && targetEpisodeId !== null && typeof targetEpisodeId === 'number') {
+                            onNavigateToEpisode(targetEpisodeId);
+                          }
+                        }}
+                        className="relative px-4 py-3 rounded-xl bg-white/10 backdrop-blur-sm border border-white/20 text-white text-xs font-medium hover:bg-white/20 active:scale-95 transition-all text-center min-h-[44px] flex items-center justify-center pointer-events-auto cursor-pointer w-full"
+                        style={{ touchAction: 'manipulation' }}
+                      >
+                        Shots
+                      </button>
+                    </>
+                  ) : episode.id === 3 ? (
+                    <>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          e.preventDefault();
+                          const targetEpisodeId = episode.ctaMapping?.applicationProcess;
+                          if (onNavigateToEpisode && targetEpisodeId !== undefined && targetEpisodeId !== null && typeof targetEpisodeId === 'number') {
+                            onNavigateToEpisode(targetEpisodeId);
+                          }
+                        }}
+                        className="relative px-4 py-3 rounded-xl bg-white/10 backdrop-blur-sm border border-white/20 text-white text-xs font-medium hover:bg-white/20 active:scale-95 transition-all text-center min-h-[44px] flex items-center justify-center pointer-events-auto cursor-pointer w-full"
+                        style={{ touchAction: 'manipulation' }}
+                      >
+                        Application process
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          e.preventDefault();
+                          const targetEpisodeId = episode.ctaMapping?.mindset;
+                          if (onNavigateToEpisode && targetEpisodeId !== undefined && targetEpisodeId !== null && typeof targetEpisodeId === 'number') {
+                            onNavigateToEpisode(targetEpisodeId);
+                          }
+                        }}
+                        className="relative px-4 py-3 rounded-xl bg-white/10 backdrop-blur-sm border border-white/20 text-white text-xs font-medium hover:bg-white/20 active:scale-95 transition-all text-center min-h-[44px] flex items-center justify-center pointer-events-auto cursor-pointer w-full"
+                        style={{ touchAction: 'manipulation' }}
+                      >
+                        Mindset
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          e.preventDefault();
+                          const targetEpisodeId = episode.ctaMapping?.coverDrive;
+                          if (onNavigateToEpisode && targetEpisodeId !== undefined && targetEpisodeId !== null && typeof targetEpisodeId === 'number') {
+                            onNavigateToEpisode(targetEpisodeId);
+                          }
+                        }}
+                        className="relative px-4 py-3 rounded-xl bg-white/10 backdrop-blur-sm border border-white/20 text-white text-xs font-medium hover:bg-white/20 active:scale-95 transition-all text-center min-h-[44px] flex items-center justify-center pointer-events-auto cursor-pointer w-full"
+                        style={{ touchAction: 'manipulation' }}
+                      >
+                        Cover drive
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          e.preventDefault();
+                          const targetEpisodeId = episode.ctaMapping?.pullShot;
+                          if (onNavigateToEpisode && targetEpisodeId !== undefined && targetEpisodeId !== null && typeof targetEpisodeId === 'number') {
+                            onNavigateToEpisode(targetEpisodeId);
+                          }
+                        }}
+                        className="relative px-4 py-3 rounded-xl bg-white/10 backdrop-blur-sm border border-white/20 text-white text-xs font-medium hover:bg-white/20 active:scale-95 transition-all text-center min-h-[44px] flex items-center justify-center pointer-events-auto cursor-pointer w-full"
+                        style={{ touchAction: 'manipulation' }}
+                      >
+                        Pull shot
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          e.preventDefault();
+                          const targetEpisodeId = episode.ctaMapping?.stepOut;
+                          if (onNavigateToEpisode && targetEpisodeId !== undefined && targetEpisodeId !== null && typeof targetEpisodeId === 'number') {
+                            onNavigateToEpisode(targetEpisodeId);
+                          }
+                        }}
+                        className="relative px-4 py-3 rounded-xl bg-white/10 backdrop-blur-sm border border-white/20 text-white text-xs font-medium hover:bg-white/20 active:scale-95 transition-all text-center min-h-[44px] flex items-center justify-center pointer-events-auto cursor-pointer w-full"
+                        style={{ touchAction: 'manipulation' }}
+                      >
+                        Step out
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          e.preventDefault();
+                          const targetEpisodeId = episode.ctaMapping?.cut;
+                          if (onNavigateToEpisode && targetEpisodeId !== undefined && targetEpisodeId !== null && typeof targetEpisodeId === 'number') {
+                            onNavigateToEpisode(targetEpisodeId);
+                          }
+                        }}
+                        className="relative px-4 py-3 rounded-xl bg-white/10 backdrop-blur-sm border border-white/20 text-white text-xs font-medium hover:bg-white/20 active:scale-95 transition-all text-center min-h-[44px] flex items-center justify-center pointer-events-auto cursor-pointer w-full"
+                        style={{ touchAction: 'manipulation' }}
+                      >
+                        Cut
+                      </button>
+                    </>
+                  )
                 )}
               </div>
             </div>
