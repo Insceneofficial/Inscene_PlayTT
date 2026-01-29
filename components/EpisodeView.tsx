@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import EpisodeSidebar from './EpisodeSidebar';
+import CTACard from './CTACard';
 import { trackVideoStart, updateVideoProgress, trackVideoEnd } from '../lib/analytics';
+import { useSwipeGesture } from '../lib/useSwipeGesture';
 
 interface EpisodeViewProps {
   episode: any;
@@ -42,6 +44,23 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
   const [isPaused, setIsPaused] = useState(false);
   const [showChatBubble, setShowChatBubble] = useState(false);
   const wasPlayingBeforeChatRef = useRef(false);
+  
+  // CTA state management
+  const [ctaState, setCtaState] = useState<'hidden' | 'visible' | 'selecting' | 'transitioning'>('hidden');
+  const [hoveredCtaKey, setHoveredCtaKey] = useState<string | null>(null);
+  const [ctaProgress, setCtaProgress] = useState<Record<string, number>>({});
+  const [swipeTriggered, setSwipeTriggered] = useState(false);
+  const [swipeDirection, setSwipeDirection] = useState<'left' | 'right' | 'up' | 'down' | null>(null);
+  const [swipePosition, setSwipePosition] = useState<{ x: number; y: number } | null>(null);
+  const [selectedCtaKey, setSelectedCtaKey] = useState<string | null>(null);
+  const [isTransitioning, setIsTransitioning] = useState(false);
+  const autoDismissTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const progressAnimationRef = useRef<number | null>(null);
+  const lastProgressMilestoneRef = useRef<Record<string, number>>({});
+  const [autoDismissProgress, setAutoDismissProgress] = useState(0);
+  const autoDismissIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [swipePreviewVisible, setSwipePreviewVisible] = useState(false);
+  const [ripplePosition, setRipplePosition] = useState<{ x: number; y: number } | null>(null);
   
   // Analytics tracking
   const analyticsRecordId = useRef<string | null>(null);
@@ -99,6 +118,80 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
   };
   
   const previousEpisodeId = getPreviousEpisodeId();
+
+  // Swipe gesture for CTA trigger
+  const handleSwipeStart = useCallback((direction: 'left' | 'right' | 'up' | 'down', position: { x: number; y: number }) => {
+    const video = videoRef.current;
+    // Only trigger if video is playing and not ended, and CTAs are not already visible or transitioning
+    // Prevent multiple swipes from triggering multiple times
+    if (video && !video.paused && !isEnded && ctaState === 'hidden' && !isTransitioning && (episode.id === 1 || episode.id === 2 || episode.id === 3) && episode.ctaMapping) {
+      // Pause video immediately
+      video.pause();
+      setIsPaused(true);
+      
+      // Set swipe trigger state
+      setSwipeTriggered(true);
+      setSwipeDirection(direction);
+      setSwipePosition(position);
+      
+      // Show swipe preview effect
+      setRipplePosition(position);
+      setSwipePreviewVisible(true);
+      setTimeout(() => setSwipePreviewVisible(false), 300);
+      
+      // Show CTA overlay with slight delay for preview effect
+      setTimeout(() => {
+        setShowCTAOverlay(true);
+        setCtaState('visible');
+      }, 100);
+      
+      // Start auto-dismiss timer (6 seconds) with progress indicator
+      setAutoDismissProgress(0);
+      if (autoDismissTimerRef.current) {
+        clearTimeout(autoDismissTimerRef.current);
+      }
+      if (autoDismissIntervalRef.current) {
+        clearInterval(autoDismissIntervalRef.current);
+      }
+      
+      // Update progress every 100ms
+      autoDismissIntervalRef.current = setInterval(() => {
+        setAutoDismissProgress(prev => {
+          const newProgress = prev + (100 / 6000); // 6000ms total
+          return Math.min(newProgress, 1);
+        });
+      }, 100);
+      
+      autoDismissTimerRef.current = setTimeout(() => {
+        // Auto-dismiss: fade out CTAs and resume video
+        if (ctaState === 'visible' && swipeTriggered && !isEnded) {
+          setCtaState('hidden');
+          setShowCTAOverlay(false);
+          setSwipeTriggered(false);
+          // Reset CTA progress
+          setCtaProgress({});
+          setHoveredCtaKey(null);
+          setAutoDismissProgress(0);
+          // Resume video
+          if (video && video.paused && !isEnded) {
+            video.play().catch(() => {});
+            setIsPaused(false);
+          }
+        }
+        if (autoDismissIntervalRef.current) {
+          clearInterval(autoDismissIntervalRef.current);
+          autoDismissIntervalRef.current = null;
+        }
+      }, 6000);
+    }
+  }, [episode.id, episode.ctaMapping, isEnded, ctaState, swipeTriggered]);
+
+  const { handlers: swipeHandlers } = useSwipeGesture({
+    onSwipeStart: handleSwipeStart,
+    detectAllDirections: true,
+    threshold: 30,
+    thresholdPercent: 0.1,
+  });
 
   // Auto-hide overlay after 3 seconds (but not when paused)
   useEffect(() => {
@@ -234,6 +327,27 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
     setProgress(0);
     setCurrentTime(0);
     setDuration(0);
+    setCtaState('hidden');
+    setHoveredCtaKey(null);
+    setCtaProgress({});
+    setSwipeTriggered(false);
+    setSwipeDirection(null);
+    setSwipePosition(null);
+    setSelectedCtaKey(null);
+    setIsTransitioning(false);
+    if (autoDismissTimerRef.current) {
+      clearTimeout(autoDismissTimerRef.current);
+      autoDismissTimerRef.current = null;
+    }
+    if (autoDismissIntervalRef.current) {
+      clearInterval(autoDismissIntervalRef.current);
+      autoDismissIntervalRef.current = null;
+    }
+    if (progressAnimationRef.current) {
+      cancelAnimationFrame(progressAnimationRef.current);
+      progressAnimationRef.current = null;
+    }
+    setAutoDismissProgress(0);
 
     // Start analytics tracking
     if (!analyticsRecordId.current) {
@@ -429,6 +543,115 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
+  // CTA interaction handlers
+  const handleCtaHoverStart = useCallback((ctaKey: string) => {
+    setHoveredCtaKey(ctaKey);
+    // Reset auto-dismiss timer on interaction
+    setAutoDismissProgress(0);
+    if (autoDismissTimerRef.current) {
+      clearTimeout(autoDismissTimerRef.current);
+    }
+    if (autoDismissIntervalRef.current) {
+      clearInterval(autoDismissIntervalRef.current);
+    }
+    if (swipeTriggered && !isEnded) {
+      // Restart progress indicator
+      autoDismissIntervalRef.current = setInterval(() => {
+        setAutoDismissProgress(prev => {
+          const newProgress = prev + (100 / 6000);
+          return Math.min(newProgress, 1);
+        });
+      }, 100);
+      
+      autoDismissTimerRef.current = setTimeout(() => {
+        if (ctaState === 'visible' && swipeTriggered && !isEnded) {
+          setCtaState('hidden');
+          setShowCTAOverlay(false);
+          setSwipeTriggered(false);
+          setCtaProgress({});
+          setHoveredCtaKey(null);
+          setAutoDismissProgress(0);
+          const video = videoRef.current;
+          if (video && video.paused && !isEnded) {
+            video.play().catch(() => {});
+            setIsPaused(false);
+          }
+        }
+        if (autoDismissIntervalRef.current) {
+          clearInterval(autoDismissIntervalRef.current);
+          autoDismissIntervalRef.current = null;
+        }
+      }, 6000);
+    }
+  }, [swipeTriggered, isEnded, ctaState]);
+
+  const handleCtaHoverEnd = useCallback(() => {
+    setHoveredCtaKey(null);
+  }, []);
+
+  const handleCtaSelect = useCallback((ctaKey: string, targetEpisodeId: number | undefined) => {
+    // Prevent multiple selections during transition
+    if (isTransitioning || !targetEpisodeId || ctaState === 'selecting' || ctaState === 'transitioning') return;
+    
+    // Clear auto-dismiss timers
+    if (autoDismissTimerRef.current) {
+      clearTimeout(autoDismissTimerRef.current);
+      autoDismissTimerRef.current = null;
+    }
+    if (autoDismissIntervalRef.current) {
+      clearInterval(autoDismissIntervalRef.current);
+      autoDismissIntervalRef.current = null;
+    }
+    
+    setSelectedCtaKey(ctaKey);
+    setCtaState('selecting');
+    
+    // Complete progress for selected CTA
+    setCtaProgress(prev => ({ ...prev, [ctaKey]: 1 }));
+    
+    // Brief delay for visual feedback, then transition
+    setTimeout(() => {
+      setIsTransitioning(true);
+      setCtaState('transitioning');
+      
+      // After card slide animation, navigate
+      setTimeout(() => {
+        if (onNavigateToEpisode) {
+          onNavigateToEpisode(targetEpisodeId);
+        }
+      }, 400); // Match card slide duration
+    }, 200);
+  }, [isTransitioning, onNavigateToEpisode, ctaState]);
+
+  // Get CTA data structure
+  const getCtaData = useCallback(() => {
+    if (!episode.ctaMapping) return [];
+    
+    if (episode.id === 1) {
+      return [
+        { key: 'professional', label: 'Need guidance about professional cricket journey', targetId: episode.ctaMapping.professional, position: 'left' as const },
+        { key: 'speed', label: 'Speed', targetId: episode.ctaMapping.speed, position: 'right' as const },
+        { key: 'stamina', label: 'Stamina', targetId: episode.ctaMapping.stamina, position: 'left' as const },
+        { key: 'shots', label: 'Shots', targetId: episode.ctaMapping.shots, position: 'right' as const },
+      ];
+    } else if (episode.id === 3) {
+      return [
+        { key: 'applicationProcess', label: 'Application process', targetId: episode.ctaMapping.applicationProcess, position: 'left' as const },
+        { key: 'mindset', label: 'Mindset', targetId: episode.ctaMapping.mindset, position: 'right' as const },
+      ];
+    } else if (episode.id === 2) {
+      return [
+        { key: 'coverDrive', label: 'Cover drive', targetId: episode.ctaMapping.coverDrive, position: 'left' as const },
+        { key: 'pullShot', label: 'Pull shot', targetId: episode.ctaMapping.pullShot, position: 'right' as const },
+        { key: 'stepOut', label: 'Step out', targetId: episode.ctaMapping.stepOut, position: 'left' as const },
+        { key: 'cut', label: 'Cut', targetId: episode.ctaMapping.cut, position: 'right' as const },
+      ];
+    }
+    return [];
+  }, [episode.id, episode.ctaMapping]);
+
+  const ctaData = getCtaData();
+
   // Close sidebar on outside tap
   useEffect(() => {
     if (!isSidebarOpen) return;
@@ -461,14 +684,57 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
     };
   }, [isSidebarOpen]);
 
+  // Get selected CTA position for slide direction
+  const selectedCta = selectedCtaKey ? ctaData.find(cta => cta.key === selectedCtaKey) : null;
+  const slideDirection = selectedCta?.position === 'left' ? 'left' : selectedCta?.position === 'right' ? 'right' : null;
+
   return (
     <div 
       ref={containerRef} 
-      className="fixed inset-0 bg-black z-[500]"
+      className="fixed inset-0 bg-black z-[500] overflow-hidden"
       onClick={handleVideoTap}
+      {...swipeHandlers}
     >
-      {/* Video */}
-      <video
+      {/* Next Episode Preview (shown during transition) */}
+      {isTransitioning && selectedCta && selectedCta.targetId && (
+        <div
+          className="absolute inset-0 z-[10] transition-opacity duration-400"
+          style={{
+            transitionDelay: '100ms',
+            opacity: isTransitioning ? 0.3 : 0,
+          }}
+        >
+          {(() => {
+            const nextEpisode = series.episodes?.find((ep: any) => ep.id === selectedCta.targetId);
+            return nextEpisode ? (
+              <video
+                src={nextEpisode.url}
+                className="w-full h-full object-cover"
+                playsInline
+                muted
+                style={{ opacity: 0.3 }}
+              />
+            ) : null;
+          })()}
+        </div>
+      )}
+
+      {/* Video Container with Slide Animation */}
+      <div
+        className={`absolute inset-0 transition-all ${
+          isTransitioning && slideDirection
+            ? slideDirection === 'left'
+              ? 'translate-x-[-100%] rotate-[-5deg] opacity-30 scale-95'
+              : 'translate-x-[100%] rotate-[5deg] opacity-30 scale-95'
+            : 'translate-x-0 rotate-0 opacity-100 scale-100'
+        }`}
+        style={{
+          transitionDuration: '400ms',
+          transitionTimingFunction: 'cubic-bezier(0.4, 0, 0.2, 1)',
+        }}
+      >
+        {/* Video */}
+        <video
         ref={videoRef}
         src={episode.url}
         className="w-full h-full object-cover"
@@ -520,8 +786,21 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
             videoRef.current.pause();
           }
           // Show CTA overlay when video ends (for Episode 1, 2, or 3 with ctaMapping)
+          // Disable auto-dismiss when video ends
           if ((episode.id === 1 || episode.id === 2 || episode.id === 3) && episode.ctaMapping) {
             setShowCTAOverlay(true);
+            setCtaState('visible');
+            // Clear auto-dismiss timer if video ends
+            if (autoDismissTimerRef.current) {
+              clearTimeout(autoDismissTimerRef.current);
+              autoDismissTimerRef.current = null;
+            }
+            if (autoDismissIntervalRef.current) {
+              clearInterval(autoDismissIntervalRef.current);
+              autoDismissIntervalRef.current = null;
+            }
+            setAutoDismissProgress(0);
+            setSwipeTriggered(false); // No auto-dismiss on video end
           }
         }}
         onTimeUpdate={handleTimeUpdate}
@@ -536,7 +815,23 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
             video.play().catch(() => {});
             setIsPaused(false);
             // Hide CTA overlay when playback resumes (unless in last 4.5 seconds)
-            if ((episode.id === 1 || episode.id === 2) && episode.ctaMapping) {
+            // If CTAs were swipe-triggered, dismiss them
+            if (swipeTriggered) {
+              setShowCTAOverlay(false);
+              setCtaState('hidden');
+              setSwipeTriggered(false);
+              setCtaProgress({});
+              setHoveredCtaKey(null);
+              setAutoDismissProgress(0);
+              if (autoDismissTimerRef.current) {
+                clearTimeout(autoDismissTimerRef.current);
+                autoDismissTimerRef.current = null;
+              }
+              if (autoDismissIntervalRef.current) {
+                clearInterval(autoDismissIntervalRef.current);
+                autoDismissIntervalRef.current = null;
+              }
+            } else if ((episode.id === 1 || episode.id === 2) && episode.ctaMapping) {
               const current = video.currentTime;
               const total = video.duration;
               const lastSecondsThreshold = 4.5;
@@ -549,12 +844,15 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
             video?.pause();
             setIsPaused(true);
             // Show CTA overlay when paused (for Episode 1, 2, or 3)
-            if ((episode.id === 1 || episode.id === 2 || episode.id === 3) && episode.ctaMapping) {
+            // But not if it was already swipe-triggered (keep that state)
+            if ((episode.id === 1 || episode.id === 2 || episode.id === 3) && episode.ctaMapping && !swipeTriggered) {
               setShowCTAOverlay(true);
+              setCtaState('visible');
             }
           }
         }}
       />
+      </div>
 
       {/* Always-Visible Controls (Home & Sidebar Toggle) */}
       <div 
@@ -779,6 +1077,56 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
         </div>
       )}
 
+      {/* Swipe Preview Ripple Effect */}
+      {swipePreviewVisible && ripplePosition && (
+        <div
+          className="absolute z-[60] pointer-events-none"
+          style={{
+            left: ripplePosition.x - 50,
+            top: ripplePosition.y - 50,
+            width: 100,
+            height: 100,
+          }}
+        >
+          <div
+            className="absolute inset-0 rounded-full bg-white/20 backdrop-blur-sm animate-ripple"
+            style={{
+              animation: 'ripple 0.3s ease-out',
+            }}
+          />
+        </div>
+      )}
+
+      {/* Auto-Dismiss Countdown Ring */}
+      {swipeTriggered && ctaState === 'visible' && !isEnded && (
+        <div className="absolute bottom-20 left-1/2 -translate-x-1/2 z-[55] pointer-events-none">
+          <svg className="w-16 h-16 transform -rotate-90" viewBox="0 0 64 64">
+            {/* Background ring */}
+            <circle
+              cx="32"
+              cy="32"
+              r="28"
+              fill="none"
+              stroke="rgba(255, 255, 255, 0.2)"
+              strokeWidth="2"
+            />
+            {/* Progress ring */}
+            <circle
+              cx="32"
+              cy="32"
+              r="28"
+              fill="none"
+              stroke={autoDismissProgress > 0.8 ? '#ff6b35' : 'white'}
+              strokeWidth="2"
+              strokeDasharray={2 * Math.PI * 28}
+              strokeDashoffset={2 * Math.PI * 28 * (1 - autoDismissProgress)}
+              strokeLinecap="round"
+              className="transition-all duration-100"
+            />
+          </svg>
+        </div>
+      )}
+
       {/* CTA Overlay - Shows when paused, in last 7 seconds, or when video ends for Episode 1, 2, or 3 */}
       {showCTAOverlay && (episode.id === 1 || episode.id === 2 || episode.id === 3) && episode.ctaMapping && (
         <div 
@@ -792,166 +1140,39 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
                 {episode.id === 1 ? 'What problems are you facing?' : episode.id === 3 ? 'What would you like to explore?' : 'Which shot would you like to learn?'}
               </p>
               <div className="grid grid-cols-2 gap-2 pointer-events-auto">
-                {episode.id === 1 ? (
-                  <>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        e.preventDefault();
-                        // Only navigate if explicitly configured with a valid episode ID
-                        const targetEpisodeId = episode.ctaMapping?.professional;
-                        if (onNavigateToEpisode && targetEpisodeId !== undefined && targetEpisodeId !== null && typeof targetEpisodeId === 'number') {
-                          onNavigateToEpisode(targetEpisodeId);
-                        }
-                      }}
-                      className="relative px-4 py-3 rounded-xl bg-white/10 backdrop-blur-sm border border-white/20 text-white text-xs font-medium hover:bg-white/20 active:scale-95 transition-all text-center min-h-[44px] flex items-center justify-center pointer-events-auto cursor-pointer w-full"
-                      style={{ touchAction: 'manipulation' }}
-                    >
-                      Need guidance about professional cricket journey
-                    </button>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        e.preventDefault();
-                        // Only navigate if explicitly configured with a valid episode ID
-                        const targetEpisodeId = episode.ctaMapping?.speed;
-                        if (onNavigateToEpisode && targetEpisodeId !== undefined && targetEpisodeId !== null && typeof targetEpisodeId === 'number') {
-                          onNavigateToEpisode(targetEpisodeId);
-                        }
-                      }}
-                      className="relative px-4 py-3 rounded-xl bg-white/10 backdrop-blur-sm border border-white/20 text-white text-xs font-medium hover:bg-white/20 active:scale-95 transition-all text-center min-h-[44px] flex items-center justify-center pointer-events-auto cursor-pointer w-full"
-                      style={{ touchAction: 'manipulation' }}
-                    >
-                      Speed
-                    </button>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        e.preventDefault();
-                        // Only navigate if explicitly configured with a valid episode ID
-                        const targetEpisodeId = episode.ctaMapping?.stamina;
-                        if (onNavigateToEpisode && targetEpisodeId !== undefined && targetEpisodeId !== null && typeof targetEpisodeId === 'number') {
-                          onNavigateToEpisode(targetEpisodeId);
-                        }
-                      }}
-                      className="relative px-4 py-3 rounded-xl bg-white/10 backdrop-blur-sm border border-white/20 text-white text-xs font-medium hover:bg-white/20 active:scale-95 transition-all text-center min-h-[44px] flex items-center justify-center pointer-events-auto cursor-pointer w-full"
-                      style={{ touchAction: 'manipulation' }}
-                    >
-                      Stamina
-                    </button>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        e.preventDefault();
-                        // Only navigate if explicitly configured with a valid episode ID
-                        const targetEpisodeId = episode.ctaMapping?.shots;
-                        if (onNavigateToEpisode && targetEpisodeId !== undefined && targetEpisodeId !== null && typeof targetEpisodeId === 'number') {
-                          onNavigateToEpisode(targetEpisodeId);
-                        }
-                      }}
-                      className="relative px-4 py-3 rounded-xl bg-white/10 backdrop-blur-sm border border-white/20 text-white text-xs font-medium hover:bg-white/20 active:scale-95 transition-all text-center min-h-[44px] flex items-center justify-center pointer-events-auto cursor-pointer w-full"
-                      style={{ touchAction: 'manipulation' }}
-                    >
-                      Shots
-                    </button>
-                  </>
-                ) : episode.id === 3 ? (
-                  <>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        e.preventDefault();
-                        // Only navigate if explicitly configured with a valid episode ID
-                        const targetEpisodeId = episode.ctaMapping?.applicationProcess;
-                        if (onNavigateToEpisode && targetEpisodeId !== undefined && targetEpisodeId !== null && typeof targetEpisodeId === 'number') {
-                          onNavigateToEpisode(targetEpisodeId);
-                        }
-                      }}
-                      className="relative px-4 py-3 rounded-xl bg-white/10 backdrop-blur-sm border border-white/20 text-white text-xs font-medium hover:bg-white/20 active:scale-95 transition-all text-center min-h-[44px] flex items-center justify-center pointer-events-auto cursor-pointer w-full"
-                      style={{ touchAction: 'manipulation' }}
-                    >
-                      Application process
-                    </button>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        e.preventDefault();
-                        // Only navigate if explicitly configured with a valid episode ID
-                        const targetEpisodeId = episode.ctaMapping?.mindset;
-                        if (onNavigateToEpisode && targetEpisodeId !== undefined && targetEpisodeId !== null && typeof targetEpisodeId === 'number') {
-                          onNavigateToEpisode(targetEpisodeId);
-                        }
-                      }}
-                      className="relative px-4 py-3 rounded-xl bg-white/10 backdrop-blur-sm border border-white/20 text-white text-xs font-medium hover:bg-white/20 active:scale-95 transition-all text-center min-h-[44px] flex items-center justify-center pointer-events-auto cursor-pointer w-full"
-                      style={{ touchAction: 'manipulation' }}
-                    >
-                      Mindset
-                    </button>
-                  </>
-                ) : (
-                  <>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        e.preventDefault();
-                        // Only navigate if explicitly configured with a valid episode ID
-                        const targetEpisodeId = episode.ctaMapping?.coverDrive;
-                        if (onNavigateToEpisode && targetEpisodeId !== undefined && targetEpisodeId !== null && typeof targetEpisodeId === 'number') {
-                          onNavigateToEpisode(targetEpisodeId);
-                        }
-                      }}
-                      className="relative px-4 py-3 rounded-xl bg-white/10 backdrop-blur-sm border border-white/20 text-white text-xs font-medium hover:bg-white/20 active:scale-95 transition-all text-center min-h-[44px] flex items-center justify-center pointer-events-auto cursor-pointer w-full"
-                      style={{ touchAction: 'manipulation' }}
-                    >
-                      Cover drive
-                    </button>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        e.preventDefault();
-                        // Only navigate if explicitly configured with a valid episode ID
-                        const targetEpisodeId = episode.ctaMapping?.pullShot;
-                        if (onNavigateToEpisode && targetEpisodeId !== undefined && targetEpisodeId !== null && typeof targetEpisodeId === 'number') {
-                          onNavigateToEpisode(targetEpisodeId);
-                        }
-                      }}
-                      className="relative px-4 py-3 rounded-xl bg-white/10 backdrop-blur-sm border border-white/20 text-white text-xs font-medium hover:bg-white/20 active:scale-95 transition-all text-center min-h-[44px] flex items-center justify-center pointer-events-auto cursor-pointer w-full"
-                      style={{ touchAction: 'manipulation' }}
-                    >
-                      Pull shot
-                    </button>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        e.preventDefault();
-                        // Only navigate if explicitly configured with a valid episode ID
-                        const targetEpisodeId = episode.ctaMapping?.stepOut;
-                        if (onNavigateToEpisode && targetEpisodeId !== undefined && targetEpisodeId !== null && typeof targetEpisodeId === 'number') {
-                          onNavigateToEpisode(targetEpisodeId);
-                        }
-                      }}
-                      className="relative px-4 py-3 rounded-xl bg-white/10 backdrop-blur-sm border border-white/20 text-white text-xs font-medium hover:bg-white/20 active:scale-95 transition-all text-center min-h-[44px] flex items-center justify-center pointer-events-auto cursor-pointer w-full"
-                      style={{ touchAction: 'manipulation' }}
-                    >
-                      Step out
-                    </button>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        e.preventDefault();
-                        // Only navigate if explicitly configured with a valid episode ID
-                        const targetEpisodeId = episode.ctaMapping?.cut;
-                        if (onNavigateToEpisode && targetEpisodeId !== undefined && targetEpisodeId !== null && typeof targetEpisodeId === 'number') {
-                          onNavigateToEpisode(targetEpisodeId);
-                        }
-                      }}
-                      className="relative px-4 py-3 rounded-xl bg-white/10 backdrop-blur-sm border border-white/20 text-white text-xs font-medium hover:bg-white/20 active:scale-95 transition-all text-center min-h-[44px] flex items-center justify-center pointer-events-auto cursor-pointer w-full"
-                      style={{ touchAction: 'manipulation' }}
-                    >
-                      Cut
-                    </button>
-                  </>
-                )}
+                {ctaData.map((cta, index) => (
+                  <div
+                    key={cta.key}
+                    className={`transition-all duration-300 ${
+                      swipePreviewVisible && swipeDirection
+                        ? (swipeDirection === 'right' && cta.position === 'right') ||
+                          (swipeDirection === 'left' && cta.position === 'left')
+                          ? 'opacity-100 translate-x-0'
+                          : 'opacity-20 translate-x-0'
+                        : 'opacity-100 translate-x-0'
+                    }`}
+                    style={{
+                      animationDelay: `${index * 50}ms`,
+                      animation: swipePreviewVisible ? 'slideInFromBottom 0.3s ease-out' : 'none',
+                    }}
+                  >
+                    <CTACard
+                      label={cta.label}
+                      ctaKey={cta.key}
+                      progress={ctaProgress[cta.key] || 0}
+                      isHovered={hoveredCtaKey === cta.key}
+                      isSelected={selectedCtaKey === cta.key}
+                      onHoverStart={() => handleCtaHoverStart(cta.key)}
+                      onHoverEnd={handleCtaHoverEnd}
+                      onSelect={() => handleCtaSelect(cta.key, cta.targetId)}
+                      momentumBonus={swipeTriggered && swipeDirection && (
+                        (swipeDirection === 'right' && cta.position === 'right') ||
+                        (swipeDirection === 'left' && cta.position === 'left')
+                      )}
+                      position={cta.position}
+                    />
+                  </div>
+                ))}
               </div>
             </div>
           </div>
@@ -988,7 +1209,7 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
         />
       )}
 
-      {/* Animation styles for typing indicator */}
+      {/* Animation styles for typing indicator and ripple */}
       <style>{`
         @keyframes dotBounce {
           0%, 100% { transform: translateY(0); }
@@ -997,6 +1218,29 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
         .dot-bounce-1 { animation: dotBounce 1s ease-in-out infinite; }
         .dot-bounce-2 { animation: dotBounce 1s ease-in-out infinite 0.15s; }
         .dot-bounce-3 { animation: dotBounce 1s ease-in-out infinite 0.3s; }
+        @keyframes ripple {
+          0% {
+            transform: scale(0);
+            opacity: 0.8;
+          }
+          100% {
+            transform: scale(3);
+            opacity: 0;
+          }
+        }
+        .animate-ripple {
+          animation: ripple 0.3s ease-out;
+        }
+        @keyframes slideInFromBottom {
+          0% {
+            transform: translateY(20px);
+            opacity: 0;
+          }
+          100% {
+            transform: translateY(0);
+            opacity: 1;
+          }
+        }
       `}</style>
     </div>
   );
