@@ -825,6 +825,11 @@ const ReelItem: React.FC<{
         // Swipe DOWN = Show options (or could be previous episode in some contexts)
         else {
           setShowOptionsOverlay(true);
+          // Pause video when options are shown
+          if (videoRef.current && !videoRef.current.paused) {
+            videoRef.current.pause();
+            setIsPaused(true);
+          }
           // Auto-hide options after 3 seconds
           setTimeout(() => {
             setShowOptionsOverlay(false);
@@ -833,6 +838,11 @@ const ReelItem: React.FC<{
       } else {
         // Horizontal swipe = Show options
         setShowOptionsOverlay(true);
+        // Pause video when options are shown
+        if (videoRef.current && !videoRef.current.paused) {
+          videoRef.current.pause();
+          setIsPaused(true);
+        }
         // Auto-hide options after 3 seconds
         setTimeout(() => {
           setShowOptionsOverlay(false);

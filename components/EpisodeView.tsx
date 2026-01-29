@@ -941,6 +941,11 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
     // Detect any intentional gesture (minimum 30px movement)
     if (deltaY > 30 || deltaX > 30) {
       setShowCTAOverlay(true);
+      // Pause video when CTA overlay is shown via gesture detection
+      if (videoRef.current && !videoRef.current.paused) {
+        videoRef.current.pause();
+        setIsPaused(true);
+      }
       swipeStartY.current = null;
       swipeStartX.current = null;
       swipeStartTime.current = null;
