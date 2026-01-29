@@ -289,6 +289,13 @@ const ReelItem: React.FC<{
   const sessionStartTime = React.useRef<number | null>(null);
   const hasTriggeredNextScroll = React.useRef(false);
   const lastEpisodeIdRef = React.useRef<string | number | null>(null);
+  
+  // Swipe gesture detection refs
+  const touchStartX = React.useRef<number | null>(null);
+  const touchStartY = React.useRef<number | null>(null);
+  const touchStartTime = React.useRef<number | null>(null);
+  const minSwipeDistance = 30; // Minimum distance in pixels to consider it a swipe
+  const maxSwipeTime = 300; // Maximum time in ms to consider it a swipe
 
   // iOS fix: Set webkit-playsinline attribute for older iOS versions
   React.useEffect(() => {
@@ -749,6 +756,66 @@ const ReelItem: React.FC<{
   const handlePause = () => {
     pauseCountRef.current += 1;
   };
+  
+  // Handle swipe gestures - pause video and show UI
+  const handleSwipe = useCallback(() => {
+    const video = videoRef.current;
+    if (!video || isEnded || video.paused || !isActive) return;
+    
+    // Pause the video
+    video.pause();
+    
+    // Show UI
+    setIsUIHidden(false);
+    if (inactivityTimerRef.current) {
+      clearTimeout(inactivityTimerRef.current);
+      inactivityTimerRef.current = setTimeout(() => {
+        setIsUIHidden(true);
+      }, 5000);
+    }
+  }, [isEnded, isActive]);
+  
+  // Touch event handlers for swipe detection
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    const touch = e.touches[0];
+    touchStartX.current = touch.clientX;
+    touchStartY.current = touch.clientY;
+    touchStartTime.current = Date.now();
+  }, []);
+  
+  const handleTouchEnd = useCallback((e: React.TouchEvent) => {
+    if (touchStartX.current === null || touchStartY.current === null || touchStartTime.current === null) {
+      return;
+    }
+    
+    const touch = e.changedTouches[0];
+    const deltaX = touch.clientX - touchStartX.current;
+    const deltaY = touch.clientY - touchStartY.current;
+    const deltaTime = Date.now() - touchStartTime.current;
+    const absDeltaX = Math.abs(deltaX);
+    const absDeltaY = Math.abs(deltaY);
+    
+    // Reset touch start values
+    touchStartX.current = null;
+    touchStartY.current = null;
+    touchStartTime.current = null;
+    
+    // Check if it's a swipe (not just a tap)
+    if (deltaTime < maxSwipeTime && (absDeltaX > minSwipeDistance || absDeltaY > minSwipeDistance)) {
+      // Determine swipe direction
+      if (absDeltaX > absDeltaY) {
+        // Horizontal swipe (left or right)
+        if (absDeltaX > minSwipeDistance) {
+          handleSwipe();
+        }
+      } else {
+        // Vertical swipe (up or down)
+        if (absDeltaY > minSwipeDistance) {
+          handleSwipe();
+        }
+      }
+    }
+  }, [handleSwipe]);
 
   const formatTime = (seconds: number) => {
     if (isNaN(seconds)) return "0:00";
@@ -765,7 +832,12 @@ const ReelItem: React.FC<{
   }
 
   return (
-    <div ref={containerRef} className="reel-item flex items-center justify-center overflow-hidden bg-[#0a0a0f]">
+    <div 
+      ref={containerRef} 
+      className="reel-item flex items-center justify-center overflow-hidden bg-[#0a0a0f]"
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
+    >
       <video
         ref={videoRef}
         src={episode.url}
@@ -922,9 +994,33 @@ const ReelItem: React.FC<{
             video.play().catch((err) => {
               console.error('[Video] Play failed on click:', err);
             });
+            // Show UI when playing
+            setIsUIHidden(false);
+            if (inactivityTimerRef.current) {
+              clearTimeout(inactivityTimerRef.current);
+              inactivityTimerRef.current = setTimeout(() => {
+                setIsUIHidden(true);
+              }, 5000);
+            }
           } else {
             video?.pause();
+            // Show UI when paused
+            setIsUIHidden(false);
+            if (inactivityTimerRef.current) {
+              clearTimeout(inactivityTimerRef.current);
+              inactivityTimerRef.current = setTimeout(() => {
+                setIsUIHidden(true);
+              }, 5000);
+            }
           }
+        }}
+        onTouchStart={(e) => {
+          e.stopPropagation();
+          handleTouchStart(e);
+        }}
+        onTouchEnd={(e) => {
+          e.stopPropagation();
+          handleTouchEnd(e);
         }}
       />
 

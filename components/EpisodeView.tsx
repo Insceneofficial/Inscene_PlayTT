@@ -53,6 +53,13 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
   const sessionStartTime = useRef<number | null>(null);
   const inactivityTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hasAttemptedAutoplay = useRef(false);
+  
+  // Swipe gesture detection refs
+  const touchStartX = useRef<number | null>(null);
+  const touchStartY = useRef<number | null>(null);
+  const touchStartTime = useRef<number | null>(null);
+  const minSwipeDistance = 30; // Minimum distance in pixels to consider it a swipe
+  const maxSwipeTime = 300; // Maximum time in ms to consider it a swipe
 
   // Get creator info
   const creatorName = series.avatars ? Object.keys(series.avatars)[0] : null;
@@ -150,18 +157,105 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
     }
   }, [isChatOpen, isEnded]);
 
-  // Show overlay on tap (but don't auto-hide when paused)
+  // Handle video tap - toggle play/pause and show overlay
   const handleVideoTap = useCallback(() => {
+    const video = videoRef.current;
+    if (!video || isEnded) return;
+    
     setIsOverlayVisible(true);
     if (inactivityTimerRef.current) {
       clearTimeout(inactivityTimerRef.current);
     }
-    if (!isPaused) {
+    
+    // Toggle play/pause
+    if (video.paused) {
+      video.play().catch(() => {});
+      setIsPaused(false);
+      // Hide CTA overlay when playback resumes (unless in last 4.5 seconds)
+      if ((episode.id === 1 || episode.id === 2 || episode.id === 3) && episode.ctaMapping) {
+        const current = video.currentTime;
+        const total = video.duration;
+        const lastSecondsThreshold = 4.5;
+        if (current < total - lastSecondsThreshold || current < 1) {
+          setShowCTAOverlay(false);
+        }
+      }
+      // Auto-hide overlay after 3 seconds when playing
       inactivityTimerRef.current = setTimeout(() => {
         setIsOverlayVisible(false);
       }, 3000);
+    } else {
+      video.pause();
+      setIsPaused(true);
+      // Show CTA overlay when paused (for Episode 1, 2, or 3)
+      if ((episode.id === 1 || episode.id === 2 || episode.id === 3) && episode.ctaMapping) {
+        setShowCTAOverlay(true);
+      }
     }
-  }, [isPaused]);
+  }, [isPaused, isEnded, episode.id, episode.ctaMapping]);
+  
+  // Handle swipe gestures - pause video and show CTA
+  const handleSwipe = useCallback(() => {
+    const video = videoRef.current;
+    if (!video || isEnded || video.paused) return;
+    
+    // Pause the video
+    video.pause();
+    setIsPaused(true);
+    
+    // Show overlay and CTA
+    setIsOverlayVisible(true);
+    if ((episode.id === 1 || episode.id === 2 || episode.id === 3) && episode.ctaMapping) {
+      setShowCTAOverlay(true);
+    }
+    
+    // Clear inactivity timer since we're paused
+    if (inactivityTimerRef.current) {
+      clearTimeout(inactivityTimerRef.current);
+    }
+  }, [isEnded, episode.id, episode.ctaMapping]);
+  
+  // Touch event handlers for swipe detection
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    const touch = e.touches[0];
+    touchStartX.current = touch.clientX;
+    touchStartY.current = touch.clientY;
+    touchStartTime.current = Date.now();
+  }, []);
+  
+  const handleTouchEnd = useCallback((e: React.TouchEvent) => {
+    if (touchStartX.current === null || touchStartY.current === null || touchStartTime.current === null) {
+      return;
+    }
+    
+    const touch = e.changedTouches[0];
+    const deltaX = touch.clientX - touchStartX.current;
+    const deltaY = touch.clientY - touchStartY.current;
+    const deltaTime = Date.now() - touchStartTime.current;
+    const absDeltaX = Math.abs(deltaX);
+    const absDeltaY = Math.abs(deltaY);
+    
+    // Reset touch start values
+    touchStartX.current = null;
+    touchStartY.current = null;
+    touchStartTime.current = null;
+    
+    // Check if it's a swipe (not just a tap)
+    if (deltaTime < maxSwipeTime && (absDeltaX > minSwipeDistance || absDeltaY > minSwipeDistance)) {
+      // Determine swipe direction
+      if (absDeltaX > absDeltaY) {
+        // Horizontal swipe (left or right)
+        if (absDeltaX > minSwipeDistance) {
+          handleSwipe();
+        }
+      } else {
+        // Vertical swipe (up or down)
+        if (absDeltaY > minSwipeDistance) {
+          handleSwipe();
+        }
+      }
+    }
+  }, [handleSwipe]);
 
   // End video session helper
   const endVideoSession = useCallback(async (isCompleted: boolean = false) => {
@@ -466,6 +560,8 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
       ref={containerRef} 
       className="fixed inset-0 bg-black z-[500]"
       onClick={handleVideoTap}
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
     >
       {/* Video */}
       <video
@@ -527,32 +623,15 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
         onTimeUpdate={handleTimeUpdate}
         onClick={(e) => {
           e.stopPropagation();
-          const video = videoRef.current;
-          // Don't allow play/pause if video has ended - keep it paused on end frame
-          if (isEnded) {
-            return;
-          }
-          if (video?.paused) {
-            video.play().catch(() => {});
-            setIsPaused(false);
-            // Hide CTA overlay when playback resumes (unless in last 4.5 seconds)
-            if ((episode.id === 1 || episode.id === 2) && episode.ctaMapping) {
-              const current = video.currentTime;
-              const total = video.duration;
-              const lastSecondsThreshold = 4.5;
-              // Only hide if not in last seconds
-              if (current < total - lastSecondsThreshold || current < 1) {
-                setShowCTAOverlay(false);
-              }
-            }
-          } else {
-            video?.pause();
-            setIsPaused(true);
-            // Show CTA overlay when paused (for Episode 1, 2, or 3)
-            if ((episode.id === 1 || episode.id === 2 || episode.id === 3) && episode.ctaMapping) {
-              setShowCTAOverlay(true);
-            }
-          }
+          handleVideoTap();
+        }}
+        onTouchStart={(e) => {
+          e.stopPropagation();
+          handleTouchStart(e);
+        }}
+        onTouchEnd={(e) => {
+          e.stopPropagation();
+          handleTouchEnd(e);
         }}
       />
 
