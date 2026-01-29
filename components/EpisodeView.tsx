@@ -15,6 +15,157 @@ interface EpisodeViewProps {
   isChatOpen?: boolean;
 }
 
+interface CTACardProps {
+  optionKey: string;
+  title: string;
+  details?: {
+    title: string;
+    description: string;
+    journey: string;
+    consequence: string;
+  };
+  isEnlarged: boolean;
+  onEnlarge: () => void;
+  onConfirm: () => void;
+}
+
+const CTACard: React.FC<CTACardProps> = ({ 
+  optionKey, 
+  title, 
+  details, 
+  isEnlarged, 
+  onEnlarge, 
+  onConfirm 
+}) => {
+  const fillIntervalRef = useRef<number | null>(null);
+  const [fillProgress, setFillProgress] = useState(0);
+  const isHoldingRef = useRef(false);
+  const baseFillDuration = 2000; // 2 seconds base duration
+  const holdAcceleration = 3; // 3x speed when holding
+
+  // Start fill animation when card is enlarged
+  useEffect(() => {
+    if (isEnlarged) {
+      setFillProgress(0);
+      const startTime = Date.now();
+      
+      const updateFill = () => {
+        const elapsed = Date.now() - startTime;
+        const speedMultiplier = isHoldingRef.current ? holdAcceleration : 1;
+        const effectiveDuration = baseFillDuration / speedMultiplier;
+        const progress = Math.min((elapsed / effectiveDuration) * 100, 100);
+        
+        setFillProgress(progress);
+        
+        if (progress >= 100) {
+          if (fillIntervalRef.current) {
+            clearInterval(fillIntervalRef.current);
+            fillIntervalRef.current = null;
+          }
+          onConfirm();
+        }
+      };
+      
+      fillIntervalRef.current = setInterval(updateFill, 16) as any;
+      
+      return () => {
+        if (fillIntervalRef.current) {
+          clearInterval(fillIntervalRef.current);
+          fillIntervalRef.current = null;
+        }
+      };
+    } else {
+      // Reset when not enlarged
+      setFillProgress(0);
+      if (fillIntervalRef.current) {
+        clearInterval(fillIntervalRef.current);
+        fillIntervalRef.current = null;
+      }
+    }
+  }, [isEnlarged, onConfirm]);
+
+  const handleClick = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!isEnlarged) {
+      onEnlarge();
+    }
+  }, [isEnlarged, onEnlarge]);
+
+  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    if (isEnlarged) {
+      e.preventDefault();
+      e.stopPropagation();
+      isHoldingRef.current = true;
+    }
+  }, [isEnlarged]);
+
+  const handleMouseUp = useCallback(() => {
+    isHoldingRef.current = false;
+  }, []);
+
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    if (isEnlarged) {
+      e.preventDefault();
+      e.stopPropagation();
+      isHoldingRef.current = true;
+    }
+  }, [isEnlarged]);
+
+  const handleTouchEnd = useCallback(() => {
+    isHoldingRef.current = false;
+  }, []);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (fillIntervalRef.current) {
+        clearInterval(fillIntervalRef.current);
+      }
+    };
+  }, []);
+
+  return (
+    <div 
+      data-cta-card
+      className={`relative w-full h-full transition-transform duration-300 ease-out ${
+        isEnlarged ? 'scale-[3] z-50' : 'scale-100 z-auto'
+      }`}
+      onClick={handleClick}
+      onMouseDown={handleMouseDown}
+      onMouseUp={handleMouseUp}
+      onMouseLeave={handleMouseUp}
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
+      onTouchCancel={handleTouchEnd}
+      style={{ touchAction: 'manipulation', transformOrigin: 'center center' }}
+    >
+      <div className="relative w-full h-full rounded-xl overflow-hidden">
+        {/* Card background - semi-transparent for text visibility */}
+        <div className="absolute inset-0 bg-black/20 backdrop-blur-sm border border-white/20 rounded-xl" />
+        
+        {/* Green fill overlay - left to right */}
+        {isEnlarged && (
+          <div 
+            className="absolute inset-0 bg-[#4A7C59] rounded-xl"
+            style={{
+              clipPath: `inset(0 ${100 - fillProgress}% 0 0)`,
+              transition: 'clip-path 0.1s linear',
+            }}
+          />
+        )}
+        
+        {/* Content */}
+        <div className="relative w-full h-full min-h-[60px] flex flex-col items-center justify-center text-center px-3 py-2.5 z-10">
+          <h3 className="text-[11px] font-medium text-white mb-1">{title}</h3>
+          {isEnlarged && (
+            <p className="text-[10px] text-white/90 leading-relaxed">xyz</p>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const EpisodeView: React.FC<EpisodeViewProps> = ({
   episode,
   series,
@@ -42,6 +193,14 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
   const [isPaused, setIsPaused] = useState(false);
   const [showChatBubble, setShowChatBubble] = useState(false);
   const wasPlayingBeforeChatRef = useRef(false);
+  
+  // CTA focus state
+  const [enlargedCardId, setEnlargedCardId] = useState<string | null>(null);
+  const swipeStartY = useRef<number | null>(null);
+  const swipeStartX = useRef<number | null>(null);
+  const swipeStartTime = useRef<number | null>(null);
+  const lastTapTime = useRef<number>(0);
+  const lastTapCardId = useRef<string | null>(null);
   
   // Analytics tracking
   const analyticsRecordId = useRef<string | null>(null);
@@ -229,6 +388,7 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
     
     // Reset CTA overlay state when episode changes
     setShowCTAOverlay(false);
+    setEnlargedCardId(null);
     setIsEnded(false);
     setIsPaused(false);
     setProgress(0);
@@ -461,11 +621,123 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
     };
   }, [isSidebarOpen]);
 
+  // Handler for previous episode navigation
+  const handlePreviousEpisode = useCallback(() => {
+    if (previousEpisodeId !== null && onNavigateToEpisode) {
+      onNavigateToEpisode(previousEpisodeId);
+    }
+  }, [previousEpisodeId, onNavigateToEpisode]);
+
+  // Vertical swipe detection for episode navigation
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    // Don't handle swipe if CTA overlay is visible or card is enlarged
+    if (showCTAOverlay || enlargedCardId !== null) return;
+    
+    const touch = e.touches[0];
+    swipeStartY.current = touch.clientY;
+    swipeStartX.current = touch.clientX;
+    swipeStartTime.current = Date.now();
+  }, [showCTAOverlay, enlargedCardId]);
+
+  const handleTouchMove = useCallback((e: React.TouchEvent) => {
+    // Prevent default scrolling when swiping
+    if (showCTAOverlay || enlargedCardId !== null) return;
+    
+    // If we have a valid swipe start, prevent default to allow swipe detection
+    if (swipeStartY.current !== null && swipeStartX.current !== null) {
+      const touch = e.touches[0];
+      const deltaY = Math.abs(touch.clientY - swipeStartY.current);
+      const deltaX = Math.abs(touch.clientX - swipeStartX.current);
+      
+      // If vertical movement is greater than horizontal, prevent default scroll
+      if (deltaY > deltaX && deltaY > 10) {
+        e.preventDefault();
+      }
+    }
+  }, [showCTAOverlay, enlargedCardId]);
+
+  const handleTouchEnd = useCallback((e: React.TouchEvent) => {
+    // Don't handle swipe if CTA overlay is visible or card is enlarged
+    if (showCTAOverlay || enlargedCardId !== null) {
+      swipeStartY.current = null;
+      swipeStartX.current = null;
+      swipeStartTime.current = null;
+      return;
+    }
+
+    if (swipeStartY.current === null || swipeStartX.current === null || swipeStartTime.current === null) {
+      return;
+    }
+
+    const touch = e.changedTouches[0];
+    const deltaY = swipeStartY.current - touch.clientY; // Positive = swipe up, Negative = swipe down
+    const deltaX = Math.abs(swipeStartX.current - touch.clientX);
+    const deltaTime = Date.now() - swipeStartTime.current;
+    const distance = Math.abs(deltaY);
+
+    // Check if this is a vertical swipe (vertical movement > horizontal)
+    if (distance > deltaX && distance > 50 && deltaTime < 500) {
+      if (deltaY > 0) {
+        // Swipe UP = Next episode
+        onNextEpisode();
+      } else {
+        // Swipe DOWN = Previous episode
+        handlePreviousEpisode();
+      }
+    }
+
+    // Reset swipe tracking
+    swipeStartY.current = null;
+    swipeStartX.current = null;
+    swipeStartTime.current = null;
+  }, [showCTAOverlay, enlargedCardId, onNextEpisode, handlePreviousEpisode]);
+
+  // Gesture detection for CTA trigger (any direction when paused/finished)
+  const handleGestureDetection = useCallback((e: React.TouchEvent) => {
+    // Only trigger CTA on gesture when paused or ended
+    if (!isPaused && !isEnded) return;
+    
+    // Don't trigger if CTA is already visible or card is enlarged
+    if (showCTAOverlay || enlargedCardId !== null) return;
+    
+    // Only for episodes with CTA mapping
+    if (!(episode.id === 1 || episode.id === 2 || episode.id === 3) || !episode.ctaMapping) return;
+
+    const touch = e.touches[0];
+    if (swipeStartY.current === null || swipeStartX.current === null) {
+      swipeStartY.current = touch.clientY;
+      swipeStartX.current = touch.clientX;
+      swipeStartTime.current = Date.now();
+      return;
+    }
+
+    const deltaY = Math.abs(touch.clientY - swipeStartY.current);
+    const deltaX = Math.abs(touch.clientX - swipeStartX.current);
+    
+    // Detect any intentional gesture (minimum 30px movement)
+    if (deltaY > 30 || deltaX > 30) {
+      setShowCTAOverlay(true);
+      swipeStartY.current = null;
+      swipeStartX.current = null;
+      swipeStartTime.current = null;
+    }
+  }, [isPaused, isEnded, showCTAOverlay, enlargedCardId, episode.id, episode.ctaMapping]);
+
   return (
     <div 
       ref={containerRef} 
       className="fixed inset-0 bg-black z-[500]"
       onClick={handleVideoTap}
+      onTouchStart={(e) => {
+        // Gesture detection for CTA trigger
+        if (isPaused || isEnded) {
+          handleGestureDetection(e);
+        }
+        // Vertical swipe detection
+        handleTouchStart(e);
+      }}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
     >
       {/* Video */}
       <video
@@ -782,177 +1054,209 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
       {/* CTA Overlay - Shows when paused, in last 7 seconds, or when video ends for Episode 1, 2, or 3 */}
       {showCTAOverlay && (episode.id === 1 || episode.id === 2 || episode.id === 3) && episode.ctaMapping && (
         <div 
-          className="absolute bottom-0 left-0 right-0 z-[50] px-4 pb-6 pt-4 pointer-events-auto"
-          style={{ paddingBottom: (isPaused || isEnded) ? '100px' : '24px' }}
-          onClick={(e) => e.stopPropagation()}
+          className="absolute inset-0 z-[50] pointer-events-auto flex items-center justify-center"
+          onClick={(e) => {
+            // Dismiss CTAs and resume playback if clicking outside cards
+            const target = e.target as HTMLElement;
+            if (!target.closest('[data-cta-card]')) {
+              setEnlargedCardId(null);
+              setShowCTAOverlay(false);
+              // Resume video playback
+              if (videoRef.current && isPaused && !isEnded) {
+                videoRef.current.play().catch(() => {});
+                setIsPaused(false);
+              }
+            }
+            e.stopPropagation();
+          }}
         >
-          <div className="bg-gradient-to-t from-black/80 via-black/60 to-transparent backdrop-blur-sm rounded-t-2xl pointer-events-auto">
-            <div className="px-4 py-3 pointer-events-auto">
-              <p className="text-white text-center text-sm font-medium mb-4 pointer-events-none">
-                {episode.id === 1 ? 'What problems are you facing?' : episode.id === 3 ? 'What would you like to explore?' : 'Which shot would you like to learn?'}
-              </p>
-              <div className="grid grid-cols-2 gap-2 pointer-events-auto">
+          <div className="w-full max-w-md px-4">
+            <p className="text-white text-center text-sm font-medium mb-4 pointer-events-none">
+              {episode.id === 1 ? 'What problems are you facing?' : episode.id === 3 ? 'What would you like to explore?' : 'Which shot would you like to learn?'}
+            </p>
+            <div className="grid grid-cols-2 gap-2.5 pointer-events-auto">
                 {episode.id === 1 ? (
                   <>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        e.preventDefault();
-                        // Only navigate if explicitly configured with a valid episode ID
-                        const targetEpisodeId = episode.ctaMapping?.professional;
-                        if (onNavigateToEpisode && targetEpisodeId !== undefined && targetEpisodeId !== null && typeof targetEpisodeId === 'number') {
-                          onNavigateToEpisode(targetEpisodeId);
-                        }
-                      }}
-                      className="relative px-4 py-3 rounded-xl bg-white/10 backdrop-blur-sm border border-white/20 text-white text-xs font-medium hover:bg-white/20 active:scale-95 transition-all text-center min-h-[44px] flex items-center justify-center pointer-events-auto cursor-pointer w-full"
-                      style={{ touchAction: 'manipulation' }}
-                    >
-                      Need guidance about professional cricket journey
-                    </button>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        e.preventDefault();
-                        // Only navigate if explicitly configured with a valid episode ID
-                        const targetEpisodeId = episode.ctaMapping?.speed;
-                        if (onNavigateToEpisode && targetEpisodeId !== undefined && targetEpisodeId !== null && typeof targetEpisodeId === 'number') {
-                          onNavigateToEpisode(targetEpisodeId);
-                        }
-                      }}
-                      className="relative px-4 py-3 rounded-xl bg-white/10 backdrop-blur-sm border border-white/20 text-white text-xs font-medium hover:bg-white/20 active:scale-95 transition-all text-center min-h-[44px] flex items-center justify-center pointer-events-auto cursor-pointer w-full"
-                      style={{ touchAction: 'manipulation' }}
-                    >
-                      Speed
-                    </button>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        e.preventDefault();
-                        // Only navigate if explicitly configured with a valid episode ID
-                        const targetEpisodeId = episode.ctaMapping?.stamina;
-                        if (onNavigateToEpisode && targetEpisodeId !== undefined && targetEpisodeId !== null && typeof targetEpisodeId === 'number') {
-                          onNavigateToEpisode(targetEpisodeId);
-                        }
-                      }}
-                      className="relative px-4 py-3 rounded-xl bg-white/10 backdrop-blur-sm border border-white/20 text-white text-xs font-medium hover:bg-white/20 active:scale-95 transition-all text-center min-h-[44px] flex items-center justify-center pointer-events-auto cursor-pointer w-full"
-                      style={{ touchAction: 'manipulation' }}
-                    >
-                      Stamina
-                    </button>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        e.preventDefault();
-                        // Only navigate if explicitly configured with a valid episode ID
-                        const targetEpisodeId = episode.ctaMapping?.shots;
-                        if (onNavigateToEpisode && targetEpisodeId !== undefined && targetEpisodeId !== null && typeof targetEpisodeId === 'number') {
-                          onNavigateToEpisode(targetEpisodeId);
-                        }
-                      }}
-                      className="relative px-4 py-3 rounded-xl bg-white/10 backdrop-blur-sm border border-white/20 text-white text-xs font-medium hover:bg-white/20 active:scale-95 transition-all text-center min-h-[44px] flex items-center justify-center pointer-events-auto cursor-pointer w-full"
-                      style={{ touchAction: 'manipulation' }}
-                    >
-                      Shots
-                    </button>
+                    <div className="w-full min-h-[60px]">
+                      <CTACard
+                        optionKey="professional"
+                        title="Need guidance about professional cricket journey"
+                        details={episode.ctaDetails?.professional}
+                        isEnlarged={enlargedCardId === 'professional'}
+                        onEnlarge={() => setEnlargedCardId('professional')}
+                        onConfirm={() => {
+                          const targetEpisodeId = episode.ctaMapping?.professional;
+                          if (onNavigateToEpisode && targetEpisodeId !== undefined && targetEpisodeId !== null && typeof targetEpisodeId === 'number') {
+                            setEnlargedCardId(null);
+                            setShowCTAOverlay(false);
+                            onNavigateToEpisode(targetEpisodeId);
+                          }
+                        }}
+                      />
+                    </div>
+                    <div className="w-full min-h-[60px]">
+                      <CTACard
+                        optionKey="speed"
+                        title="Speed"
+                        details={episode.ctaDetails?.speed}
+                        isEnlarged={enlargedCardId === 'speed'}
+                        onEnlarge={() => setEnlargedCardId('speed')}
+                        onConfirm={() => {
+                          const targetEpisodeId = episode.ctaMapping?.speed;
+                          if (onNavigateToEpisode && targetEpisodeId !== undefined && targetEpisodeId !== null && typeof targetEpisodeId === 'number') {
+                            setEnlargedCardId(null);
+                            setShowCTAOverlay(false);
+                            onNavigateToEpisode(targetEpisodeId);
+                          }
+                        }}
+                      />
+                    </div>
+                    <div className="w-full min-h-[60px]">
+                      <CTACard
+                        optionKey="stamina"
+                        title="Stamina"
+                        details={episode.ctaDetails?.stamina}
+                        isEnlarged={enlargedCardId === 'stamina'}
+                        onEnlarge={() => setEnlargedCardId('stamina')}
+                        onConfirm={() => {
+                          const targetEpisodeId = episode.ctaMapping?.stamina;
+                          if (onNavigateToEpisode && targetEpisodeId !== undefined && targetEpisodeId !== null && typeof targetEpisodeId === 'number') {
+                            setEnlargedCardId(null);
+                            setShowCTAOverlay(false);
+                            onNavigateToEpisode(targetEpisodeId);
+                          }
+                        }}
+                      />
+                    </div>
+                    <div className="w-full min-h-[60px]">
+                      <CTACard
+                        optionKey="shots"
+                        title="Shots"
+                        details={episode.ctaDetails?.shots}
+                        isEnlarged={enlargedCardId === 'shots'}
+                        onEnlarge={() => setEnlargedCardId('shots')}
+                        onConfirm={() => {
+                          const targetEpisodeId = episode.ctaMapping?.shots;
+                          if (onNavigateToEpisode && targetEpisodeId !== undefined && targetEpisodeId !== null && typeof targetEpisodeId === 'number') {
+                            setEnlargedCardId(null);
+                            setShowCTAOverlay(false);
+                            onNavigateToEpisode(targetEpisodeId);
+                          }
+                        }}
+                      />
+                    </div>
                   </>
                 ) : episode.id === 3 ? (
                   <>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        e.preventDefault();
-                        // Only navigate if explicitly configured with a valid episode ID
-                        const targetEpisodeId = episode.ctaMapping?.applicationProcess;
-                        if (onNavigateToEpisode && targetEpisodeId !== undefined && targetEpisodeId !== null && typeof targetEpisodeId === 'number') {
-                          onNavigateToEpisode(targetEpisodeId);
-                        }
-                      }}
-                      className="relative px-4 py-3 rounded-xl bg-white/10 backdrop-blur-sm border border-white/20 text-white text-xs font-medium hover:bg-white/20 active:scale-95 transition-all text-center min-h-[44px] flex items-center justify-center pointer-events-auto cursor-pointer w-full"
-                      style={{ touchAction: 'manipulation' }}
-                    >
-                      Application process
-                    </button>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        e.preventDefault();
-                        // Only navigate if explicitly configured with a valid episode ID
-                        const targetEpisodeId = episode.ctaMapping?.mindset;
-                        if (onNavigateToEpisode && targetEpisodeId !== undefined && targetEpisodeId !== null && typeof targetEpisodeId === 'number') {
-                          onNavigateToEpisode(targetEpisodeId);
-                        }
-                      }}
-                      className="relative px-4 py-3 rounded-xl bg-white/10 backdrop-blur-sm border border-white/20 text-white text-xs font-medium hover:bg-white/20 active:scale-95 transition-all text-center min-h-[44px] flex items-center justify-center pointer-events-auto cursor-pointer w-full"
-                      style={{ touchAction: 'manipulation' }}
-                    >
-                      Mindset
-                    </button>
+                    <div className="w-full min-h-[60px]">
+                      <CTACard
+                        optionKey="applicationProcess"
+                        title="Application process"
+                        details={episode.ctaDetails?.applicationProcess}
+                        isEnlarged={enlargedCardId === 'applicationProcess'}
+                        onEnlarge={() => setEnlargedCardId('applicationProcess')}
+                        onConfirm={() => {
+                          const targetEpisodeId = episode.ctaMapping?.applicationProcess;
+                          if (onNavigateToEpisode && targetEpisodeId !== undefined && targetEpisodeId !== null && typeof targetEpisodeId === 'number') {
+                            setEnlargedCardId(null);
+                            setShowCTAOverlay(false);
+                            onNavigateToEpisode(targetEpisodeId);
+                          }
+                        }}
+                      />
+                    </div>
+                    <div className="w-full min-h-[60px]">
+                      <CTACard
+                        optionKey="mindset"
+                        title="Mindset"
+                        details={episode.ctaDetails?.mindset}
+                        isEnlarged={enlargedCardId === 'mindset'}
+                        onEnlarge={() => setEnlargedCardId('mindset')}
+                        onConfirm={() => {
+                          const targetEpisodeId = episode.ctaMapping?.mindset;
+                          if (onNavigateToEpisode && targetEpisodeId !== undefined && targetEpisodeId !== null && typeof targetEpisodeId === 'number') {
+                            setEnlargedCardId(null);
+                            setShowCTAOverlay(false);
+                            onNavigateToEpisode(targetEpisodeId);
+                          }
+                        }}
+                      />
+                    </div>
+                    <div></div>
+                    <div></div>
                   </>
                 ) : (
                   <>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        e.preventDefault();
-                        // Only navigate if explicitly configured with a valid episode ID
-                        const targetEpisodeId = episode.ctaMapping?.coverDrive;
-                        if (onNavigateToEpisode && targetEpisodeId !== undefined && targetEpisodeId !== null && typeof targetEpisodeId === 'number') {
-                          onNavigateToEpisode(targetEpisodeId);
-                        }
-                      }}
-                      className="relative px-4 py-3 rounded-xl bg-white/10 backdrop-blur-sm border border-white/20 text-white text-xs font-medium hover:bg-white/20 active:scale-95 transition-all text-center min-h-[44px] flex items-center justify-center pointer-events-auto cursor-pointer w-full"
-                      style={{ touchAction: 'manipulation' }}
-                    >
-                      Cover drive
-                    </button>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        e.preventDefault();
-                        // Only navigate if explicitly configured with a valid episode ID
-                        const targetEpisodeId = episode.ctaMapping?.pullShot;
-                        if (onNavigateToEpisode && targetEpisodeId !== undefined && targetEpisodeId !== null && typeof targetEpisodeId === 'number') {
-                          onNavigateToEpisode(targetEpisodeId);
-                        }
-                      }}
-                      className="relative px-4 py-3 rounded-xl bg-white/10 backdrop-blur-sm border border-white/20 text-white text-xs font-medium hover:bg-white/20 active:scale-95 transition-all text-center min-h-[44px] flex items-center justify-center pointer-events-auto cursor-pointer w-full"
-                      style={{ touchAction: 'manipulation' }}
-                    >
-                      Pull shot
-                    </button>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        e.preventDefault();
-                        // Only navigate if explicitly configured with a valid episode ID
-                        const targetEpisodeId = episode.ctaMapping?.stepOut;
-                        if (onNavigateToEpisode && targetEpisodeId !== undefined && targetEpisodeId !== null && typeof targetEpisodeId === 'number') {
-                          onNavigateToEpisode(targetEpisodeId);
-                        }
-                      }}
-                      className="relative px-4 py-3 rounded-xl bg-white/10 backdrop-blur-sm border border-white/20 text-white text-xs font-medium hover:bg-white/20 active:scale-95 transition-all text-center min-h-[44px] flex items-center justify-center pointer-events-auto cursor-pointer w-full"
-                      style={{ touchAction: 'manipulation' }}
-                    >
-                      Step out
-                    </button>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        e.preventDefault();
-                        // Only navigate if explicitly configured with a valid episode ID
-                        const targetEpisodeId = episode.ctaMapping?.cut;
-                        if (onNavigateToEpisode && targetEpisodeId !== undefined && targetEpisodeId !== null && typeof targetEpisodeId === 'number') {
-                          onNavigateToEpisode(targetEpisodeId);
-                        }
-                      }}
-                      className="relative px-4 py-3 rounded-xl bg-white/10 backdrop-blur-sm border border-white/20 text-white text-xs font-medium hover:bg-white/20 active:scale-95 transition-all text-center min-h-[44px] flex items-center justify-center pointer-events-auto cursor-pointer w-full"
-                      style={{ touchAction: 'manipulation' }}
-                    >
-                      Cut
-                    </button>
+                    <div className="w-full min-h-[60px]">
+                      <CTACard
+                        optionKey="coverDrive"
+                        title="Cover drive"
+                        details={episode.ctaDetails?.coverDrive}
+                        isEnlarged={enlargedCardId === 'coverDrive'}
+                        onEnlarge={() => setEnlargedCardId('coverDrive')}
+                        onConfirm={() => {
+                          const targetEpisodeId = episode.ctaMapping?.coverDrive;
+                          if (onNavigateToEpisode && targetEpisodeId !== undefined && targetEpisodeId !== null && typeof targetEpisodeId === 'number') {
+                            setEnlargedCardId(null);
+                            setShowCTAOverlay(false);
+                            onNavigateToEpisode(targetEpisodeId);
+                          }
+                        }}
+                      />
+                    </div>
+                    <div className="w-full min-h-[60px]">
+                      <CTACard
+                        optionKey="pullShot"
+                        title="Pull shot"
+                        details={episode.ctaDetails?.pullShot}
+                        isEnlarged={enlargedCardId === 'pullShot'}
+                        onEnlarge={() => setEnlargedCardId('pullShot')}
+                        onConfirm={() => {
+                          const targetEpisodeId = episode.ctaMapping?.pullShot;
+                          if (onNavigateToEpisode && targetEpisodeId !== undefined && targetEpisodeId !== null && typeof targetEpisodeId === 'number') {
+                            setEnlargedCardId(null);
+                            setShowCTAOverlay(false);
+                            onNavigateToEpisode(targetEpisodeId);
+                          }
+                        }}
+                      />
+                    </div>
+                    <div className="w-full min-h-[60px]">
+                      <CTACard
+                        optionKey="stepOut"
+                        title="Step out"
+                        details={episode.ctaDetails?.stepOut}
+                        isEnlarged={enlargedCardId === 'stepOut'}
+                        onEnlarge={() => setEnlargedCardId('stepOut')}
+                        onConfirm={() => {
+                          const targetEpisodeId = episode.ctaMapping?.stepOut;
+                          if (onNavigateToEpisode && targetEpisodeId !== undefined && targetEpisodeId !== null && typeof targetEpisodeId === 'number') {
+                            setEnlargedCardId(null);
+                            setShowCTAOverlay(false);
+                            onNavigateToEpisode(targetEpisodeId);
+                          }
+                        }}
+                      />
+                    </div>
+                    <div className="w-full min-h-[60px]">
+                      <CTACard
+                        optionKey="cut"
+                        title="Cut"
+                        details={episode.ctaDetails?.cut}
+                        isEnlarged={enlargedCardId === 'cut'}
+                        onEnlarge={() => setEnlargedCardId('cut')}
+                        onConfirm={() => {
+                          const targetEpisodeId = episode.ctaMapping?.cut;
+                          if (onNavigateToEpisode && targetEpisodeId !== undefined && targetEpisodeId !== null && typeof targetEpisodeId === 'number') {
+                            setEnlargedCardId(null);
+                            setShowCTAOverlay(false);
+                            onNavigateToEpisode(targetEpisodeId);
+                          }
+                        }}
+                      />
+                    </div>
                   </>
                 )}
-              </div>
             </div>
           </div>
         </div>
@@ -988,7 +1292,7 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
         />
       )}
 
-      {/* Animation styles for typing indicator */}
+      {/* Animation styles for typing indicator, card flip, and border glow */}
       <style>{`
         @keyframes dotBounce {
           0%, 100% { transform: translateY(0); }
@@ -997,6 +1301,42 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
         .dot-bounce-1 { animation: dotBounce 1s ease-in-out infinite; }
         .dot-bounce-2 { animation: dotBounce 1s ease-in-out infinite 0.15s; }
         .dot-bounce-3 { animation: dotBounce 1s ease-in-out infinite 0.3s; }
+        
+        /* Card flip 3D perspective */
+        .perspective-1000 {
+          perspective: 1000px;
+          -webkit-perspective: 1000px;
+        }
+        
+        .transform-style-3d {
+          transform-style: preserve-3d;
+          -webkit-transform-style: preserve-3d;
+        }
+        
+        .backface-hidden {
+          backface-visibility: hidden;
+          -webkit-backface-visibility: hidden;
+        }
+        
+        .rotate-y-180 {
+          transform: rotateY(180deg);
+        }
+        
+        /* Border glow animation */
+        @keyframes borderGlow {
+          0%, 100% {
+            box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.4);
+            border-color: rgba(255, 255, 255, 0.2);
+          }
+          50% {
+            box-shadow: 0 0 8px 2px rgba(255, 255, 255, 0.6);
+            border-color: rgba(255, 255, 255, 0.4);
+          }
+        }
+        
+        .border-glow {
+          animation: borderGlow 2s ease-in-out infinite;
+        }
       `}</style>
     </div>
   );

@@ -207,7 +207,12 @@ const ReelItem: React.FC<{
   const [isEnded, setIsEnded] = useState(false);
   const [isScrubbing, setIsScrubbing] = useState(false);
   const [isUIHidden, setIsUIHidden] = useState(false);
+  const [isPaused, setIsPaused] = useState(false);
   const lastEpisodeIdRef = useRef<string | number | null>(null);
+  
+  // Vertical swipe detection state
+  const swipeStartY = useRef<number | null>(null);
+  const swipeStartTime = useRef<number | null>(null);
   
   // Debug: Log on every render
   useEffect(() => {
@@ -750,13 +755,63 @@ const ReelItem: React.FC<{
     pauseCountRef.current += 1;
   };
 
+  // Vertical swipe detection for episode navigation
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    const touch = e.touches[0];
+    swipeStartY.current = touch.clientY;
+    swipeStartTime.current = Date.now();
+  }, []);
+
+  const handleTouchMove = useCallback((e: React.TouchEvent) => {
+    if (swipeStartY.current !== null) {
+      const touch = e.touches[0];
+      const deltaY = Math.abs(touch.clientY - swipeStartY.current);
+      
+      // If significant vertical movement, prevent default scroll to allow swipe detection
+      if (deltaY > 10) {
+        e.preventDefault();
+      }
+    }
+  }, []);
+
+  const handleTouchEnd = useCallback((e: React.TouchEvent) => {
+    if (swipeStartY.current === null || swipeStartTime.current === null) {
+      return;
+    }
+
+    const touch = e.changedTouches[0];
+    const deltaY = swipeStartY.current - touch.clientY; // Positive = swipe up, Negative = swipe down
+    const deltaTime = Date.now() - swipeStartTime.current;
+    const distance = Math.abs(deltaY);
+
+    // Check if this is a vertical swipe (minimum 50px, within 500ms)
+    if (distance > 50 && deltaTime < 500) {
+      if (deltaY > 0) {
+        // Swipe UP = Next episode
+        onNextEpisode();
+      }
+      // Note: Previous episode navigation not implemented for ReelItem
+      // as it's typically used in a scroll container where previous is handled by scrolling
+    }
+
+    // Reset swipe tracking
+    swipeStartY.current = null;
+    swipeStartTime.current = null;
+  }, [onNextEpisode]);
+
   // Debug: Log render state
   if (isActive && !isEnded) {
     console.log('[Inactivity] Render - isUIHidden:', isUIHidden, 'isActive:', isActive, 'isEnded:', isEnded);
   }
 
   return (
-    <div ref={containerRef} className="reel-item flex items-center justify-center overflow-hidden bg-[#0a0a0f]">
+    <div 
+      ref={containerRef} 
+      className="reel-item flex items-center justify-center overflow-hidden bg-[#0a0a0f]"
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
+    >
       <video
         ref={videoRef}
         src={episode.url}
@@ -822,6 +877,7 @@ const ReelItem: React.FC<{
           });
           // iOS fix: Only hide loading when video actually starts playing
           setLoading(false);
+          setIsPaused(false);
         }}
         onPause={() => {
           const video = videoRef.current;
@@ -830,6 +886,7 @@ const ReelItem: React.FC<{
             ended: video?.ended
           });
           handlePause();
+          setIsPaused(true);
         }}
         onEnded={() => {
           console.log('[Video] Ended - Episode:', episode.label);
@@ -1063,6 +1120,32 @@ export const SERIES_CATALOG = [
           'shots': 2,
           'professional': 3
           // Other CTAs (speed, stamina) have no navigation until explicitly configured
+        },
+        ctaDetails: {
+          professional: {
+            title: 'Professional Cricket Journey',
+            description: 'Get guidance on your path to professional cricket',
+            journey: 'You will explore age selection, career planning, and professional development strategies.',
+            consequence: 'Learn about the professional cricket ecosystem and how to navigate your career.'
+          },
+          speed: {
+            title: 'Speed Training',
+            description: 'Improve your running speed and agility on the field',
+            journey: 'You will learn speed training techniques and drills to enhance your performance.',
+            consequence: 'Develop faster reflexes and better fielding capabilities.'
+          },
+          stamina: {
+            title: 'Stamina Building',
+            description: 'Build endurance for longer matches and better performance',
+            journey: 'You will discover stamina-building exercises and training routines.',
+            consequence: 'Maintain peak performance throughout long matches and training sessions.'
+          },
+          shots: {
+            title: 'Cricket Shots',
+            description: 'Master various batting shots and techniques',
+            journey: 'You will learn different shot techniques and when to use them.',
+            consequence: 'Improve your batting skills and shot selection.'
+          }
         }
       },
       {
@@ -1075,6 +1158,32 @@ export const SERIES_CATALOG = [
         ctaMapping: {
           'coverDrive': 3
           // Other CTAs (pullShot, stepOut, cut) have no navigation until explicitly configured
+        },
+        ctaDetails: {
+          coverDrive: {
+            title: 'Cover Drive',
+            description: 'Master the elegant cover drive shot',
+            journey: 'You will learn the proper technique, footwork, and timing for the cover drive.',
+            consequence: 'Add a powerful and elegant shot to your batting arsenal.'
+          },
+          pullShot: {
+            title: 'Pull Shot',
+            description: 'Learn to execute the pull shot effectively',
+            journey: 'You will discover pull shot techniques and how to handle short-pitched deliveries.',
+            consequence: 'Confidently handle fast short-pitched bowling.'
+          },
+          stepOut: {
+            title: 'Step Out',
+            description: 'Master stepping out to the pitch',
+            journey: 'You will learn when and how to step out to disrupt the bowler\'s length.',
+            consequence: 'Take control of the crease and put pressure on the bowler.'
+          },
+          cut: {
+            title: 'Cut Shot',
+            description: 'Perfect your cut shot technique',
+            journey: 'You will learn the cut shot mechanics and placement strategies.',
+            consequence: 'Effectively score runs off short and wide deliveries.'
+          }
         }
       },
       {
@@ -1087,6 +1196,20 @@ export const SERIES_CATALOG = [
         ctaMapping: {
           'mindset': 5
           // Application process CTA - navigation to be configured later
+        },
+        ctaDetails: {
+          applicationProcess: {
+            title: 'Application Process',
+            description: 'Understand the professional cricket application and selection process',
+            journey: 'You will learn about trials, selection criteria, and how to prepare for professional opportunities.',
+            consequence: 'Be better prepared for professional cricket opportunities and applications.'
+          },
+          mindset: {
+            title: 'Professional Mindset',
+            description: 'Develop the mental strength for professional cricket',
+            journey: 'You will explore mental training, focus techniques, and professional mindset development.',
+            consequence: 'Build the mental resilience needed for professional cricket success.'
+          }
         }
       },
       {
