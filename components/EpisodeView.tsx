@@ -25,8 +25,11 @@ interface CTACardProps {
     consequence: string;
   };
   isEnlarged: boolean;
+  isFlipped?: boolean;
+  isBlurred?: boolean;
   onEnlarge: () => void;
   onConfirm: () => void;
+  cardRef?: (el: HTMLDivElement | null) => void;
 }
 
 const CTACard: React.FC<CTACardProps> = ({ 
@@ -34,27 +37,54 @@ const CTACard: React.FC<CTACardProps> = ({
   title, 
   details, 
   isEnlarged, 
+  isFlipped = false,
+  isBlurred = false,
   onEnlarge, 
-  onConfirm 
+  onConfirm,
+  cardRef
 }) => {
   const fillIntervalRef = useRef<number | null>(null);
   const [fillProgress, setFillProgress] = useState(0);
+  const [isHolding, setIsHolding] = useState(false);
   const isHoldingRef = useRef(false);
+  const progressStartTimeRef = useRef<number | null>(null);
+  const holdStartTimeRef = useRef<number | null>(null);
+  const totalHoldTimeRef = useRef<number>(0); // Total accumulated hold time
+  const lastUpdateTimeRef = useRef<number | null>(null);
   const baseFillDuration = 2000; // 2 seconds base duration
   const holdAcceleration = 3; // 3x speed when holding
 
-  // Start fill animation when card is enlarged
+  // Start fill animation automatically when card is enlarged, speed up when holding
   useEffect(() => {
     if (isEnlarged) {
       setFillProgress(0);
       const startTime = Date.now();
+      progressStartTimeRef.current = startTime;
+      holdStartTimeRef.current = null;
+      totalHoldTimeRef.current = 0;
+      lastUpdateTimeRef.current = startTime;
       
       const updateFill = () => {
-        const elapsed = Date.now() - startTime;
-        const speedMultiplier = isHoldingRef.current ? holdAcceleration : 1;
-        const effectiveDuration = baseFillDuration / speedMultiplier;
-        const progress = Math.min((elapsed / effectiveDuration) * 100, 100);
+        if (!progressStartTimeRef.current || !lastUpdateTimeRef.current) return;
         
+        const now = Date.now();
+        const deltaTime = now - lastUpdateTimeRef.current;
+        lastUpdateTimeRef.current = now;
+        
+        // Update total hold time if currently holding
+        if (isHoldingRef.current) {
+          if (holdStartTimeRef.current === null) {
+            holdStartTimeRef.current = now;
+          }
+          totalHoldTimeRef.current += deltaTime;
+        }
+        
+        // Calculate effective time: total elapsed - hold time + (hold time * 3)
+        // = total elapsed + (hold time * 2)
+        const totalElapsed = now - progressStartTimeRef.current;
+        const effectiveTime = totalElapsed + (totalHoldTimeRef.current * (holdAcceleration - 1));
+        
+        const progress = Math.min((effectiveTime / baseFillDuration) * 100, 100);
         setFillProgress(progress);
         
         if (progress >= 100) {
@@ -62,6 +92,13 @@ const CTACard: React.FC<CTACardProps> = ({
             clearInterval(fillIntervalRef.current);
             fillIntervalRef.current = null;
           }
+          // Reset holding state before confirming to ensure swipe is enabled
+          isHoldingRef.current = false;
+          setIsHolding(false);
+          progressStartTimeRef.current = null;
+          holdStartTimeRef.current = null;
+          totalHoldTimeRef.current = 0;
+          lastUpdateTimeRef.current = null;
           onConfirm();
         }
       };
@@ -77,6 +114,10 @@ const CTACard: React.FC<CTACardProps> = ({
     } else {
       // Reset when not enlarged
       setFillProgress(0);
+      progressStartTimeRef.current = null;
+      holdStartTimeRef.current = null;
+      totalHoldTimeRef.current = 0;
+      lastUpdateTimeRef.current = null;
       if (fillIntervalRef.current) {
         clearInterval(fillIntervalRef.current);
         fillIntervalRef.current = null;
@@ -96,11 +137,13 @@ const CTACard: React.FC<CTACardProps> = ({
       e.preventDefault();
       e.stopPropagation();
       isHoldingRef.current = true;
+      setIsHolding(true);
     }
   }, [isEnlarged]);
 
   const handleMouseUp = useCallback(() => {
     isHoldingRef.current = false;
+    setIsHolding(false);
   }, []);
 
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
@@ -108,11 +151,13 @@ const CTACard: React.FC<CTACardProps> = ({
       e.preventDefault();
       e.stopPropagation();
       isHoldingRef.current = true;
+      setIsHolding(true);
     }
   }, [isEnlarged]);
 
   const handleTouchEnd = useCallback(() => {
     isHoldingRef.current = false;
+    setIsHolding(false);
   }, []);
 
   // Cleanup on unmount
@@ -126,40 +171,102 @@ const CTACard: React.FC<CTACardProps> = ({
 
   return (
     <div 
+      ref={cardRef}
       data-cta-card
-      className={`relative w-full h-full transition-transform duration-300 ease-out ${
-        isEnlarged ? 'scale-[3] z-50' : 'scale-100 z-auto'
-      }`}
+      className={`relative w-full h-full ${isBlurred ? 'backdrop-blur-sm opacity-60 pointer-events-none' : ''}`}
       onClick={handleClick}
       onMouseDown={handleMouseDown}
       onMouseUp={handleMouseUp}
       onMouseLeave={handleMouseUp}
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
-      onTouchCancel={handleTouchEnd}
-      style={{ touchAction: 'manipulation', transformOrigin: 'center center' }}
+      style={{ touchAction: 'manipulation' }}
     >
-      <div className="relative w-full h-full rounded-xl overflow-hidden">
-        {/* Card background - semi-transparent for text visibility */}
-        <div className="absolute inset-0 bg-black/20 backdrop-blur-sm border border-white/20 rounded-xl" />
-        
-        {/* Green fill overlay - left to right */}
-        {isEnlarged && (
-          <div 
-            className="absolute inset-0 bg-[#4A7C59] rounded-xl"
+      <div 
+        className="relative w-full h-full"
+        style={{ 
+          perspective: '1000px',
+          WebkitPerspective: '1000px'
+        }}
+      >
+        <div
+          className="relative w-full h-full transform-style-3d"
             style={{
-              clipPath: `inset(0 ${100 - fillProgress}% 0 0)`,
-              transition: 'clip-path 0.1s linear',
+              transformStyle: 'preserve-3d',
+              WebkitTransformStyle: 'preserve-3d',
+              transform: isFlipped ? 'rotateY(180deg)' : 'rotateY(0deg)',
+              transition: 'transform 0.4s cubic-bezier(0.16, 1, 0.3, 1)'
             }}
-          />
-        )}
-        
-        {/* Content */}
-        <div className="relative w-full h-full min-h-[60px] flex flex-col items-center justify-center text-center px-3 py-2.5 z-10">
-          <h3 className="text-[11px] font-medium text-white mb-1">{title}</h3>
-          {isEnlarged && (
-            <p className="text-[10px] text-white/90 leading-relaxed">xyz</p>
-          )}
+        >
+          {/* Front Face */}
+          <div 
+            className="absolute inset-0 backface-hidden rounded-xl"
+            style={{ 
+              backfaceVisibility: 'hidden',
+              WebkitBackfaceVisibility: 'hidden'
+            }}
+          >
+            <div className="relative w-full h-full rounded-xl overflow-hidden">
+              {/* Card background */}
+              <div className="absolute inset-0 bg-black/20 backdrop-blur-sm rounded-xl" />
+              
+              {/* Content */}
+              <div className="relative w-full h-full min-h-[60px] flex flex-col items-center justify-center text-center px-3 py-2.5 z-10">
+                <h3 className="text-[11px] font-medium text-white mb-1">{title}</h3>
+              </div>
+            </div>
+          </div>
+
+          {/* Back Face */}
+          <div 
+            className="absolute inset-0 backface-hidden rounded-xl"
+            style={{ 
+              backfaceVisibility: 'hidden',
+              WebkitBackfaceVisibility: 'hidden',
+              transform: 'rotateY(180deg)'
+            }}
+          >
+            <div className="relative w-full h-full rounded-xl overflow-hidden">
+              {/* Card background */}
+              <div className="absolute inset-0 bg-black/20 backdrop-blur-sm rounded-xl z-0" />
+              
+              {/* Green fill overlay - left to right */}
+              {isEnlarged && (
+                <div 
+                  className={`absolute inset-0 rounded-xl z-[5] transition-all duration-200 ${
+                    isHolding ? 'bg-[#5A9C6A]' : 'bg-[#4A7C59]'
+                  }`}
+                  style={{
+                    clipPath: `inset(0 ${100 - fillProgress}% 0 0)`,
+                    transition: 'clip-path 0.1s linear',
+                    opacity: fillProgress > 0 ? 0.8 : 0.3, // Make it more visible
+                  }}
+                />
+              )}
+              
+              
+              {/* Details Content */}
+              <div className="relative w-full h-full min-h-[80px] flex flex-col items-center justify-center text-center px-5 py-4 z-10">
+                {details ? (
+                  <div className="w-full flex flex-col items-center justify-start gap-2 max-h-full overflow-y-auto">
+                    <h3 className="text-[14px] font-medium text-white leading-tight mb-0.5">{details.title || title}</h3>
+                    <p className="text-[11px] text-white/90 leading-[1.5] px-2" style={{ 
+                      display: '-webkit-box',
+                      WebkitLineClamp: 4,
+                      WebkitBoxOrient: 'vertical',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis'
+                    }}>{details.description}</p>
+                    {details.journey && (
+                      <p className="text-[10px] text-white/80 leading-[1.4] px-2 mt-1">{details.journey}</p>
+                    )}
+                  </div>
+                ) : (
+                  <h3 className="text-[14px] font-medium text-white leading-tight">{title}</h3>
+                )}
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -196,6 +303,12 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
   
   // CTA focus state
   const [enlargedCardId, setEnlargedCardId] = useState<string | null>(null);
+  const [isFlipped, setIsFlipped] = useState(false);
+  const [flippedCardId, setFlippedCardId] = useState<string | null>(null); // Track which card is flipped in the grid
+  const [hideOriginalCardId, setHideOriginalCardId] = useState<string | null>(null); // Track which card to hide after flip completes
+  const [outsideClickCount, setOutsideClickCount] = useState(0);
+  const [expandedCardBounds, setExpandedCardBounds] = useState<DOMRect | null>(null);
+  const cardRefs = useRef<{ [key: string]: HTMLDivElement | null }>({});
   const swipeStartY = useRef<number | null>(null);
   const swipeStartX = useRef<number | null>(null);
   const swipeStartTime = useRef<number | null>(null);
@@ -389,6 +502,9 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
     // Reset CTA overlay state when episode changes
     setShowCTAOverlay(false);
     setEnlargedCardId(null);
+    setIsFlipped(false);
+    setFlippedCardId(null);
+    setHideOriginalCardId(null);
     setIsEnded(false);
     setIsPaused(false);
     setProgress(0);
@@ -691,6 +807,51 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
     swipeStartX.current = null;
     swipeStartTime.current = null;
   }, [showCTAOverlay, enlargedCardId, onNextEpisode, handlePreviousEpisode]);
+
+  // Handle card enlargement with flip - flip happens first on original card, then enlarge
+  const handleCardEnlarge = useCallback((cardId: string) => {
+    // First, flip the card in the grid (this will be visible)
+    setFlippedCardId(cardId);
+    
+    // Wait for flip animation to complete before showing enlarged overlay
+    setTimeout(() => {
+      const cardElement = cardRefs.current[cardId];
+      if (cardElement) {
+        const bounds = cardElement.getBoundingClientRect();
+        setExpandedCardBounds(bounds);
+      }
+      setEnlargedCardId(cardId);
+      setIsFlipped(true);
+      setOutsideClickCount(0);
+      
+      // Hide the original card after a brief moment
+      setTimeout(() => {
+        setHideOriginalCardId(cardId);
+      }, 50);
+    }, 400); // Wait for flip animation to complete (matches transition duration)
+  }, []);
+
+  // Handle outside click - reverse flip and shrink back to original size
+  const handleOutsideClick = useCallback((e: React.MouseEvent | React.TouchEvent) => {
+    const target = e.target as HTMLElement;
+    if (target.closest('[data-cta-card]') || target.closest('[data-expanded-card]')) {
+      return;
+    }
+
+    if (enlargedCardId) {
+      // Show original card again first
+      setHideOriginalCardId(null);
+      // Reverse flip and shrink back to original size
+      setIsFlipped(false);
+      setFlippedCardId(null);
+      // Wait for flip animation to complete before collapsing
+      setTimeout(() => {
+        setEnlargedCardId(null);
+        setExpandedCardBounds(null);
+        setOutsideClickCount(0);
+      }, 400);
+    }
+  }, [enlargedCardId]);
 
   // Gesture detection for CTA trigger (any direction when paused/finished)
   const handleGestureDetection = useCallback((e: React.TouchEvent) => {
@@ -1054,132 +1215,149 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
       {/* CTA Overlay - Shows when paused, in last 7 seconds, or when video ends for Episode 1, 2, or 3 */}
       {showCTAOverlay && (episode.id === 1 || episode.id === 2 || episode.id === 3) && episode.ctaMapping && (
         <div 
-          className="absolute inset-0 z-[50] pointer-events-auto flex items-center justify-center"
-          onClick={(e) => {
-            // Dismiss CTAs and resume playback if clicking outside cards
-            const target = e.target as HTMLElement;
-            if (!target.closest('[data-cta-card]')) {
-              setEnlargedCardId(null);
-              setShowCTAOverlay(false);
-              // Resume video playback
-              if (videoRef.current && isPaused && !isEnded) {
-                videoRef.current.play().catch(() => {});
-                setIsPaused(false);
-              }
-            }
-            e.stopPropagation();
-          }}
+          className="absolute inset-0 z-[50] pointer-events-auto flex items-center justify-center px-4 py-8"
+          onClick={handleOutsideClick}
         >
-          <div className="w-full max-w-md px-4">
-            <p className="text-white text-center text-sm font-medium mb-4 pointer-events-none">
+          <div className="w-full max-w-md max-h-[90vh]">
+            <p className="text-white text-center text-sm font-medium mb-4 pointer-events-none px-2">
               {episode.id === 1 ? 'What problems are you facing?' : episode.id === 3 ? 'What would you like to explore?' : 'Which shot would you like to learn?'}
             </p>
-            <div className="grid grid-cols-2 gap-2.5 pointer-events-auto">
+            <div className="grid grid-cols-2 gap-2.5 pointer-events-auto px-2">
                 {episode.id === 1 ? (
                   <>
-                    <div className="w-full min-h-[60px]">
+                    <div className={`w-full min-h-[60px] transition-opacity duration-300 ${hideOriginalCardId === 'professional' ? 'opacity-0 pointer-events-none' : ''}`}>
                       <CTACard
                         optionKey="professional"
                         title="Need guidance about professional cricket journey"
                         details={episode.ctaDetails?.professional}
-                        isEnlarged={enlargedCardId === 'professional'}
-                        onEnlarge={() => setEnlargedCardId('professional')}
+                        isEnlarged={false}
+                        isFlipped={flippedCardId === 'professional'}
+                        isBlurred={enlargedCardId !== null && enlargedCardId !== 'professional'}
+                        onEnlarge={() => handleCardEnlarge('professional')}
                         onConfirm={() => {
                           const targetEpisodeId = episode.ctaMapping?.professional;
                           if (onNavigateToEpisode && targetEpisodeId !== undefined && targetEpisodeId !== null && typeof targetEpisodeId === 'number') {
                             setEnlargedCardId(null);
+                            setIsFlipped(false);
+                            setExpandedCardBounds(null);
                             setShowCTAOverlay(false);
                             onNavigateToEpisode(targetEpisodeId);
                           }
                         }}
+                        cardRef={(el) => { cardRefs.current['professional'] = el; }}
                       />
                     </div>
-                    <div className="w-full min-h-[60px]">
+                    <div className={`w-full min-h-[60px] transition-opacity duration-300 ${hideOriginalCardId === 'speed' ? 'opacity-0 pointer-events-none' : ''}`}>
                       <CTACard
                         optionKey="speed"
                         title="Speed"
                         details={episode.ctaDetails?.speed}
-                        isEnlarged={enlargedCardId === 'speed'}
-                        onEnlarge={() => setEnlargedCardId('speed')}
+                        isEnlarged={false}
+                        isFlipped={flippedCardId === 'speed'}
+                        isBlurred={enlargedCardId !== null && enlargedCardId !== 'speed'}
+                        onEnlarge={() => handleCardEnlarge('speed')}
                         onConfirm={() => {
                           const targetEpisodeId = episode.ctaMapping?.speed;
                           if (onNavigateToEpisode && targetEpisodeId !== undefined && targetEpisodeId !== null && typeof targetEpisodeId === 'number') {
                             setEnlargedCardId(null);
+                            setIsFlipped(false);
+                            setExpandedCardBounds(null);
                             setShowCTAOverlay(false);
                             onNavigateToEpisode(targetEpisodeId);
                           }
                         }}
+                        cardRef={(el) => { cardRefs.current['speed'] = el; }}
                       />
                     </div>
-                    <div className="w-full min-h-[60px]">
+                    <div className={`w-full min-h-[60px] transition-opacity duration-300 ${hideOriginalCardId === 'stamina' ? 'opacity-0 pointer-events-none' : ''}`}>
                       <CTACard
                         optionKey="stamina"
                         title="Stamina"
                         details={episode.ctaDetails?.stamina}
-                        isEnlarged={enlargedCardId === 'stamina'}
-                        onEnlarge={() => setEnlargedCardId('stamina')}
+                        isEnlarged={false}
+                        isFlipped={flippedCardId === 'stamina'}
+                        isBlurred={enlargedCardId !== null && enlargedCardId !== 'stamina'}
+                        onEnlarge={() => handleCardEnlarge('stamina')}
                         onConfirm={() => {
                           const targetEpisodeId = episode.ctaMapping?.stamina;
                           if (onNavigateToEpisode && targetEpisodeId !== undefined && targetEpisodeId !== null && typeof targetEpisodeId === 'number') {
                             setEnlargedCardId(null);
+                            setIsFlipped(false);
+                            setExpandedCardBounds(null);
                             setShowCTAOverlay(false);
                             onNavigateToEpisode(targetEpisodeId);
                           }
                         }}
+                        cardRef={(el) => { cardRefs.current['stamina'] = el; }}
                       />
                     </div>
-                    <div className="w-full min-h-[60px]">
+                    <div className={`w-full min-h-[60px] transition-opacity duration-300 ${hideOriginalCardId === 'shots' ? 'opacity-0 pointer-events-none' : ''}`}>
                       <CTACard
                         optionKey="shots"
                         title="Shots"
                         details={episode.ctaDetails?.shots}
-                        isEnlarged={enlargedCardId === 'shots'}
-                        onEnlarge={() => setEnlargedCardId('shots')}
+                        isEnlarged={false}
+                        isFlipped={flippedCardId === 'shots'}
+                        isBlurred={enlargedCardId !== null && enlargedCardId !== 'shots'}
+                        onEnlarge={() => handleCardEnlarge('shots')}
                         onConfirm={() => {
                           const targetEpisodeId = episode.ctaMapping?.shots;
                           if (onNavigateToEpisode && targetEpisodeId !== undefined && targetEpisodeId !== null && typeof targetEpisodeId === 'number') {
                             setEnlargedCardId(null);
+                            setIsFlipped(false);
+                            setExpandedCardBounds(null);
                             setShowCTAOverlay(false);
                             onNavigateToEpisode(targetEpisodeId);
                           }
                         }}
+                        cardRef={(el) => { cardRefs.current['shots'] = el; }}
                       />
                     </div>
                   </>
                 ) : episode.id === 3 ? (
                   <>
-                    <div className="w-full min-h-[60px]">
+                    <div className={`w-full min-h-[60px] transition-opacity duration-300 ${hideOriginalCardId === 'applicationProcess' ? 'opacity-0 pointer-events-none' : ''}`}>
                       <CTACard
                         optionKey="applicationProcess"
                         title="Application process"
                         details={episode.ctaDetails?.applicationProcess}
-                        isEnlarged={enlargedCardId === 'applicationProcess'}
-                        onEnlarge={() => setEnlargedCardId('applicationProcess')}
+                        isEnlarged={false}
+                        isFlipped={flippedCardId === 'applicationProcess'}
+                        isBlurred={enlargedCardId !== null && enlargedCardId !== 'applicationProcess'}
+                        onEnlarge={() => handleCardEnlarge('applicationProcess')}
                         onConfirm={() => {
                           const targetEpisodeId = episode.ctaMapping?.applicationProcess;
                           if (onNavigateToEpisode && targetEpisodeId !== undefined && targetEpisodeId !== null && typeof targetEpisodeId === 'number') {
                             setEnlargedCardId(null);
+                            setIsFlipped(false);
+                            setExpandedCardBounds(null);
                             setShowCTAOverlay(false);
                             onNavigateToEpisode(targetEpisodeId);
                           }
                         }}
+                        cardRef={(el) => { cardRefs.current['applicationProcess'] = el; }}
                       />
                     </div>
-                    <div className="w-full min-h-[60px]">
+                    <div className={`w-full min-h-[60px] transition-opacity duration-300 ${hideOriginalCardId === 'mindset' ? 'opacity-0 pointer-events-none' : ''}`}>
                       <CTACard
                         optionKey="mindset"
                         title="Mindset"
                         details={episode.ctaDetails?.mindset}
-                        isEnlarged={enlargedCardId === 'mindset'}
-                        onEnlarge={() => setEnlargedCardId('mindset')}
+                        isEnlarged={false}
+                        isFlipped={flippedCardId === 'mindset'}
+                        isBlurred={enlargedCardId !== null && enlargedCardId !== 'mindset'}
+                        onEnlarge={() => handleCardEnlarge('mindset')}
                         onConfirm={() => {
                           const targetEpisodeId = episode.ctaMapping?.mindset;
                           if (onNavigateToEpisode && targetEpisodeId !== undefined && targetEpisodeId !== null && typeof targetEpisodeId === 'number') {
                             setEnlargedCardId(null);
+                            setIsFlipped(false);
+                            setExpandedCardBounds(null);
                             setShowCTAOverlay(false);
                             onNavigateToEpisode(targetEpisodeId);
                           }
                         }}
+                        cardRef={(el) => { cardRefs.current['mindset'] = el; }}
                       />
                     </div>
                     <div></div>
@@ -1187,72 +1365,92 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
                   </>
                 ) : (
                   <>
-                    <div className="w-full min-h-[60px]">
+                    <div className={`w-full min-h-[60px] transition-opacity duration-300 ${hideOriginalCardId === 'coverDrive' ? 'opacity-0 pointer-events-none' : ''}`}>
                       <CTACard
                         optionKey="coverDrive"
                         title="Cover drive"
                         details={episode.ctaDetails?.coverDrive}
-                        isEnlarged={enlargedCardId === 'coverDrive'}
-                        onEnlarge={() => setEnlargedCardId('coverDrive')}
+                        isEnlarged={false}
+                        isFlipped={flippedCardId === 'coverDrive'}
+                        isBlurred={enlargedCardId !== null && enlargedCardId !== 'coverDrive'}
+                        onEnlarge={() => handleCardEnlarge('coverDrive')}
                         onConfirm={() => {
                           const targetEpisodeId = episode.ctaMapping?.coverDrive;
                           if (onNavigateToEpisode && targetEpisodeId !== undefined && targetEpisodeId !== null && typeof targetEpisodeId === 'number') {
                             setEnlargedCardId(null);
+                            setIsFlipped(false);
+                            setExpandedCardBounds(null);
                             setShowCTAOverlay(false);
                             onNavigateToEpisode(targetEpisodeId);
                           }
                         }}
+                        cardRef={(el) => { cardRefs.current['coverDrive'] = el; }}
                       />
                     </div>
-                    <div className="w-full min-h-[60px]">
+                    <div className={`w-full min-h-[60px] transition-opacity duration-300 ${hideOriginalCardId === 'pullShot' ? 'opacity-0 pointer-events-none' : ''}`}>
                       <CTACard
                         optionKey="pullShot"
                         title="Pull shot"
                         details={episode.ctaDetails?.pullShot}
-                        isEnlarged={enlargedCardId === 'pullShot'}
-                        onEnlarge={() => setEnlargedCardId('pullShot')}
+                        isEnlarged={false}
+                        isFlipped={flippedCardId === 'pullShot'}
+                        isBlurred={enlargedCardId !== null && enlargedCardId !== 'pullShot'}
+                        onEnlarge={() => handleCardEnlarge('pullShot')}
                         onConfirm={() => {
                           const targetEpisodeId = episode.ctaMapping?.pullShot;
                           if (onNavigateToEpisode && targetEpisodeId !== undefined && targetEpisodeId !== null && typeof targetEpisodeId === 'number') {
                             setEnlargedCardId(null);
+                            setIsFlipped(false);
+                            setExpandedCardBounds(null);
                             setShowCTAOverlay(false);
                             onNavigateToEpisode(targetEpisodeId);
                           }
                         }}
+                        cardRef={(el) => { cardRefs.current['pullShot'] = el; }}
                       />
                     </div>
-                    <div className="w-full min-h-[60px]">
+                    <div className={`w-full min-h-[60px] transition-opacity duration-300 ${hideOriginalCardId === 'stepOut' ? 'opacity-0 pointer-events-none' : ''}`}>
                       <CTACard
                         optionKey="stepOut"
                         title="Step out"
                         details={episode.ctaDetails?.stepOut}
-                        isEnlarged={enlargedCardId === 'stepOut'}
-                        onEnlarge={() => setEnlargedCardId('stepOut')}
+                        isEnlarged={false}
+                        isFlipped={flippedCardId === 'stepOut'}
+                        isBlurred={enlargedCardId !== null && enlargedCardId !== 'stepOut'}
+                        onEnlarge={() => handleCardEnlarge('stepOut')}
                         onConfirm={() => {
                           const targetEpisodeId = episode.ctaMapping?.stepOut;
                           if (onNavigateToEpisode && targetEpisodeId !== undefined && targetEpisodeId !== null && typeof targetEpisodeId === 'number') {
                             setEnlargedCardId(null);
+                            setIsFlipped(false);
+                            setExpandedCardBounds(null);
                             setShowCTAOverlay(false);
                             onNavigateToEpisode(targetEpisodeId);
                           }
                         }}
+                        cardRef={(el) => { cardRefs.current['stepOut'] = el; }}
                       />
                     </div>
-                    <div className="w-full min-h-[60px]">
+                    <div className={`w-full min-h-[60px] transition-opacity duration-300 ${hideOriginalCardId === 'cut' ? 'opacity-0 pointer-events-none' : ''}`}>
                       <CTACard
                         optionKey="cut"
                         title="Cut"
                         details={episode.ctaDetails?.cut}
-                        isEnlarged={enlargedCardId === 'cut'}
-                        onEnlarge={() => setEnlargedCardId('cut')}
+                        isEnlarged={false}
+                        isFlipped={flippedCardId === 'cut'}
+                        isBlurred={enlargedCardId !== null && enlargedCardId !== 'cut'}
+                        onEnlarge={() => handleCardEnlarge('cut')}
                         onConfirm={() => {
                           const targetEpisodeId = episode.ctaMapping?.cut;
                           if (onNavigateToEpisode && targetEpisodeId !== undefined && targetEpisodeId !== null && typeof targetEpisodeId === 'number') {
                             setEnlargedCardId(null);
+                            setIsFlipped(false);
+                            setExpandedCardBounds(null);
                             setShowCTAOverlay(false);
                             onNavigateToEpisode(targetEpisodeId);
                           }
                         }}
+                        cardRef={(el) => { cardRefs.current['cut'] = el; }}
                       />
                     </div>
                   </>
@@ -1262,6 +1460,238 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
         </div>
       )}
 
+      {/* Expanded Card Portal Overlay */}
+      {enlargedCardId && expandedCardBounds && showCTAOverlay && (episode.id === 1 || episode.id === 2 || episode.id === 3) && episode.ctaMapping && (
+        <div 
+          className="fixed inset-0 z-[60] pointer-events-none flex items-center justify-center transition-opacity duration-300"
+          data-expanded-card
+          style={{ opacity: hideOriginalCardId === enlargedCardId ? 1 : 0 }}
+        >
+          {/* Backdrop to make blurred cards visible */}
+          <div className="absolute inset-0 bg-black/20 backdrop-blur-sm pointer-events-none" />
+          <div
+            className="pointer-events-auto"
+            style={{
+              width: expandedCardBounds.width,
+              height: Math.max(expandedCardBounds.height, 200), // Ensure minimum height for content
+              transform: 'scale(2.0)',
+              transition: 'transform 0.4s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.4s ease-out',
+              boxShadow: '0 20px 60px rgba(0, 0, 0, 0.5)',
+            }}
+          >
+            {enlargedCardId === 'professional' && (
+              <CTACard
+                optionKey="professional"
+                title="Need guidance about professional cricket journey"
+                details={episode.ctaDetails?.professional}
+                isEnlarged={true}
+                isFlipped={isFlipped}
+                isBlurred={false}
+                onEnlarge={() => {}}
+                onConfirm={() => {
+                  const targetEpisodeId = episode.ctaMapping?.professional;
+                  if (onNavigateToEpisode && targetEpisodeId !== undefined && targetEpisodeId !== null && typeof targetEpisodeId === 'number') {
+                    setEnlargedCardId(null);
+                    setIsFlipped(false);
+                    setExpandedCardBounds(null);
+                    setShowCTAOverlay(false);
+                    onNavigateToEpisode(targetEpisodeId);
+                  }
+                }}
+              />
+            )}
+            {enlargedCardId === 'speed' && (
+              <CTACard
+                optionKey="speed"
+                title="Speed"
+                details={episode.ctaDetails?.speed}
+                isEnlarged={true}
+                isFlipped={isFlipped}
+                isBlurred={false}
+                onEnlarge={() => {}}
+                onConfirm={() => {
+                  const targetEpisodeId = episode.ctaMapping?.speed;
+                  if (onNavigateToEpisode && targetEpisodeId !== undefined && targetEpisodeId !== null && typeof targetEpisodeId === 'number') {
+                    setEnlargedCardId(null);
+                    setIsFlipped(false);
+                    setExpandedCardBounds(null);
+                    setShowCTAOverlay(false);
+                    onNavigateToEpisode(targetEpisodeId);
+                  }
+                }}
+              />
+            )}
+            {enlargedCardId === 'stamina' && (
+              <CTACard
+                optionKey="stamina"
+                title="Stamina"
+                details={episode.ctaDetails?.stamina}
+                isEnlarged={true}
+                isFlipped={isFlipped}
+                isBlurred={false}
+                onEnlarge={() => {}}
+                onConfirm={() => {
+                  const targetEpisodeId = episode.ctaMapping?.stamina;
+                  if (onNavigateToEpisode && targetEpisodeId !== undefined && targetEpisodeId !== null && typeof targetEpisodeId === 'number') {
+                    setEnlargedCardId(null);
+                    setIsFlipped(false);
+                    setExpandedCardBounds(null);
+                    setShowCTAOverlay(false);
+                    onNavigateToEpisode(targetEpisodeId);
+                  }
+                }}
+              />
+            )}
+            {enlargedCardId === 'shots' && (
+              <CTACard
+                optionKey="shots"
+                title="Shots"
+                details={episode.ctaDetails?.shots}
+                isEnlarged={true}
+                isFlipped={isFlipped}
+                isBlurred={false}
+                onEnlarge={() => {}}
+                onConfirm={() => {
+                  const targetEpisodeId = episode.ctaMapping?.shots;
+                  if (onNavigateToEpisode && targetEpisodeId !== undefined && targetEpisodeId !== null && typeof targetEpisodeId === 'number') {
+                    setEnlargedCardId(null);
+                    setIsFlipped(false);
+                    setExpandedCardBounds(null);
+                    setShowCTAOverlay(false);
+                    onNavigateToEpisode(targetEpisodeId);
+                  }
+                }}
+              />
+            )}
+            {enlargedCardId === 'applicationProcess' && (
+              <CTACard
+                optionKey="applicationProcess"
+                title="Application process"
+                details={episode.ctaDetails?.applicationProcess}
+                isEnlarged={true}
+                isFlipped={isFlipped}
+                isBlurred={false}
+                onEnlarge={() => {}}
+                onConfirm={() => {
+                  const targetEpisodeId = episode.ctaMapping?.applicationProcess;
+                  if (onNavigateToEpisode && targetEpisodeId !== undefined && targetEpisodeId !== null && typeof targetEpisodeId === 'number') {
+                    setEnlargedCardId(null);
+                    setIsFlipped(false);
+                    setExpandedCardBounds(null);
+                    setShowCTAOverlay(false);
+                    onNavigateToEpisode(targetEpisodeId);
+                  }
+                }}
+              />
+            )}
+            {enlargedCardId === 'mindset' && (
+              <CTACard
+                optionKey="mindset"
+                title="Mindset"
+                details={episode.ctaDetails?.mindset}
+                isEnlarged={true}
+                isFlipped={isFlipped}
+                isBlurred={false}
+                onEnlarge={() => {}}
+                onConfirm={() => {
+                  const targetEpisodeId = episode.ctaMapping?.mindset;
+                  if (onNavigateToEpisode && targetEpisodeId !== undefined && targetEpisodeId !== null && typeof targetEpisodeId === 'number') {
+                    setEnlargedCardId(null);
+                    setIsFlipped(false);
+                    setExpandedCardBounds(null);
+                    setShowCTAOverlay(false);
+                    onNavigateToEpisode(targetEpisodeId);
+                  }
+                }}
+              />
+            )}
+            {enlargedCardId === 'coverDrive' && (
+              <CTACard
+                optionKey="coverDrive"
+                title="Cover drive"
+                details={episode.ctaDetails?.coverDrive}
+                isEnlarged={true}
+                isFlipped={isFlipped}
+                isBlurred={false}
+                onEnlarge={() => {}}
+                onConfirm={() => {
+                  const targetEpisodeId = episode.ctaMapping?.coverDrive;
+                  if (onNavigateToEpisode && targetEpisodeId !== undefined && targetEpisodeId !== null && typeof targetEpisodeId === 'number') {
+                    setEnlargedCardId(null);
+                    setIsFlipped(false);
+                    setExpandedCardBounds(null);
+                    setShowCTAOverlay(false);
+                    onNavigateToEpisode(targetEpisodeId);
+                  }
+                }}
+              />
+            )}
+            {enlargedCardId === 'pullShot' && (
+              <CTACard
+                optionKey="pullShot"
+                title="Pull shot"
+                details={episode.ctaDetails?.pullShot}
+                isEnlarged={true}
+                isFlipped={isFlipped}
+                isBlurred={false}
+                onEnlarge={() => {}}
+                onConfirm={() => {
+                  const targetEpisodeId = episode.ctaMapping?.pullShot;
+                  if (onNavigateToEpisode && targetEpisodeId !== undefined && targetEpisodeId !== null && typeof targetEpisodeId === 'number') {
+                    setEnlargedCardId(null);
+                    setIsFlipped(false);
+                    setExpandedCardBounds(null);
+                    setShowCTAOverlay(false);
+                    onNavigateToEpisode(targetEpisodeId);
+                  }
+                }}
+              />
+            )}
+            {enlargedCardId === 'stepOut' && (
+              <CTACard
+                optionKey="stepOut"
+                title="Step out"
+                details={episode.ctaDetails?.stepOut}
+                isEnlarged={true}
+                isFlipped={isFlipped}
+                isBlurred={false}
+                onEnlarge={() => {}}
+                onConfirm={() => {
+                  const targetEpisodeId = episode.ctaMapping?.stepOut;
+                  if (onNavigateToEpisode && targetEpisodeId !== undefined && targetEpisodeId !== null && typeof targetEpisodeId === 'number') {
+                    setEnlargedCardId(null);
+                    setIsFlipped(false);
+                    setExpandedCardBounds(null);
+                    setShowCTAOverlay(false);
+                    onNavigateToEpisode(targetEpisodeId);
+                  }
+                }}
+              />
+            )}
+            {enlargedCardId === 'cut' && (
+              <CTACard
+                optionKey="cut"
+                title="Cut"
+                details={episode.ctaDetails?.cut}
+                isEnlarged={true}
+                isFlipped={isFlipped}
+                isBlurred={false}
+                onEnlarge={() => {}}
+                onConfirm={() => {
+                  const targetEpisodeId = episode.ctaMapping?.cut;
+                  if (onNavigateToEpisode && targetEpisodeId !== undefined && targetEpisodeId !== null && typeof targetEpisodeId === 'number') {
+                    setEnlargedCardId(null);
+                    setIsFlipped(false);
+                    setExpandedCardBounds(null);
+                    setShowCTAOverlay(false);
+                    onNavigateToEpisode(targetEpisodeId);
+                  }
+                }}
+              />
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Sidebar */}
       <div
