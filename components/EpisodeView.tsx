@@ -315,6 +315,12 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
   const lastTapTime = useRef<number>(0);
   const lastTapCardId = useRef<string | null>(null);
   
+  // Transition animation state
+  const [isTransitioning, setIsTransitioning] = useState(false);
+  const [transitionDirection, setTransitionDirection] = useState<'up' | 'down' | null>(null);
+  const previousEpisodeIdRef = useRef<number | null>(null);
+  const transitionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  
   // Analytics tracking
   const analyticsRecordId = useRef<string | null>(null);
   const progressIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -371,6 +377,43 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
   };
   
   const previousEpisodeId = getPreviousEpisodeId();
+
+  // Handle episode transitions with animation
+  useEffect(() => {
+    // Check if episode changed
+    if (previousEpisodeIdRef.current !== null && previousEpisodeIdRef.current !== episode.id) {
+      // Determine direction based on episode ID change
+      const direction = episode.id > previousEpisodeIdRef.current ? 'up' : 'down';
+      
+      // Clear any existing timeout
+      if (transitionTimeoutRef.current) {
+        clearTimeout(transitionTimeoutRef.current);
+      }
+      
+      // Start transition - new content slides in from opposite direction
+      setIsTransitioning(true);
+      // Set opposite direction so new content starts off-screen and slides in
+      setTransitionDirection(direction === 'up' ? 'down' : 'up');
+      
+      // Immediately animate to center (slide in)
+      requestAnimationFrame(() => {
+        setTransitionDirection(null);
+        // After animation completes, reset transition state
+        transitionTimeoutRef.current = setTimeout(() => {
+          setIsTransitioning(false);
+        }, 400); // Match animation duration
+      });
+    }
+    
+    // Update previous episode ID
+    previousEpisodeIdRef.current = episode.id;
+    
+    return () => {
+      if (transitionTimeoutRef.current) {
+        clearTimeout(transitionTimeoutRef.current);
+      }
+    };
+  }, [episode.id]);
 
   // Auto-hide overlay after 3 seconds (but not when paused)
   useEffect(() => {
@@ -433,7 +476,11 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
         setIsOverlayVisible(false);
       }, 3000);
     }
-  }, [isPaused]);
+    // Show CTA on tap if applicable
+    if ((episode.id === 1 || episode.id === 2 || episode.id === 3) && episode.ctaMapping && !showCTAOverlay && enlargedCardId === null) {
+      setShowCTAOverlay(true);
+    }
+  }, [isPaused, episode.id, episode.ctaMapping, showCTAOverlay, enlargedCardId]);
 
   // End video session helper
   const endVideoSession = useCallback(async (isCompleted: boolean = false) => {
@@ -746,18 +793,18 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
 
   // Vertical swipe detection for episode navigation
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
-    // Don't handle swipe if CTA overlay is visible or card is enlarged
-    if (showCTAOverlay || enlargedCardId !== null) return;
+    // Don't handle swipe if card is enlarged
+    if (enlargedCardId !== null) return;
     
     const touch = e.touches[0];
     swipeStartY.current = touch.clientY;
     swipeStartX.current = touch.clientX;
     swipeStartTime.current = Date.now();
-  }, [showCTAOverlay, enlargedCardId]);
+  }, [enlargedCardId]);
 
   const handleTouchMove = useCallback((e: React.TouchEvent) => {
     // Prevent default scrolling when swiping
-    if (showCTAOverlay || enlargedCardId !== null) return;
+    if (enlargedCardId !== null) return;
     
     // If we have a valid swipe start, prevent default to allow swipe detection
     if (swipeStartY.current !== null && swipeStartX.current !== null) {
@@ -765,40 +812,59 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
       const deltaY = Math.abs(touch.clientY - swipeStartY.current);
       const deltaX = Math.abs(touch.clientX - swipeStartX.current);
       
-      // If vertical movement is greater than horizontal, prevent default scroll
-      if (deltaY > deltaX && deltaY > 10) {
+      // If significant movement in any direction, prevent default to allow gesture detection
+      if (deltaY > 10 || deltaX > 10) {
         e.preventDefault();
       }
     }
-  }, [showCTAOverlay, enlargedCardId]);
+  }, [enlargedCardId]);
 
   const handleTouchEnd = useCallback((e: React.TouchEvent) => {
-    // Don't handle swipe if CTA overlay is visible or card is enlarged
-    if (showCTAOverlay || enlargedCardId !== null) {
+    // Don't handle swipe if card is enlarged
+    if (enlargedCardId !== null) {
       swipeStartY.current = null;
       swipeStartX.current = null;
       swipeStartTime.current = null;
       return;
     }
 
+    const hasCTAMapping = (episode.id === 1 || episode.id === 2 || episode.id === 3) && episode.ctaMapping;
+
     if (swipeStartY.current === null || swipeStartX.current === null || swipeStartTime.current === null) {
+      // Check for tap gesture (no movement) to show CTA
+      if (hasCTAMapping && !showCTAOverlay) {
+        setShowCTAOverlay(true);
+      }
       return;
     }
 
     const touch = e.changedTouches[0];
     const deltaY = swipeStartY.current - touch.clientY; // Positive = swipe up, Negative = swipe down
-    const deltaX = Math.abs(swipeStartX.current - touch.clientX);
+    const deltaX = swipeStartX.current - touch.clientX; // Positive = swipe left, Negative = swipe right
     const deltaTime = Date.now() - swipeStartTime.current;
-    const distance = Math.abs(deltaY);
+    const distanceY = Math.abs(deltaY);
+    const distanceX = Math.abs(deltaX);
+    const totalDistance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
 
-    // Check if this is a vertical swipe (vertical movement > horizontal)
-    if (distance > deltaX && distance > 50 && deltaTime < 500) {
-      if (deltaY > 0) {
-        // Swipe UP = Next episode
-        onNextEpisode();
-      } else {
-        // Swipe DOWN = Previous episode
-        handlePreviousEpisode();
+    // Check if this is a gesture (minimum 30px movement, within 500ms)
+    if (totalDistance > 30 && deltaTime < 500) {
+      // For episodes with CTA mapping, show CTA on any gesture (left, right, up, down)
+      if (hasCTAMapping && !showCTAOverlay) {
+        setShowCTAOverlay(true);
+      } else if (!hasCTAMapping && distanceY > distanceX && distanceY > 50) {
+        // Only handle vertical navigation for episodes without CTA mapping
+        if (deltaY > 0) {
+          // Swipe UP = Next episode
+          onNextEpisode();
+        } else {
+          // Swipe DOWN = Previous episode
+          handlePreviousEpisode();
+        }
+      }
+    } else if (totalDistance <= 30 && deltaTime < 300) {
+      // Small movement or tap - show CTA if applicable
+      if (hasCTAMapping && !showCTAOverlay) {
+        setShowCTAOverlay(true);
       }
     }
 
@@ -806,7 +872,7 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
     swipeStartY.current = null;
     swipeStartX.current = null;
     swipeStartTime.current = null;
-  }, [showCTAOverlay, enlargedCardId, onNextEpisode, handlePreviousEpisode]);
+  }, [enlargedCardId, episode.id, episode.ctaMapping, showCTAOverlay, onNextEpisode, handlePreviousEpisode]);
 
   // Handle card enlargement with flip - flip happens first on original card, then enlarge
   const handleCardEnlarge = useCallback((cardId: string) => {
@@ -853,11 +919,8 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
     }
   }, [enlargedCardId]);
 
-  // Gesture detection for CTA trigger (any direction when paused/finished)
+  // Gesture detection for CTA trigger (any direction while playing)
   const handleGestureDetection = useCallback((e: React.TouchEvent) => {
-    // Only trigger CTA on gesture when paused or ended
-    if (!isPaused && !isEnded) return;
-    
     // Don't trigger if CTA is already visible or card is enlarged
     if (showCTAOverlay || enlargedCardId !== null) return;
     
@@ -882,24 +945,43 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
       swipeStartX.current = null;
       swipeStartTime.current = null;
     }
-  }, [isPaused, isEnded, showCTAOverlay, enlargedCardId, episode.id, episode.ctaMapping]);
+  }, [showCTAOverlay, enlargedCardId, episode.id, episode.ctaMapping]);
+
+  // Calculate transform for transition animation
+  const getTransform = () => {
+    if (!isTransitioning || !transitionDirection) {
+      return 'translateY(0)';
+    }
+    // Slide content out in the direction of navigation
+    return transitionDirection === 'up' 
+      ? 'translateY(-100%)' 
+      : 'translateY(100%)';
+  };
 
   return (
     <div 
       ref={containerRef} 
-      className="fixed inset-0 bg-black z-[500]"
+      className="fixed inset-0 bg-black z-[500] overflow-hidden"
       onClick={handleVideoTap}
       onTouchStart={(e) => {
-        // Gesture detection for CTA trigger
-        if (isPaused || isEnded) {
-          handleGestureDetection(e);
-        }
+        // Gesture detection for CTA trigger (works while playing)
+        handleGestureDetection(e);
         // Vertical swipe detection
         handleTouchStart(e);
       }}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
     >
+      {/* Animated content wrapper */}
+      <div
+        key={episode.id}
+        className="absolute inset-0 w-full h-full"
+        style={{
+          transform: getTransform(),
+          transition: 'transform 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
+          willChange: isTransitioning ? 'transform' : 'auto',
+        }}
+      >
       {/* Video */}
       <video
         ref={videoRef}
@@ -1768,6 +1850,7 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
           animation: borderGlow 2s ease-in-out infinite;
         }
       `}</style>
+      </div>
     </div>
   );
 };
