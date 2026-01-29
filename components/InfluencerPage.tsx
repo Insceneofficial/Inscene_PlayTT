@@ -306,6 +306,17 @@ const ReelItem: React.FC<{
     }
   }, []);
 
+  // Cleanup: Ensure video is paused and muted when component unmounts
+  React.useEffect(() => {
+    return () => {
+      const video = videoRef.current;
+      if (video) {
+        video.pause();
+        video.muted = true;
+      }
+    };
+  }, []);
+
   // Pause video when chat opens, resume when chat closes
   React.useEffect(() => {
     const video = videoRef.current;
@@ -511,6 +522,11 @@ const ReelItem: React.FC<{
           clearInterval(progressIntervalRef.current);
           progressIntervalRef.current = null;
         }
+        // Ensure video is paused and muted on cleanup
+        if (video) {
+          video.pause();
+          video.muted = true;
+        }
         // Cleanup video event listeners and timeout
         if (fallbackTimeout) {
           clearTimeout(fallbackTimeout);
@@ -523,7 +539,9 @@ const ReelItem: React.FC<{
         }
       };
     } else {
+      // When video becomes inactive, pause, mute, and stop it completely
       video.pause();
+      video.muted = true;
       video.preload = "none";
       endVideoSession(false);
       
@@ -531,6 +549,11 @@ const ReelItem: React.FC<{
         if (progressIntervalRef.current) {
           clearInterval(progressIntervalRef.current);
           progressIntervalRef.current = null;
+        }
+        // Ensure video is fully stopped on cleanup
+        if (video) {
+          video.pause();
+          video.muted = true;
         }
       };
     }

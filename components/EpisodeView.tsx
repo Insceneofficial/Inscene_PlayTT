@@ -13,6 +13,8 @@ interface EpisodeViewProps {
   onExit: () => void;
   onNavigateToEpisode?: (episodeId: number) => void;
   isChatOpen?: boolean;
+  containerClassName?: string;
+  preventAutoplay?: boolean;
 }
 
 const EpisodeView: React.FC<EpisodeViewProps> = ({
@@ -25,6 +27,8 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
   onExit,
   onNavigateToEpisode,
   isChatOpen = false,
+  containerClassName = '',
+  preventAutoplay = false,
 }) => {
   const navigate = useNavigate();
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -303,6 +307,53 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
     }
   }, []);
 
+  // Aggressively stop video when preventAutoplay is true (during transitions)
+  useEffect(() => {
+    if (preventAutoplay && videoRef.current) {
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/ac7c5e46-64d1-400e-8ce5-b517901614ef',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'EpisodeView.tsx:311',message:'Stopping video due to preventAutoplay',data:{episodeId:episode.id,paused:videoRef.current?.paused,muted:videoRef.current?.muted},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+      // #endregion
+      const video = videoRef.current;
+      // Aggressively stop: pause, mute, reset position
+      // Don't call load() as it causes reload and blinking
+      video.pause();
+      video.muted = true;
+      video.currentTime = 0;
+      setIsPaused(true);
+    }
+  }, [preventAutoplay, episode.id]);
+
+  // Continuous check to ensure video stays stopped when preventAutoplay is true
+  useEffect(() => {
+    if (!preventAutoplay) return;
+    
+    const interval = setInterval(() => {
+      const video = videoRef.current;
+      if (video && (!video.paused || !video.muted)) {
+        video.pause();
+        video.muted = true;
+        if (video.currentTime > 0) {
+          video.currentTime = 0;
+        }
+      }
+    }, 100); // Check every 100ms during transition
+    
+    return () => clearInterval(interval);
+  }, [preventAutoplay]);
+
+  // Cleanup: Pause video when component unmounts
+  useEffect(() => {
+    return () => {
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/ac7c5e46-64d1-400e-8ce5-b517901614ef',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'EpisodeView.tsx:310',message:'Component unmounting - pausing video',data:{episodeId:episode.id,paused:videoRef.current?.paused},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+      // #endregion
+      if (videoRef.current) {
+        videoRef.current.pause();
+        videoRef.current.muted = true;
+      }
+    };
+  }, []);
+
   // Video lifecycle management
   useEffect(() => {
     const video = videoRef.current;
@@ -328,6 +379,21 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
     setProgress(0);
     setCurrentTime(0);
     setDuration(0);
+    
+    // Don't reset loading state if video is already loaded (prevents blink during transitions)
+    if (video.readyState >= 2) {
+      setLoading(false);
+    }
+
+    // If preventAutoplay is true, ensure video is paused and muted
+    if (preventAutoplay) {
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/ac7c5e46-64d1-400e-8ce5-b517901614ef',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'EpisodeView.tsx:335',message:'Pausing video in lifecycle useEffect due to preventAutoplay',data:{episodeId:episode.id},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+      // #endregion
+      video.pause();
+      video.muted = true;
+      setIsPaused(true);
+    }
 
     // Start analytics tracking
     if (!analyticsRecordId.current) {
@@ -558,7 +624,7 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
   return (
     <div 
       ref={containerRef} 
-      className="fixed inset-0 bg-black z-[500]"
+      className={`fixed inset-0 bg-black z-[500] ${containerClassName}`}
       onClick={handleVideoTap}
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
@@ -576,16 +642,48 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
           }
         }}
         onCanPlay={() => {
-          if (!hasAttemptedAutoplay.current && videoRef.current) {
+          // #region agent log
+          fetch('http://127.0.0.1:7242/ingest/ac7c5e46-64d1-400e-8ce5-b517901614ef',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'EpisodeView.tsx:580',message:'onCanPlay triggered',data:{episodeId:episode.id,isMuted,hasAttemptedAutoplay:hasAttemptedAutoplay.current,paused:videoRef.current?.paused,muted:videoRef.current?.muted,containerClassName,preventAutoplay},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A,B'})}).catch(()=>{});
+          // #endregion
+          if (!hasAttemptedAutoplay.current && videoRef.current && !preventAutoplay) {
             videoRef.current.play().then(() => {
+              // #region agent log
+              fetch('http://127.0.0.1:7242/ingest/ac7c5e46-64d1-400e-8ce5-b517901614ef',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'EpisodeView.tsx:583',message:'Video play success',data:{episodeId:episode.id,muted:videoRef.current?.muted},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A,B'})}).catch(()=>{});
+              // #endregion
               setIsPaused(false);
             }).catch(() => {
               setShowPlayButton(true);
               setIsPaused(true);
             });
+          } else if (preventAutoplay && videoRef.current) {
+            // #region agent log
+            fetch('http://127.0.0.1:7242/ingest/ac7c5e46-64d1-400e-8ce5-b517901614ef',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'EpisodeView.tsx:592',message:'Autoplay prevented',data:{episodeId:episode.id},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+            // #endregion
+            const video = videoRef.current;
+            video.pause();
+            video.muted = true;
+            video.currentTime = 0;
+            // Don't call load() as it causes reload and blinking
+            setIsPaused(true);
           }
         }}
         onPlaying={() => {
+          // #region agent log
+          fetch('http://127.0.0.1:7242/ingest/ac7c5e46-64d1-400e-8ce5-b517901614ef',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'EpisodeView.tsx:604',message:'Video playing',data:{episodeId:episode.id,isMuted,muted:videoRef.current?.muted,containerClassName,preventAutoplay},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A,B,C'})}).catch(()=>{});
+          // #endregion
+          // If preventAutoplay is true, aggressively stop the video immediately
+          if (preventAutoplay && videoRef.current) {
+            // #region agent log
+            fetch('http://127.0.0.1:7242/ingest/ac7c5e46-64d1-400e-8ce5-b517901614ef',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'EpisodeView.tsx:607',message:'Stopping video in onPlaying due to preventAutoplay',data:{episodeId:episode.id},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+            // #endregion
+            const video = videoRef.current;
+            video.pause();
+            video.muted = true;
+            video.currentTime = 0;
+            // Don't call load() as it causes reload and blinking
+            setIsPaused(true);
+            return;
+          }
           setLoading(false);
           setShowPlayButton(false);
           setIsPaused(false);

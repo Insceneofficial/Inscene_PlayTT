@@ -222,6 +222,17 @@ const ReelItem: React.FC<{
       video.setAttribute('playsinline', 'true');
     }
   }, []);
+
+  // Cleanup: Ensure video is paused and muted when component unmounts
+  useEffect(() => {
+    return () => {
+      const video = videoRef.current;
+      if (video) {
+        video.pause();
+        video.muted = true;
+      }
+    };
+  }, []);
   
   // Analytics tracking refs
   const analyticsRecordId = useRef<string | null>(null);
@@ -693,6 +704,11 @@ const ReelItem: React.FC<{
           clearInterval(progressIntervalRef.current);
           progressIntervalRef.current = null;
         }
+        // Ensure video is paused and muted on cleanup
+        if (video) {
+          video.pause();
+          video.muted = true;
+        }
         // Cleanup video event listeners and timeout
         if (fallbackTimeout) {
           clearTimeout(fallbackTimeout);
@@ -705,7 +721,9 @@ const ReelItem: React.FC<{
         }
       };
     } else {
+      // When video becomes inactive, pause, mute, and stop it completely
       video.pause();
+      video.muted = true;
       video.preload = "none";
       
       // End tracking when scrolling away (isActive became false)
@@ -716,6 +734,11 @@ const ReelItem: React.FC<{
         if (progressIntervalRef.current) {
           clearInterval(progressIntervalRef.current);
           progressIntervalRef.current = null;
+        }
+        // Ensure video is fully stopped on cleanup
+        if (video) {
+          video.pause();
+          video.muted = true;
         }
       };
     }
@@ -1232,6 +1255,9 @@ const AppContent: React.FC = () => {
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [isWaitlistModalOpen, setIsWaitlistModalOpen] = useState(false);
   const [ctaNavigatedEpisodes, setCtaNavigatedEpisodes] = useState<Set<number>>(new Set());
+  const [isTransitioning, setIsTransitioning] = useState(false);
+  const [transitioningToEpisodeId, setTransitioningToEpisodeId] = useState<number | null>(null);
+  const [previousEpisode, setPreviousEpisode] = useState<any>(null);
   
   const [conversations, setConversations] = useState<Record<string, ConversationHistoryEntry>>({});
   const [typingStatus, setTypingStatus] = useState<Record<string, boolean>>({});
@@ -1464,9 +1490,6 @@ const AppContent: React.FC = () => {
       return;
     }
     
-    // Add episode to CTA-navigated set so it's included in filtered list
-    setCtaNavigatedEpisodes(prev => new Set(prev).add(episodeId));
-    
     // Filter episodes based on path choice (same logic as in render, but including CTA-navigated episodes)
     const getFilteredEpisodes = (episodes: any[], seriesId: string, ctaEpisodes: Set<number>): any[] => {
       if (typeof window === 'undefined') return episodes;
@@ -1498,20 +1521,66 @@ const AppContent: React.FC = () => {
       return filtered;
     };
     
-    const filteredEpisodes = getFilteredEpisodes(selectedSeries.episodes, selectedSeries.id, ctaNavigatedEpisodes);
+    // Get current episode before transition
+    const currentFilteredEpisodes = getFilteredEpisodes(selectedSeries.episodes, selectedSeries.id, ctaNavigatedEpisodes);
+    const currentEpisode = currentFilteredEpisodes[activeIdx] || currentFilteredEpisodes[0];
+    
+    // Add episode to CTA-navigated set so it's included in filtered list
+    const newCtaSet = new Set(ctaNavigatedEpisodes).add(episodeId);
+    setCtaNavigatedEpisodes(newCtaSet);
+    
+    // Get filtered episodes with new CTA episode included
+    const filteredEpisodes = getFilteredEpisodes(selectedSeries.episodes, selectedSeries.id, newCtaSet);
     const targetIndex = filteredEpisodes.findIndex((ep: any) => ep.id === episodeId);
     
-    if (targetIndex !== -1) {
-      setActiveIdx(targetIndex);
-    } else {
-      // If still not found, try adding it again and recalculate
-      const newCtaSet = new Set(ctaNavigatedEpisodes).add(episodeId);
-      const newFiltered = getFilteredEpisodes(selectedSeries.episodes, selectedSeries.id, newCtaSet);
-      const newTargetIndex = newFiltered.findIndex((ep: any) => ep.id === episodeId);
-      if (newTargetIndex !== -1) {
-        setActiveIdx(newTargetIndex);
-      }
+    if (targetIndex === -1) {
+      console.warn('[handleNavigateToEpisode] Target episode not found in filtered list:', episodeId);
+      return;
     }
+    
+    // Start transition: store previous episode and set transition state
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/ac7c5e46-64d1-400e-8ce5-b517901614ef',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'App.tsx:1518',message:'Transition starting',data:{currentEpisodeId:currentEpisode?.id,targetEpisodeId:episodeId,isMuted},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A,B,C'})}).catch(()=>{});
+    // #endregion
+    // Aggressively stop all videos on the page before starting transition to prevent double audio
+    const allVideos = document.querySelectorAll('video');
+    allVideos.forEach((video) => {
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/ac7c5e46-64d1-400e-8ce5-b517901614ef',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'App.tsx:1523',message:'Stopping video before transition',data:{paused:video.paused,muted:video.muted},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+      // #endregion
+      // Aggressively stop the video: pause, mute, reset position
+      // Don't call load() as it causes reload and blinking
+      video.pause();
+      video.muted = true;
+      video.currentTime = 0;
+    });
+    setPreviousEpisode(currentEpisode);
+    setIsTransitioning(true);
+    setTransitioningToEpisodeId(episodeId);
+    
+    // After animation completes (550ms), update activeIdx and clear transition state
+    setTimeout(() => {
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/ac7c5e46-64d1-400e-8ce5-b517901614ef',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'App.tsx:1527',message:'Transition ending',data:{targetIndex},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A,B,C'})}).catch(()=>{});
+      // #endregion
+      // Before updating state, ensure all videos are stopped except the new active one
+      // Use requestAnimationFrame to ensure smooth transition without blink
+      requestAnimationFrame(() => {
+        const allVideos = document.querySelectorAll('video');
+        allVideos.forEach((video, index) => {
+          // Stop all videos - the new active one will be started by its useEffect
+          video.pause();
+          video.muted = true;
+        });
+        // Update state in next frame to prevent double render
+        requestAnimationFrame(() => {
+          setActiveIdx(targetIndex);
+          setIsTransitioning(false);
+          setTransitioningToEpisodeId(null);
+          setPreviousEpisode(null);
+        });
+      });
+    }, 550);
   };
 
   const handleChatUpdate = (char: string, messages: any[]) => {
@@ -1948,6 +2017,100 @@ const AppContent: React.FC = () => {
         
         if (!currentEpisode) return null;
         
+        // During transition, render both old and new videos
+        if (isTransitioning && previousEpisode && transitioningToEpisodeId) {
+          const targetEpisode = selectedSeries.episodes.find((ep: any) => ep.id === transitioningToEpisodeId);
+          
+          if (!targetEpisode) {
+            // Fallback to normal rendering if target episode not found
+            return (
+              <EpisodeView
+                episode={currentEpisode}
+                series={selectedSeries}
+                isMuted={isMuted}
+                toggleMute={() => setIsMuted(!isMuted)}
+                onEnterStory={(char, intro, hook, entryPoint) => handleChatInit({
+                  char, intro, hook, 
+                  isFromHistory: false, 
+                  isWhatsApp: false,
+                  entryPoint,
+                  seriesId: selectedSeries.id,
+                  seriesTitle: selectedSeries.title,
+                  episodeId: currentEpisode.id,
+                  episodeLabel: currentEpisode.label
+                })}
+                onNextEpisode={handleNext}
+                onExit={() => {
+                  setSelectedSeries(null);
+                  setChatData(null);
+                }}
+                onNavigateToEpisode={handleNavigateToEpisode}
+                isChatOpen={!!chatData}
+              />
+            );
+          }
+          
+          // #region agent log
+          fetch('http://127.0.0.1:7242/ingest/ac7c5e46-64d1-400e-8ce5-b517901614ef',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'App.tsx:2005',message:'Rendering dual videos during transition',data:{previousEpisodeId:previousEpisode.id,targetEpisodeId:targetEpisode.id,isMuted},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A,B,C'})}).catch(()=>{});
+          // #endregion
+          return (
+            <div className="fixed inset-0 bg-black z-[500] overflow-hidden">
+              {/* Old video - sliding up and out */}
+              <EpisodeView
+                episode={previousEpisode}
+                series={selectedSeries}
+                isMuted={true}
+                toggleMute={() => setIsMuted(!isMuted)}
+                onEnterStory={(char, intro, hook, entryPoint) => handleChatInit({
+                  char, intro, hook, 
+                  isFromHistory: false, 
+                  isWhatsApp: false,
+                  entryPoint,
+                  seriesId: selectedSeries.id,
+                  seriesTitle: selectedSeries.title,
+                  episodeId: previousEpisode.id,
+                  episodeLabel: previousEpisode.label
+                })}
+                onNextEpisode={handleNext}
+                onExit={() => {
+                  setSelectedSeries(null);
+                  setChatData(null);
+                }}
+                onNavigateToEpisode={handleNavigateToEpisode}
+                isChatOpen={!!chatData}
+                containerClassName="video-transition-out"
+                preventAutoplay={true}
+              />
+              {/* New video - sliding in from below */}
+              <EpisodeView
+                episode={targetEpisode}
+                series={selectedSeries}
+                isMuted={isMuted}
+                toggleMute={() => setIsMuted(!isMuted)}
+                onEnterStory={(char, intro, hook, entryPoint) => handleChatInit({
+                  char, intro, hook, 
+                  isFromHistory: false, 
+                  isWhatsApp: false,
+                  entryPoint,
+                  seriesId: selectedSeries.id,
+                  seriesTitle: selectedSeries.title,
+                  episodeId: targetEpisode.id,
+                  episodeLabel: targetEpisode.label
+                })}
+                onNextEpisode={handleNext}
+                onExit={() => {
+                  setSelectedSeries(null);
+                  setChatData(null);
+                }}
+                onNavigateToEpisode={handleNavigateToEpisode}
+                isChatOpen={!!chatData}
+                containerClassName="video-transition-in"
+              />
+            </div>
+          );
+        }
+        
+        // Normal rendering - single video
         return (
           <EpisodeView
             episode={currentEpisode}
@@ -2170,6 +2333,20 @@ const AppContent: React.FC = () => {
         .dot-bounce-1 { animation: dotBounce 1s ease-in-out infinite; }
         .dot-bounce-2 { animation: dotBounce 1s ease-in-out infinite 0.15s; }
         .dot-bounce-3 { animation: dotBounce 1s ease-in-out infinite 0.3s; }
+        @keyframes slideUpOut {
+          from { transform: translateY(0); }
+          to { transform: translateY(-100%); }
+        }
+        @keyframes slideUpIn {
+          from { transform: translateY(100%); }
+          to { transform: translateY(0); }
+        }
+        .video-transition-out {
+          animation: slideUpOut 0.55s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+        }
+        .video-transition-in {
+          animation: slideUpIn 0.55s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+        }
         .reel-snap-container { scroll-behavior: smooth; }
         .scrub-range { -webkit-appearance: none; }
         .scrub-range::-webkit-slider-thumb { -webkit-appearance: none; width: 12px; height: 12px; background: white; border-radius: 50%; box-shadow: 0 1px 4px rgba(0,0,0,0.2); cursor: pointer; }
