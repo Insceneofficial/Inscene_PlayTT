@@ -210,9 +210,13 @@ const ReelItem: React.FC<{
   const [isPaused, setIsPaused] = useState(false);
   const lastEpisodeIdRef = useRef<string | number | null>(null);
   
-  // Vertical swipe detection state
+  // Swipe detection state for all directions
   const swipeStartY = useRef<number | null>(null);
+  const swipeStartX = useRef<number | null>(null);
   const swipeStartTime = useRef<number | null>(null);
+  const [showOptionsOverlay, setShowOptionsOverlay] = useState(false);
+  const [isSlidingDown, setIsSlidingDown] = useState(false);
+  const hasTriggeredSlideRef = useRef(false);
   
   // Debug: Log on every render
   useEffect(() => {
@@ -499,6 +503,9 @@ const ReelItem: React.FC<{
       if (isNewEpisode) {
         video.currentTime = 0;
         lastEpisodeIdRef.current = episode.id;
+        // Reset slide animation state for new episode
+        setIsSlidingDown(false);
+        hasTriggeredSlideRef.current = false;
       }
       
       video.preload = "auto";
@@ -730,7 +737,24 @@ const ReelItem: React.FC<{
     if (videoRef.current) {
       setCurrentTime(videoRef.current.currentTime);
       setDuration(videoRef.current.duration);
-      setProgress((videoRef.current.currentTime / videoRef.current.duration) * 100 || 0);
+      const newProgress = (videoRef.current.currentTime / videoRef.current.duration) * 100 || 0;
+      setProgress(newProgress);
+      
+      // Auto-advance to next episode when progress reaches 100% (like Instagram reels)
+      if (newProgress >= 99.9 && !isEnded && isActive && !hasTriggeredSlideRef.current) {
+        hasTriggeredSlideRef.current = true;
+        // Trigger slide-down animation
+        setIsSlidingDown(true);
+        // After animation completes, scroll to next episode
+        setTimeout(() => {
+          onNextEpisode();
+          // Reset after a delay to allow for next episode
+          setTimeout(() => {
+            setIsSlidingDown(false);
+            hasTriggeredSlideRef.current = false;
+          }, 100);
+        }, 500); // 500ms animation duration
+      }
     }
   };
 
@@ -755,47 +779,70 @@ const ReelItem: React.FC<{
     pauseCountRef.current += 1;
   };
 
-  // Vertical swipe detection for episode navigation
+  // Multi-directional swipe detection for options overlay and episode navigation
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
     const touch = e.touches[0];
     swipeStartY.current = touch.clientY;
+    swipeStartX.current = touch.clientX;
     swipeStartTime.current = Date.now();
   }, []);
 
   const handleTouchMove = useCallback((e: React.TouchEvent) => {
-    if (swipeStartY.current !== null) {
+    if (swipeStartY.current !== null && swipeStartX.current !== null) {
       const touch = e.touches[0];
       const deltaY = Math.abs(touch.clientY - swipeStartY.current);
+      const deltaX = Math.abs(touch.clientX - swipeStartX.current);
       
-      // If significant vertical movement, prevent default scroll to allow swipe detection
-      if (deltaY > 10) {
+      // If significant movement in any direction, prevent default scroll to allow swipe detection
+      if (deltaY > 10 || deltaX > 10) {
         e.preventDefault();
       }
     }
   }, []);
 
   const handleTouchEnd = useCallback((e: React.TouchEvent) => {
-    if (swipeStartY.current === null || swipeStartTime.current === null) {
+    if (swipeStartY.current === null || swipeStartX.current === null || swipeStartTime.current === null) {
       return;
     }
 
     const touch = e.changedTouches[0];
     const deltaY = swipeStartY.current - touch.clientY; // Positive = swipe up, Negative = swipe down
+    const deltaX = swipeStartX.current - touch.clientX; // Positive = swipe left, Negative = swipe right
     const deltaTime = Date.now() - swipeStartTime.current;
-    const distance = Math.abs(deltaY);
+    const distanceY = Math.abs(deltaY);
+    const distanceX = Math.abs(deltaX);
+    const totalDistance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
 
-    // Check if this is a vertical swipe (minimum 50px, within 500ms)
-    if (distance > 50 && deltaTime < 500) {
-      if (deltaY > 0) {
-        // Swipe UP = Next episode
-        onNextEpisode();
+    // Check if this is a swipe (minimum 50px, within 500ms)
+    if (totalDistance > 50 && deltaTime < 500) {
+      // Determine primary direction
+      if (distanceY > distanceX) {
+        // Vertical swipe
+        if (deltaY > 0) {
+          // Swipe UP = Next episode
+          onNextEpisode();
+        }
+        // Swipe DOWN = Show options (or could be previous episode in some contexts)
+        else {
+          setShowOptionsOverlay(true);
+          // Auto-hide options after 3 seconds
+          setTimeout(() => {
+            setShowOptionsOverlay(false);
+          }, 3000);
+        }
+      } else {
+        // Horizontal swipe = Show options
+        setShowOptionsOverlay(true);
+        // Auto-hide options after 3 seconds
+        setTimeout(() => {
+          setShowOptionsOverlay(false);
+        }, 3000);
       }
-      // Note: Previous episode navigation not implemented for ReelItem
-      // as it's typically used in a scroll container where previous is handled by scrolling
     }
 
     // Reset swipe tracking
     swipeStartY.current = null;
+    swipeStartX.current = null;
     swipeStartTime.current = null;
   }, [onNextEpisode]);
 
@@ -808,6 +855,10 @@ const ReelItem: React.FC<{
     <div 
       ref={containerRef} 
       className="reel-item flex items-center justify-center overflow-hidden bg-[#0a0a0f]"
+      style={{
+        transform: isSlidingDown ? 'translateY(100vh)' : 'translateY(0)',
+        transition: isSlidingDown ? 'transform 0.5s cubic-bezier(0.4, 0, 0.2, 1)' : 'none'
+      }}
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
@@ -891,6 +942,18 @@ const ReelItem: React.FC<{
         onEnded={() => {
           console.log('[Video] Ended - Episode:', episode.label);
           setIsEnded(true);
+          // Also trigger slide-down animation when video ends
+          if (!hasTriggeredSlideRef.current && isActive) {
+            hasTriggeredSlideRef.current = true;
+            setIsSlidingDown(true);
+            setTimeout(() => {
+              onNextEpisode();
+              setTimeout(() => {
+                setIsSlidingDown(false);
+                hasTriggeredSlideRef.current = false;
+              }, 100);
+            }, 500);
+          }
         }}
         onError={(e) => {
           const video = videoRef.current;
@@ -1086,6 +1149,101 @@ const ReelItem: React.FC<{
               <div className="text-[11px] text-white tabular-nums">
                 {formatTime(currentTime)} / {formatTime(duration)}
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Options Overlay - Shows on swipe in any direction */}
+      {showOptionsOverlay && !isEnded && (
+        <div 
+          className="absolute inset-0 z-[200] flex items-center justify-center bg-black/60 backdrop-blur-sm transition-opacity duration-300"
+          onClick={() => setShowOptionsOverlay(false)}
+        >
+          <div className="bg-white/95 backdrop-blur-md rounded-2xl p-6 shadow-2xl max-w-xs w-full mx-4">
+            <div className="flex flex-col gap-4">
+              <h3 className="text-lg font-semibold text-[#1A1A1A] text-center">Options</h3>
+              
+              <div className="flex flex-col gap-2">
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    toggleMute();
+                    setShowOptionsOverlay(false);
+                  }}
+                  className="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/80 hover:bg-white transition-all active:scale-95"
+                >
+                  <div className="w-10 h-10 rounded-lg bg-[#4A7C59]/10 flex items-center justify-center">
+                    {isMuted ? (
+                      <svg viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5 text-[#4A7C59]">
+                        <path d="M13.5 4.06c0-1.336-1.616-2.005-2.56-1.06l-4.5 4.5H4.508c-1.141 0-2.318.664-2.66 1.905A9.76 9.76 0 0 0 1.5 12c0 .898.121 1.768.35 2.595.341 1.24 1.518 1.905 2.659 1.905h1.93l4.5 4.5c.945.945 2.561.276 2.561-1.06V4.06ZM18.535 7.465a.75.75 0 0 1 1.06 0L22.12 10l-2.525 2.525a.75.75 0 1 1-1.06-1.06L20 10l-1.465-1.465a.75.75 0 0 1 0-1.06Z" />
+                      </svg>
+                    ) : (
+                      <svg viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5 text-[#4A7C59]">
+                        <path d="M13.5 4.06c0-1.336-1.616-2.005-2.56-1.06l-4.5 4.5H4.508c-1.141 0-2.318.664-2.66 1.905A9.76 9.76 0 0 0 1.5 12c0 .898.121 1.768.35 2.595.341 1.24 1.518 1.905 2.659 1.905h1.93l4.5 4.5c.945.945 2.561.276 2.561-1.06V4.06ZM17.78 9.22a.75.75 0 1 0-1.06 1.06 4.25 4.25 0 0 1 0 6.01.75.75 0 0 0 1.06 1.06 5.75 5.75 0 0 0 0-8.13ZM21.03 5.97a.75.75 0 0 0-1.06 1.06 8.5 8.5 0 0 1 0 12.02.75.75 0 1 0 1.06 1.06 10 10 0 0 0 0-14.14Z" />
+                      </svg>
+                    )}
+                  </div>
+                  <span className="text-[14px] font-medium text-[#1A1A1A]">
+                    {isMuted ? 'Unmute' : 'Mute'}
+                  </span>
+                </button>
+
+                {episode.triggers.map((t: any, idx: number) => (
+                  <button
+                    key={idx}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onEnterStory(t.char, t.intro, t.hook, 'video_sidebar');
+                      setShowOptionsOverlay(false);
+                    }}
+                    className="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/80 hover:bg-white transition-all active:scale-95"
+                  >
+                    <div className="w-10 h-10 rounded-lg bg-[#4A7C59]/10 flex items-center justify-center overflow-hidden">
+                      <img 
+                        src={series.avatars[t.char]} 
+                        alt={t.char}
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
+                    <span className="text-[14px] font-medium text-[#1A1A1A]">
+                      Chat with {t.char}
+                    </span>
+                  </button>
+                ))}
+
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (navigator.share) {
+                      navigator.share({
+                        title: episode.label,
+                        text: `Check out this episode: ${episode.label}`,
+                        url: window.location.href
+                      }).catch(() => {});
+                    }
+                    setShowOptionsOverlay(false);
+                  }}
+                  className="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/80 hover:bg-white transition-all active:scale-95"
+                >
+                  <div className="w-10 h-10 rounded-lg bg-[#4A7C59]/10 flex items-center justify-center">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-5 h-5 text-[#4A7C59]">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
+                    </svg>
+                  </div>
+                  <span className="text-[14px] font-medium text-[#1A1A1A]">Share</span>
+                </button>
+              </div>
+
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowOptionsOverlay(false);
+                }}
+                className="mt-2 px-4 py-2.5 rounded-xl bg-black/5 hover:bg-black/10 text-[14px] font-medium text-[#1A1A1A] transition-all active:scale-95"
+              >
+                Close
+              </button>
             </div>
           </div>
         </div>
