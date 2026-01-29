@@ -15,6 +15,8 @@ interface EpisodeViewProps {
   isChatOpen?: boolean;
   containerClassName?: string;
   preventAutoplay?: boolean;
+  currentIndex?: number; // Current position in filtered episodes list
+  ctaNavigatedEpisodes?: Set<number>; // CTA-navigated episodes to include in filtered list
 }
 
 const EpisodeView: React.FC<EpisodeViewProps> = ({
@@ -29,6 +31,8 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
   isChatOpen = false,
   containerClassName = '',
   preventAutoplay = false,
+  currentIndex,
+  ctaNavigatedEpisodes = new Set(),
 }) => {
   const navigate = useNavigate();
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -57,6 +61,10 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
   const sessionStartTime = useRef<number | null>(null);
   const inactivityTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hasAttemptedAutoplay = useRef(false);
+  const preventAutoplayCleanupRef = useRef<(() => void) | null>(null);
+  const preventAutoplayTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const preventAutoplayCanPlayRef = useRef<((e: Event) => void) | null>(null);
+  const preventAutoplayLoadedDataRef = useRef<((e: Event) => void) | null>(null);
   
   // Swipe gesture detection refs
   const touchStartX = useRef<number | null>(null);
@@ -69,15 +77,15 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
   const creatorName = series.avatars ? Object.keys(series.avatars)[0] : null;
   const creatorAvatar = creatorName ? series.avatars[creatorName] : undefined;
   
-  // Find previous episode ID (for episodes > 1)
-  // This finds the episode with the highest ID that is less than the current episode ID
-  // BUT only from the filtered episodes based on user's path choice
+  // Find previous episode ID by position in filtered list, not by episode ID
+  // This ensures we navigate to the immediate previous video in the sequence
   const getPreviousEpisodeId = (): number | null => {
-    if (episode.id <= 1) return null;
     if (!series.episodes || series.episodes.length === 0) return null;
+    if (currentIndex === undefined || currentIndex === null) return null;
+    if (currentIndex <= 0) return null; // Already at first episode
     
     // Get filtered episodes based on path choice (same logic as in App.tsx)
-    const getFilteredEpisodes = (episodes: any[], seriesId: string): any[] => {
+    const getFilteredEpisodes = (episodes: any[], seriesId: string, ctaEpisodes: Set<number>): any[] => {
       if (typeof window === 'undefined') return episodes;
       const storageKey = `inscene_path_choice_${seriesId}`;
       const choice = localStorage.getItem(storageKey);
@@ -94,19 +102,29 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
         filtered = episodes.filter((ep: any) => ep.id === 1);
       }
       
+      // Add CTA-navigated episodes that aren't already in the filtered list
+      ctaEpisodes.forEach(epId => {
+        if (!filtered.find(ep => ep.id === epId)) {
+          const episode = episodes.find((ep: any) => ep.id === epId);
+          if (episode) {
+            filtered.push(episode);
+          }
+        }
+      });
+      
       return filtered;
     };
     
-    // Get filtered episodes based on user's path choice
-    const filteredEpisodes = getFilteredEpisodes(series.episodes, series.id);
+    // Get filtered episodes based on user's path choice and CTA navigation
+    const filteredEpisodes = getFilteredEpisodes(series.episodes, series.id, ctaNavigatedEpisodes);
     
-    // Find all episodes in the filtered list with ID less than current episode
-    const previousEpisodes = filteredEpisodes
-      .filter((ep: any) => ep.id < episode.id)
-      .sort((a: any, b: any) => b.id - a.id); // Sort descending to get the closest previous episode
+    // Get the previous episode by position (index - 1) in the filtered list
+    const previousIndex = currentIndex - 1;
+    if (previousIndex >= 0 && previousIndex < filteredEpisodes.length) {
+      return filteredEpisodes[previousIndex].id;
+    }
     
-    // Return the episode with the highest ID that's still less than current AND in the filtered list
-    return previousEpisodes.length > 0 ? previousEpisodes[0].id : null;
+    return null;
   };
   
   const previousEpisodeId = getPreviousEpisodeId();
@@ -362,7 +380,8 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
     // Set iOS attributes
     video.setAttribute('webkit-playsinline', 'true');
     video.setAttribute('playsinline', 'true');
-    video.preload = 'auto';
+    // Use 'auto' preload unless preventAutoplay is true (then use 'metadata' to prevent blank)
+    video.preload = preventAutoplay ? 'metadata' : 'auto';
 
     // Reset state
     seekCountRef.current = 0;
@@ -381,8 +400,12 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
     setDuration(0);
     
     // Don't reset loading state if video is already loaded (prevents blink during transitions)
-    if (video.readyState >= 2) {
+    // But if preventAutoplay is true, we still want to show loading until video is ready
+    if (video.readyState >= 2 && !preventAutoplay) {
       setLoading(false);
+    } else if (preventAutoplay) {
+      // During transitions, keep loading state until video is ready
+      setLoading(true);
     }
 
     // If preventAutoplay is true, ensure video is paused and muted
@@ -430,9 +453,16 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
       }
     }, 10000);
 
-    // Attempt autoplay
+    // Attempt autoplay (only if preventAutoplay is false)
     const attemptAutoplay = async () => {
       if (hasAttemptedAutoplay.current) return;
+      if (preventAutoplay) {
+        // Don't attempt autoplay if preventAutoplay is true
+        setShowPlayButton(false);
+        setLoading(false);
+        setIsPaused(true);
+        return;
+      }
       hasAttemptedAutoplay.current = true;
 
       try {
@@ -448,15 +478,80 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
       }
     };
 
-    // Wait for video to be ready
-    if (video.readyState >= 2) {
-      attemptAutoplay();
-    } else {
-      const onCanPlay = () => {
+    // Wait for video to be ready (only if preventAutoplay is false)
+    if (!preventAutoplay) {
+      if (video.readyState >= 2) {
         attemptAutoplay();
-        video.removeEventListener('canplay', onCanPlay);
+      } else {
+        const onCanPlay = () => {
+          attemptAutoplay();
+          video.removeEventListener('canplay', onCanPlay);
+        };
+        video.addEventListener('canplay', onCanPlay);
+      }
+    } else {
+      // If preventAutoplay is true, ensure video is ready and preloaded
+      // Preload the video to prevent blank screens
+      if (video.readyState < 2) {
+        video.preload = 'metadata';
+        video.load();
+      }
+      
+      // Wait for video to be ready before hiding loading
+      if (video.readyState >= 2) {
+        setLoading(false);
+      } else {
+        // Define handlers first
+        const onLoadedData = () => {
+          if (video.readyState >= 2) {
+            setLoading(false);
+            if (preventAutoplayCanPlayRef.current) {
+              video.removeEventListener('canplay', preventAutoplayCanPlayRef.current);
+            }
+            if (preventAutoplayLoadedDataRef.current) {
+              video.removeEventListener('loadeddata', preventAutoplayLoadedDataRef.current);
+            }
+          }
+        };
+        
+        const onCanPlay = () => {
+          setLoading(false);
+          if (preventAutoplayCanPlayRef.current) {
+            video.removeEventListener('canplay', preventAutoplayCanPlayRef.current);
+          }
+          if (preventAutoplayLoadedDataRef.current) {
+            video.removeEventListener('loadeddata', preventAutoplayLoadedDataRef.current);
+          }
+        };
+        
+        // Store handlers in refs for cleanup
+        preventAutoplayCanPlayRef.current = onCanPlay;
+        preventAutoplayLoadedDataRef.current = onLoadedData;
+        
+        video.addEventListener('canplay', onCanPlay);
+        video.addEventListener('loadeddata', onLoadedData);
+        
+        // Fallback: hide loading after max 2 seconds even if video not ready
+        preventAutoplayTimeoutRef.current = setTimeout(() => {
+          setLoading(false);
+        }, 2000);
+      }
+      
+      // Store cleanup for later
+      preventAutoplayCleanupRef.current = () => {
+        if (preventAutoplayTimeoutRef.current) {
+          clearTimeout(preventAutoplayTimeoutRef.current);
+          preventAutoplayTimeoutRef.current = null;
+        }
+        if (preventAutoplayCanPlayRef.current) {
+          video.removeEventListener('canplay', preventAutoplayCanPlayRef.current);
+          preventAutoplayCanPlayRef.current = null;
+        }
+        if (preventAutoplayLoadedDataRef.current) {
+          video.removeEventListener('loadeddata', preventAutoplayLoadedDataRef.current);
+          preventAutoplayLoadedDataRef.current = null;
+        }
       };
-      video.addEventListener('canplay', onCanPlay);
     }
 
     // Handle page unload
@@ -472,8 +567,13 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
         clearInterval(progressIntervalRef.current);
         progressIntervalRef.current = null;
       }
+      // Cleanup preventAutoplay listeners if they exist
+      if (preventAutoplayCleanupRef.current) {
+        preventAutoplayCleanupRef.current();
+        preventAutoplayCleanupRef.current = null;
+      }
     };
-  }, [episode.id, series.id, isMuted, endVideoSession]);
+  }, [episode.id, series.id, isMuted, endVideoSession, preventAutoplay]);
 
   // Track video end
   useEffect(() => {
@@ -636,16 +736,22 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
         className="w-full h-full object-cover"
         playsInline
         muted={isMuted}
+        preload={preventAutoplay ? "metadata" : "auto"}
         onLoadedData={() => {
           if (videoRef.current && videoRef.current.readyState >= 2) {
-            setLoading(false);
+            // Only hide loading if not in preventAutoplay mode or if video is truly ready
+            if (!preventAutoplay || videoRef.current.readyState >= 3) {
+              setLoading(false);
+            }
           }
         }}
         onCanPlay={() => {
           // #region agent log
           fetch('http://127.0.0.1:7242/ingest/ac7c5e46-64d1-400e-8ce5-b517901614ef',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'EpisodeView.tsx:580',message:'onCanPlay triggered',data:{episodeId:episode.id,isMuted,hasAttemptedAutoplay:hasAttemptedAutoplay.current,paused:videoRef.current?.paused,muted:videoRef.current?.muted,containerClassName,preventAutoplay},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A,B'})}).catch(()=>{});
           // #endregion
+          // Only attempt to play if preventAutoplay is false and we haven't already attempted
           if (!hasAttemptedAutoplay.current && videoRef.current && !preventAutoplay) {
+            hasAttemptedAutoplay.current = true;
             videoRef.current.play().then(() => {
               // #region agent log
               fetch('http://127.0.0.1:7242/ingest/ac7c5e46-64d1-400e-8ce5-b517901614ef',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'EpisodeView.tsx:583',message:'Video play success',data:{episodeId:episode.id,muted:videoRef.current?.muted},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A,B'})}).catch(()=>{});

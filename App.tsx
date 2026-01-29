@@ -1258,6 +1258,7 @@ const AppContent: React.FC = () => {
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [transitioningToEpisodeId, setTransitioningToEpisodeId] = useState<number | null>(null);
   const [previousEpisode, setPreviousEpisode] = useState<any>(null);
+  const [transitionDirection, setTransitionDirection] = useState<'forward' | 'backward'>('forward');
   
   const [conversations, setConversations] = useState<Record<string, ConversationHistoryEntry>>({});
   const [typingStatus, setTypingStatus] = useState<Record<string, boolean>>({});
@@ -1537,6 +1538,22 @@ const AppContent: React.FC = () => {
       console.warn('[handleNavigateToEpisode] Target episode not found in filtered list:', episodeId);
       return;
     }
+    
+    // Determine transition direction: backward if going to lower index, forward if going to higher index
+    const isBackward = targetIndex < activeIdx;
+    setTransitionDirection(isBackward ? 'backward' : 'forward');
+    
+    // Preload the target video to prevent blanks (targetEpisode already declared above)
+    const preloadVideo = document.createElement('video');
+    preloadVideo.src = targetEpisode.url;
+    preloadVideo.preload = 'auto';
+    preloadVideo.muted = true;
+    preloadVideo.load();
+    // Clean up preload element after a delay
+    setTimeout(() => {
+      preloadVideo.src = '';
+      preloadVideo.load();
+    }, 2000);
     
     // Start transition: store previous episode and set transition state
     // #region agent log
@@ -2046,16 +2063,18 @@ const AppContent: React.FC = () => {
                 }}
                 onNavigateToEpisode={handleNavigateToEpisode}
                 isChatOpen={!!chatData}
+                currentIndex={activeIdx}
+                ctaNavigatedEpisodes={ctaNavigatedEpisodes}
               />
             );
           }
           
           // #region agent log
-          fetch('http://127.0.0.1:7242/ingest/ac7c5e46-64d1-400e-8ce5-b517901614ef',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'App.tsx:2005',message:'Rendering dual videos during transition',data:{previousEpisodeId:previousEpisode.id,targetEpisodeId:targetEpisode.id,isMuted},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A,B,C'})}).catch(()=>{});
+          fetch('http://127.0.0.1:7242/ingest/ac7c5e46-64d1-400e-8ce5-b517901614ef',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'App.tsx:2005',message:'Rendering dual videos during transition',data:{previousEpisodeId:previousEpisode.id,targetEpisodeId:targetEpisode.id,isMuted,transitionDirection},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A,B,C'})}).catch(()=>{});
           // #endregion
           return (
             <div className="fixed inset-0 bg-black z-[500] overflow-hidden">
-              {/* Old video - sliding up and out */}
+              {/* Old video - sliding out based on direction */}
               <EpisodeView
                 episode={previousEpisode}
                 series={selectedSeries}
@@ -2078,10 +2097,12 @@ const AppContent: React.FC = () => {
                 }}
                 onNavigateToEpisode={handleNavigateToEpisode}
                 isChatOpen={!!chatData}
-                containerClassName="video-transition-out"
+                containerClassName={transitionDirection === 'backward' ? 'video-transition-out-down' : 'video-transition-out'}
                 preventAutoplay={true}
+                currentIndex={activeIdx}
+                ctaNavigatedEpisodes={ctaNavigatedEpisodes}
               />
-              {/* New video - sliding in from below */}
+              {/* New video - sliding in based on direction */}
               <EpisodeView
                 episode={targetEpisode}
                 series={selectedSeries}
@@ -2104,7 +2125,10 @@ const AppContent: React.FC = () => {
                 }}
                 onNavigateToEpisode={handleNavigateToEpisode}
                 isChatOpen={!!chatData}
-                containerClassName="video-transition-in"
+                containerClassName={transitionDirection === 'backward' ? 'video-transition-in-up' : 'video-transition-in'}
+                preventAutoplay={true}
+                currentIndex={activeIdx}
+                ctaNavigatedEpisodes={ctaNavigatedEpisodes}
               />
             </div>
           );
@@ -2134,6 +2158,8 @@ const AppContent: React.FC = () => {
             }}
             onNavigateToEpisode={handleNavigateToEpisode}
             isChatOpen={!!chatData}
+            currentIndex={activeIdx}
+            ctaNavigatedEpisodes={ctaNavigatedEpisodes}
           />
         );
       })()}
@@ -2341,11 +2367,25 @@ const AppContent: React.FC = () => {
           from { transform: translateY(100%); }
           to { transform: translateY(0); }
         }
+        @keyframes slideDownOut {
+          from { transform: translateY(0); }
+          to { transform: translateY(100%); }
+        }
+        @keyframes slideDownIn {
+          from { transform: translateY(-100%); }
+          to { transform: translateY(0); }
+        }
         .video-transition-out {
           animation: slideUpOut 0.55s cubic-bezier(0.4, 0, 0.2, 1) forwards;
         }
         .video-transition-in {
           animation: slideUpIn 0.55s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+        }
+        .video-transition-out-down {
+          animation: slideDownOut 0.55s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+        }
+        .video-transition-in-up {
+          animation: slideDownIn 0.55s cubic-bezier(0.4, 0, 0.2, 1) forwards;
         }
         .reel-snap-container { scroll-behavior: smooth; }
         .scrub-range { -webkit-appearance: none; }
