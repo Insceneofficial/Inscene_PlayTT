@@ -1252,7 +1252,12 @@ Keep it brief and friendly.`
               <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
             </svg>
             <div className="relative w-10 h-10 rounded-full overflow-hidden flex-shrink-0 shadow-sm">
-              {!avatarError ? (
+              {character?.trim() === 'Chirag' ? (
+                // Always show "C" with green background for Chirag (content protection)
+                <div className="w-full h-full bg-[#4A7C59] flex items-center justify-center text-white font-semibold text-lg">
+                  C
+                </div>
+              ) : !avatarError ? (
                 <img 
                   src={avatar} 
                   alt={character}
@@ -1261,7 +1266,7 @@ Keep it brief and friendly.`
                 />
               ) : (
                 <div className="w-full h-full bg-[#4A7C59] flex items-center justify-center text-white font-semibold text-lg">
-                  {seriesTitle ? seriesTitle.charAt(0).toUpperCase() : character.charAt(0).toUpperCase()}
+                  {seriesTitle ? seriesTitle.charAt(0).toUpperCase() : character?.charAt(0)?.toUpperCase() || '?'}
                 </div>
               )}
             </div>
@@ -1452,7 +1457,12 @@ Keep it brief and friendly.`
               </svg>
             </button>
             <div className="relative w-11 h-11 rounded-full overflow-hidden flex-shrink-0 shadow-sm">
-              {!avatarError ? (
+              {character?.trim() === 'Chirag' ? (
+                // Always show "C" with green background for Chirag (content protection)
+                <div className="w-full h-full bg-[#4A7C59] flex items-center justify-center text-white font-semibold text-lg">
+                  C
+                </div>
+              ) : !avatarError ? (
                 <img 
                   src={avatar} 
                   alt={character}
@@ -1461,7 +1471,7 @@ Keep it brief and friendly.`
                 />
               ) : (
                 <div className="w-full h-full bg-[#4A7C59] flex items-center justify-center text-white font-semibold text-lg">
-                  {seriesTitle ? seriesTitle.charAt(0).toUpperCase() : character.charAt(0).toUpperCase()}
+                  {seriesTitle ? seriesTitle.charAt(0).toUpperCase() : character?.charAt(0)?.toUpperCase() || '?'}
                 </div>
               )}
             </div>

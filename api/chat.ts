@@ -53,6 +53,27 @@ export default async function handler(
       temperature,
     });
 
+    // Filter response content for inappropriate material
+    if (response.choices && response.choices.length > 0) {
+      const message = response.choices[0].message;
+      if (message && message.content) {
+        // List of forbidden terms and patterns
+        const forbiddenTerms = [
+          /\b(beta|bhai)\b/gi, // Casual/informal address terms - explicitly forbidden
+          // Add more patterns as needed for obscene/vulgar content
+        ];
+        
+        // Check if content contains forbidden terms
+        const containsForbidden = forbiddenTerms.some(pattern => pattern.test(message.content));
+        
+        if (containsForbidden) {
+          // Replace with safe, professional response
+          message.content = "I'm here to help you with cricket coaching and fitness goals. How can I assist you today?";
+          console.warn('[API] Filtered inappropriate content from AI response');
+        }
+      }
+    }
+
     // Return the response
     return res.status(200).json(response);
   } catch (error: any) {
