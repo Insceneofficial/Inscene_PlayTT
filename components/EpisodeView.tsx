@@ -602,20 +602,27 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
   // Track video end and check episode limit
   useEffect(() => {
     if (isEnded && analyticsRecordId.current) {
-      endVideoSession(true);
-      // Notify parent that episode is completed
-      if (onEpisodeCompleted) {
-        onEpisodeCompleted(episode.id);
-      }
-      
-      // Check episode limit after completion
-      const checkLimit = async () => {
-        const limitReached = await checkEpisodeLimit();
-        if (limitReached && onEpisodeLimitReached) {
-          onEpisodeLimitReached();
+      // Run the async completion and limit check
+      const handleCompletion = async () => {
+        // First, wait for video session to be recorded in database
+        await endVideoSession(true);
+        
+        // Notify parent that episode is completed
+        if (onEpisodeCompleted) {
+          onEpisodeCompleted(episode.id);
         }
+        
+        // Check episode limit after completion is recorded
+        // Add small delay to ensure database write is complete
+        setTimeout(async () => {
+          const limitReached = await checkEpisodeLimit();
+          console.log('[EpisodeView] Episode limit check:', { limitReached });
+          if (limitReached && onEpisodeLimitReached) {
+            onEpisodeLimitReached();
+          }
+        }, 500);
       };
-      checkLimit();
+      handleCompletion();
     }
   }, [isEnded, endVideoSession, onEpisodeCompleted, onEpisodeLimitReached, episode.id]);
 

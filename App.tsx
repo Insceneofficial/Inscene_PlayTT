@@ -13,8 +13,8 @@ import HamburgerMenu from './components/HamburgerMenu.tsx';
 import LeaderboardDrawer from './components/LeaderboardDrawer.tsx';
 import EpisodeView from './components/EpisodeView.tsx';
 import { AuthProvider, useAuth } from './lib/auth';
-import { getUserMessageCount, MAX_USER_MESSAGES, hasUnlimitedMessages } from './lib/chatStorage';
-import { hasShownSignupPrompt, canAccessEpisode } from './lib/usageLimits';
+import { getUserMessageCount, hasUnlimitedMessages } from './lib/chatStorage';
+import { hasShownSignupPrompt, canAccessEpisode, MAX_CHAT_MESSAGES } from './lib/usageLimits';
 import { Analytics } from "@vercel/analytics/react";
 import { PointsEarningProvider } from './lib/pointsEarningContext';
 import PointEarningAnimation from './components/PointEarningAnimation';
@@ -1520,20 +1520,10 @@ const AppContent: React.FC = () => {
 
   // Show sign-up prompt on app entry if not shown before and user is not authenticated
   useEffect(() => {
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/ac7c5e46-64d1-400e-8ce5-b517901614ef',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'App.tsx:1522',message:'Sign-up prompt check',data:{isAuthLoading,isAuthenticated,hasShown:hasShownSignupPrompt()},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-    // #endregion
     // Wait for auth to finish loading before showing prompt
     if (!isAuthLoading && !isAuthenticated && !hasShownSignupPrompt()) {
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/ac7c5e46-64d1-400e-8ce5-b517901614ef',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'App.tsx:1526',message:'Setting sign-up prompt to open',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-      // #endregion
       console.log('[App] Showing sign-up prompt');
       setIsSignupPromptOpen(true);
-    } else {
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/ac7c5e46-64d1-400e-8ce5-b517901614ef',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'App.tsx:1530',message:'Sign-up prompt NOT shown',data:{reason:isAuthLoading?'auth loading':isAuthenticated?'authenticated':'already shown'},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-      // #endregion
     }
   }, [isAuthenticated, isAuthLoading]);
 
@@ -1688,7 +1678,7 @@ const AppContent: React.FC = () => {
     // Check message count limit (skip for unlimited users)
     if (!hasUnlimitedMessages()) {
       const messageCount = await getUserMessageCount();
-      if (messageCount >= MAX_USER_MESSAGES) {
+      if (messageCount >= MAX_CHAT_MESSAGES) {
         // User has reached message limit - show waitlist modal
         setWaitlistLimitType('chat');
         setIsWaitlistModalOpen(true);
@@ -2468,6 +2458,15 @@ const AppContent: React.FC = () => {
                 }}
                 onNavigateToEpisode={handleNavigateToEpisode}
                 onNavigateBack={handleNavigateBack}
+                onEpisodeCompleted={(episodeId) => {
+                  if (episodeId === 1 && !isAuthenticated) {
+                    setIsMandatorySignInOpen(true);
+                  }
+                }}
+                onEpisodeLimitReached={() => {
+                  setWaitlistLimitType('episode');
+                  setIsWaitlistModalOpen(true);
+                }}
                 isChatOpen={!!chatData}
                 currentIndex={activeIdx}
                 ctaNavigatedEpisodes={ctaNavigatedEpisodes}
@@ -2501,6 +2500,15 @@ const AppContent: React.FC = () => {
                 }}
                 onNavigateToEpisode={handleNavigateToEpisode}
                 onNavigateBack={handleNavigateBack}
+                onEpisodeCompleted={(episodeId) => {
+                  if (episodeId === 1 && !isAuthenticated) {
+                    setIsMandatorySignInOpen(true);
+                  }
+                }}
+                onEpisodeLimitReached={() => {
+                  setWaitlistLimitType('episode');
+                  setIsWaitlistModalOpen(true);
+                }}
                 isChatOpen={!!chatData}
                 containerClassName={transitionDirection === 'backward' ? 'video-transition-out-down' : 'video-transition-out'}
                 preventAutoplay={true}
@@ -2531,6 +2539,15 @@ const AppContent: React.FC = () => {
                 }}
                 onNavigateToEpisode={handleNavigateToEpisode}
                 onNavigateBack={handleNavigateBack}
+                onEpisodeCompleted={(episodeId) => {
+                  if (episodeId === 1 && !isAuthenticated) {
+                    setIsMandatorySignInOpen(true);
+                  }
+                }}
+                onEpisodeLimitReached={() => {
+                  setWaitlistLimitType('episode');
+                  setIsWaitlistModalOpen(true);
+                }}
                 isChatOpen={!!chatData}
                 containerClassName={transitionDirection === 'backward' ? 'video-transition-in-up' : 'video-transition-in'}
                 preventAutoplay={true}
@@ -2567,13 +2584,11 @@ const AppContent: React.FC = () => {
             onNavigateToEpisode={handleNavigateToEpisode}
             onNavigateBack={handleNavigateBack}
             onEpisodeCompleted={(episodeId) => {
-              // Check if Episode 1 was completed by a guest user
               if (episodeId === 1 && !isAuthenticated) {
                 setIsMandatorySignInOpen(true);
               }
             }}
             onEpisodeLimitReached={() => {
-              // Show waitlist modal with episode limit type
               setWaitlistLimitType('episode');
               setIsWaitlistModalOpen(true);
             }}

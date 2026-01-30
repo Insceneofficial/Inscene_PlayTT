@@ -1,6 +1,7 @@
 import React from 'react';
 import { useAuth } from '../lib/auth';
 import { markSignupPromptShown } from '../lib/usageLimits';
+import { isDevMode, createDevUser } from '../lib/devAuth';
 
 interface SignupPromptModalProps {
   isOpen: boolean;
@@ -10,18 +11,9 @@ interface SignupPromptModalProps {
 
 const SignupPromptModal: React.FC<SignupPromptModalProps> = ({ isOpen, onClose, onSignIn }) => {
   const { isAuthenticated } = useAuth();
+  const isDev = isDevMode();
 
-  // #region agent log
-  fetch('http://127.0.0.1:7242/ingest/ac7c5e46-64d1-400e-8ce5-b517901614ef',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'SignupPromptModal.tsx:12',message:'SignupPromptModal render',data:{isOpen,isAuthenticated},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-  // #endregion
-
-  if (!isOpen || isAuthenticated) {
-    // #region agent log
-    if (!isOpen) fetch('http://127.0.0.1:7242/ingest/ac7c5e46-64d1-400e-8ce5-b517901614ef',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'SignupPromptModal.tsx:16',message:'Modal not rendering - isOpen false',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-    if (isAuthenticated) fetch('http://127.0.0.1:7242/ingest/ac7c5e46-64d1-400e-8ce5-b517901614ef',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'SignupPromptModal.tsx:16',message:'Modal not rendering - user authenticated',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-    // #endregion
-    return null;
-  }
+  if (!isOpen || isAuthenticated) return null;
 
   const handleContinueAsGuest = () => {
     markSignupPromptShown();
@@ -31,6 +23,19 @@ const SignupPromptModal: React.FC<SignupPromptModalProps> = ({ isOpen, onClose, 
   const handleSignIn = () => {
     markSignupPromptShown();
     onSignIn();
+  };
+
+  const handleDevLogin = () => {
+    // Clear the disabled flag
+    localStorage.removeItem('inscene_dev_auth_disabled');
+    // Mark prompt as shown
+    markSignupPromptShown();
+    // Create and set dev user
+    const devUser = createDevUser();
+    if (devUser) {
+      // Reload to apply the auth state
+      window.location.reload();
+    }
   };
 
   return (
@@ -90,6 +95,23 @@ const SignupPromptModal: React.FC<SignupPromptModalProps> = ({ isOpen, onClose, 
           >
             Continue as Guest
           </button>
+
+          {/* Dev Login Button - Only in dev mode */}
+          {isDev && (
+            <>
+              <div className="flex items-center gap-4 py-2">
+                <div className="flex-1 h-px bg-black/[0.06]" />
+                <span className="text-[#ACACAC] text-[12px] font-medium">or</span>
+                <div className="flex-1 h-px bg-black/[0.06]" />
+              </div>
+              <button
+                onClick={handleDevLogin}
+                className="w-full py-3 rounded-xl bg-[#C9A227]/10 border border-[#C9A227]/20 text-[#C9A227] font-medium hover:bg-[#C9A227]/20 active:scale-[0.98] transition-all text-[14px]"
+              >
+                🔧 Dev Account (Local Only)
+              </button>
+            </>
+          )}
 
           {/* Terms */}
           <p className="text-center text-[#ACACAC] text-[11px] leading-relaxed pt-2">

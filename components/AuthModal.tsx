@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { useAuth } from '../lib/auth';
+import { isDevMode, createDevUser } from '../lib/devAuth';
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -12,6 +13,18 @@ const GOOGLE_CLIENT_ID = (import.meta as any).env?.VITE_GOOGLE_CLIENT_ID || '';
 const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess }) => {
   const { isAuthenticated, signInWithGoogle } = useAuth();
   const googleButtonRef = useRef<HTMLDivElement>(null);
+  const isDev = isDevMode();
+  
+  const handleDevLogin = () => {
+    // Clear the disabled flag
+    localStorage.removeItem('inscene_dev_auth_disabled');
+    // Create and set dev user
+    const devUser = createDevUser();
+    if (devUser) {
+      // Reload to apply the auth state
+      window.location.reload();
+    }
+  };
 
   // Close modal on successful auth
   useEffect(() => {
@@ -110,6 +123,23 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess }) => 
           >
             Continue as Guest
           </button>
+
+          {/* Dev Login Button - Only in dev mode */}
+          {isDev && (
+            <>
+              <div className="flex items-center gap-4 py-2">
+                <div className="flex-1 h-px bg-black/[0.06]" />
+                <span className="text-[#ACACAC] text-[12px] font-medium">or</span>
+                <div className="flex-1 h-px bg-black/[0.06]" />
+              </div>
+              <button
+                onClick={handleDevLogin}
+                className="w-full py-3 rounded-xl bg-[#C9A227]/10 border border-[#C9A227]/20 text-[#C9A227] font-medium hover:bg-[#C9A227]/20 active:scale-[0.98] transition-all text-[14px]"
+              >
+                🔧 Dev Account (Local Only)
+              </button>
+            </>
+          )}
 
           {/* Terms */}
           <p className="text-center text-[#ACACAC] text-[11px] leading-relaxed pt-2">

@@ -19,7 +19,7 @@ const WaitlistModal: React.FC<WaitlistModalProps> = ({ isOpen, onClose, limitTyp
   const title = limitType === 'episode' ? 'Episode limit reached' : 'Message limit reached';
   const description = limitType === 'episode' 
     ? "You've completed your free episodes. Get personalized cricket exercise sessions — join the Premium Waitlist."
-    : "You've used your free messages. Get personalized cricket exercise sessions — join the Premium Waitlist.";
+    : "You've used your free credits. Get personalized cricket exercise sessions — join the Premium Waitlist.";
 
   const handleJoinWaitlist = async () => {
     setIsSubmitting(true);
@@ -45,16 +45,6 @@ const WaitlistModal: React.FC<WaitlistModalProps> = ({ isOpen, onClose, limitTyp
   return (
     <div className="fixed inset-0 z-[7000] flex items-center justify-center p-6 bg-black/30 backdrop-blur-md animate-fade-in">
       <div className="relative w-full max-w-sm bg-white rounded-2xl overflow-hidden shadow-xl p-8 animate-slide-up">
-        {/* Close Button */}
-        <button 
-          onClick={onClose} 
-          className="absolute top-5 right-5 w-8 h-8 rounded-lg bg-black/[0.04] hover:bg-black/[0.08] flex items-center justify-center transition-all active:scale-95"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4 text-[#8A8A8A]">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-          </svg>
-        </button>
-
         <div className="flex flex-col items-center gap-5 mt-2">
           {isSuccess ? (
             <>
@@ -88,13 +78,6 @@ const WaitlistModal: React.FC<WaitlistModalProps> = ({ isOpen, onClose, limitTyp
                 className="w-full py-3.5 rounded-xl bg-[#4A7C59] text-white font-semibold text-[15px] hover:bg-[#3D6549] active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isSubmitting ? 'Joining...' : 'Apply for Premium Waitlist'}
-              </button>
-              
-              <button
-                onClick={onClose}
-                className="w-full py-3 rounded-xl bg-transparent text-[#8A8A8A] font-medium text-[14px] hover:text-[#4A4A4A] transition-all"
-              >
-                Maybe later
               </button>
             </>
           )}

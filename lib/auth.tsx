@@ -114,9 +114,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       
       if (devAuthDisabled) {
         console.log('[DevAuth] Dev auth auto-login is disabled - user signed out for testing');
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/ac7c5e46-64d1-400e-8ce5-b517901614ef',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'auth.tsx:117',message:'Dev auth disabled - setting loading false',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
-        // #endregion
         setIsLoading(false);
         // Don't auto-login, allow user to test as guest
         // Continue to normal flow below - user will be null, which is correct for guest
@@ -223,6 +220,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     // Clear local storage
     localStorage.removeItem('inscene_google_user');
     localStorage.removeItem('inscene_google_token');
+    localStorage.removeItem('inscene_signup_prompt_shown');
     
     // Disable dev auth auto-login after sign-out (for testing purposes)
     if (shouldUseDevAuth()) {
