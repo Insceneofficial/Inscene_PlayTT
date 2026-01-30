@@ -65,7 +65,7 @@ const SignupPromptModal: React.FC<SignupPromptModalProps> = ({ isOpen, onClose, 
                 Get Started
               </h2>
               <p className="text-[#8A8A8A] text-[14px] mt-2 max-w-[280px]">
-                Get 5 free chat messages + 3 episodes for free.
+                Get 5 chat messages + 5 episodes for free.
               </p>
             </div>
           </div>

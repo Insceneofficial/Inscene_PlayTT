@@ -7,7 +7,7 @@ import { isUserLoggedIn } from './chatStorage';
 // ============================================
 
 export const MAX_CHAT_MESSAGES = 5;
-export const MAX_EPISODES = 3;
+export const MAX_EPISODES = 5;
 
 // ============================================
 // Usage Tracking Functions
