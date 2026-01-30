@@ -5,14 +5,21 @@ import { useAuth } from '../lib/auth';
 interface WaitlistModalProps {
   isOpen: boolean;
   onClose: () => void;
+  limitType?: 'chat' | 'episode';
 }
 
-const WaitlistModal: React.FC<WaitlistModalProps> = ({ isOpen, onClose }) => {
+const WaitlistModal: React.FC<WaitlistModalProps> = ({ isOpen, onClose, limitType = 'chat' }) => {
   const { user } = useAuth();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
 
   if (!isOpen) return null;
+
+  // Customize messaging based on limit type
+  const title = limitType === 'episode' ? 'Episode limit reached' : 'Message limit reached';
+  const description = limitType === 'episode' 
+    ? "You've completed your free episodes. Get personalized cricket exercise sessions — join the Premium Waitlist."
+    : "You've used your free messages. Get personalized cricket exercise sessions — join the Premium Waitlist.";
 
   const handleJoinWaitlist = async () => {
     setIsSubmitting(true);
@@ -69,9 +76,9 @@ const WaitlistModal: React.FC<WaitlistModalProps> = ({ isOpen, onClose }) => {
                 </svg>
               </div>
               <div className="text-center">
-                <h3 className="text-xl font-semibold text-[#1A1A1A] mb-1">Message limit reached</h3>
+                <h3 className="text-xl font-semibold text-[#1A1A1A] mb-1">{title}</h3>
                 <p className="text-[#8A8A8A] text-[14px] mb-6 max-w-[280px]">
-                  You've used your free messages. Join the waitlist to unlock unlimited access.
+                  {description}
                 </p>
               </div>
               
@@ -80,7 +87,7 @@ const WaitlistModal: React.FC<WaitlistModalProps> = ({ isOpen, onClose }) => {
                 disabled={isSubmitting}
                 className="w-full py-3.5 rounded-xl bg-[#4A7C59] text-white font-semibold text-[15px] hover:bg-[#3D6549] active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {isSubmitting ? 'Joining...' : 'Join Waitlist'}
+                {isSubmitting ? 'Joining...' : 'Apply for Premium Waitlist'}
               </button>
               
               <button

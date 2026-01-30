@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { trackChatStart, updateChatMessages, trackChatEnd } from '../lib/analytics';
-import { saveMessage, loadChatHistory, isUserLoggedIn, debugListAllMessages, getUserMessageCount, MAX_USER_MESSAGES, hasUnlimitedMessages } from '../lib/chatStorage';
+import { saveMessage, loadChatHistory, isUserLoggedIn, debugListAllMessages, getUserMessageCount, hasUnlimitedMessages } from '../lib/chatStorage';
+import { MAX_CHAT_MESSAGES } from '../lib/usageLimits';
 import { getCharacterPrompt } from '../lib/characters';
 import { getGoalState, markTaskDone, createGoal, GoalWithStreak } from '../lib/goals';
 import { recordActivity, recordChatMessages, recordGoalCompletion } from '../lib/streaksAndPoints';
@@ -775,7 +776,7 @@ Generate ONLY the follow-up message, nothing else.
     // Check message count limit before sending (skip for unlimited users)
     if (isUserLoggedIn() && !hasUnlimitedMessages()) {
       const messageCount = await getUserMessageCount();
-      if (messageCount >= MAX_USER_MESSAGES) {
+      if (messageCount >= MAX_CHAT_MESSAGES) {
         // User has reached limit - show waitlist modal
         if (onWaitlistRequired) {
           onWaitlistRequired();

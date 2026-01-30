@@ -1,9 +1,11 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { BrowserRouter, Routes, Route, Link, useNavigate, useSearchParams } from 'react-router-dom';
 import Logo from './components/Logo.tsx';
 import ChatPanel from './components/ChatPanel.tsx';
 import AuthModal from './components/AuthModal.tsx';
 import WaitlistModal from './components/WaitlistModal.tsx';
+import SignupPromptModal from './components/SignupPromptModal.tsx';
+import MandatorySignInModal from './components/MandatorySignInModal.tsx';
 import UserMenu from './components/UserMenu.tsx';
 import InfluencerPage from './components/InfluencerPage.tsx';
 import ChatWidget from './components/ChatWidget.tsx';
@@ -12,6 +14,7 @@ import LeaderboardDrawer from './components/LeaderboardDrawer.tsx';
 import EpisodeView from './components/EpisodeView.tsx';
 import { AuthProvider, useAuth } from './lib/auth';
 import { getUserMessageCount, MAX_USER_MESSAGES, hasUnlimitedMessages } from './lib/chatStorage';
+import { hasShownSignupPrompt, canAccessEpisode } from './lib/usageLimits';
 import { Analytics } from "@vercel/analytics/react";
 import { PointsEarningProvider } from './lib/pointsEarningContext';
 import PointEarningAnimation from './components/PointEarningAnimation';
@@ -1414,7 +1417,7 @@ interface ConversationHistoryEntry {
 const AppContent: React.FC = () => {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { user, isAuthenticated } = useAuth();
+  const { user, isAuthenticated, isLoading: isAuthLoading } = useAuth();
   const [selectedSeries, setSelectedSeries] = useState<any>(null);
   const [activeIdx, setActiveIdx] = useState(0);
   const [isMuted, setIsMuted] = useState(false);
@@ -1423,6 +1426,9 @@ const AppContent: React.FC = () => {
   const [choiceModalData, setChoiceModalData] = useState<any>(null);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [isWaitlistModalOpen, setIsWaitlistModalOpen] = useState(false);
+  const [waitlistLimitType, setWaitlistLimitType] = useState<'chat' | 'episode'>('chat');
+  const [isSignupPromptOpen, setIsSignupPromptOpen] = useState(false);
+  const [isMandatorySignInOpen, setIsMandatorySignInOpen] = useState(false);
   const [ctaNavigatedEpisodes, setCtaNavigatedEpisodes] = useState<Set<number>>(new Set());
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [transitioningToEpisodeId, setTransitioningToEpisodeId] = useState<number | null>(null);
@@ -1511,6 +1517,25 @@ const AppContent: React.FC = () => {
     trackViewer();
     trackPageView({ viewType: 'app_open' });
   }, []);
+
+  // Show sign-up prompt on app entry if not shown before and user is not authenticated
+  useEffect(() => {
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/ac7c5e46-64d1-400e-8ce5-b517901614ef',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'App.tsx:1522',message:'Sign-up prompt check',data:{isAuthLoading,isAuthenticated,hasShown:hasShownSignupPrompt()},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+    // #endregion
+    // Wait for auth to finish loading before showing prompt
+    if (!isAuthLoading && !isAuthenticated && !hasShownSignupPrompt()) {
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/ac7c5e46-64d1-400e-8ce5-b517901614ef',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'App.tsx:1526',message:'Setting sign-up prompt to open',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      // #endregion
+      console.log('[App] Showing sign-up prompt');
+      setIsSignupPromptOpen(true);
+    } else {
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/ac7c5e46-64d1-400e-8ce5-b517901614ef',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'App.tsx:1530',message:'Sign-up prompt NOT shown',data:{reason:isAuthLoading?'auth loading':isAuthenticated?'authenticated':'already shown'},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      // #endregion
+    }
+  }, [isAuthenticated, isAuthLoading]);
 
   // Load chat histories when user logs in
   useEffect(() => {
@@ -1665,6 +1690,7 @@ const AppContent: React.FC = () => {
       const messageCount = await getUserMessageCount();
       if (messageCount >= MAX_USER_MESSAGES) {
         // User has reached message limit - show waitlist modal
+        setWaitlistLimitType('chat');
         setIsWaitlistModalOpen(true);
         return;
       }
@@ -1793,6 +1819,12 @@ const AppContent: React.FC = () => {
       return;
     }
     
+    // Guest episode restriction: Guests can only access Episode 1
+    if (!isAuthenticated && !canAccessEpisode(episodeId, isAuthenticated)) {
+      setIsMandatorySignInOpen(true);
+      return;
+    }
+    
     // Verify the episode exists in the series
     const targetEpisode = selectedSeries.episodes.find((ep: any) => ep.id === episodeId);
     if (!targetEpisode) {
@@ -1893,7 +1925,8 @@ const AppContent: React.FC = () => {
     }
     
     // Add episode to CTA-navigated set so it's included in filtered list
-    const newCtaSet = new Set(ctaNavigatedEpisodes).add(episodeId);
+    const newCtaSet = new Set<number>(ctaNavigatedEpisodes);
+    newCtaSet.add(episodeId);
     setCtaNavigatedEpisodes(newCtaSet);
     
     // Get filtered episodes with new CTA episode included
@@ -2533,6 +2566,17 @@ const AppContent: React.FC = () => {
             }}
             onNavigateToEpisode={handleNavigateToEpisode}
             onNavigateBack={handleNavigateBack}
+            onEpisodeCompleted={(episodeId) => {
+              // Check if Episode 1 was completed by a guest user
+              if (episodeId === 1 && !isAuthenticated) {
+                setIsMandatorySignInOpen(true);
+              }
+            }}
+            onEpisodeLimitReached={() => {
+              // Show waitlist modal with episode limit type
+              setWaitlistLimitType('episode');
+              setIsWaitlistModalOpen(true);
+            }}
             isChatOpen={!!chatData}
             currentIndex={activeIdx}
             ctaNavigatedEpisodes={ctaNavigatedEpisodes}
@@ -2690,7 +2734,10 @@ const AppContent: React.FC = () => {
           seriesId={chatData.seriesId}
           seriesTitle={chatData.seriesTitle}
           episodeId={chatData.episodeId}
-          onWaitlistRequired={() => setIsWaitlistModalOpen(true)}
+          onWaitlistRequired={() => {
+            setWaitlistLimitType('chat');
+            setIsWaitlistModalOpen(true);
+          }}
           isGuidedChat={chatData.isGuidedChat || false}
           guidedChatDuration={chatData.guidedChatDuration || 45}
           closeEnabled={chatData.closeEnabled !== undefined ? chatData.closeEnabled : true}
@@ -2743,9 +2790,27 @@ const AppContent: React.FC = () => {
       {/* Waitlist Modal */}
       <WaitlistModal 
         isOpen={isWaitlistModalOpen} 
-        onClose={() => setIsWaitlistModalOpen(false)} 
+        onClose={() => setIsWaitlistModalOpen(false)}
+        limitType={waitlistLimitType}
       />
 
+      {/* Sign-up Prompt Modal */}
+      <SignupPromptModal
+        isOpen={isSignupPromptOpen}
+        onClose={() => setIsSignupPromptOpen(false)}
+        onSignIn={() => {
+          setIsSignupPromptOpen(false);
+          setIsAuthModalOpen(true);
+        }}
+      />
+
+      {/* Mandatory Sign-In Modal */}
+      <MandatorySignInModal
+        isOpen={isMandatorySignInOpen}
+        onSuccess={() => {
+          setIsMandatorySignInOpen(false);
+        }}
+      />
 
       <Analytics />
 

@@ -642,3 +642,44 @@ export const getSeriesProgress = async (
     return defaultProgress;
   }
 };
+
+/**
+ * Get total count of unique completed episodes across all series for the current user
+ * An episode is considered completed if is_completed = true or completion_percentage >= 90
+ */
+export const getCompletedEpisodesCount = async (): Promise<number> => {
+  if (!isSupabaseConfigured()) return 0;
+  
+  const googleUserId = getGoogleUserId();
+  if (!googleUserId) return 0;
+  
+  try {
+    // Get all completed video sessions
+    const { data, error } = await supabase
+      .from('video_sessions')
+      .select('series_id, episode_id, is_completed, completion_percentage')
+      .eq('google_user_id', googleUserId)
+      .or('is_completed.eq.true,completion_percentage.gte.90');
+    
+    if (error) throw error;
+    
+    if (!data || data.length === 0) return 0;
+    
+    // Create a set of unique episode identifiers (series_id + episode_id)
+    const uniqueEpisodes = new Set<string>();
+    
+    data.forEach(session => {
+      const isCompleted = session.is_completed || (session.completion_percentage && session.completion_percentage >= 90);
+      if (isCompleted) {
+        // Use combination of series_id and episode_id as unique identifier
+        const episodeKey = `${session.series_id}_${session.episode_id}`;
+        uniqueEpisodes.add(episodeKey);
+      }
+    });
+    
+    return uniqueEpisodes.size;
+  } catch (error) {
+    console.warn('Analytics: Failed to get completed episodes count', error);
+    return 0;
+  }
+};

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import EpisodeSidebar from './EpisodeSidebar';
 import { trackVideoStart, updateVideoProgress, trackVideoEnd } from '../lib/analytics';
 import { getGlobalRules, getFirstInSequence, getNumericId, getStringId, isEp3OrStep, shouldTriggerChatOnComplete, shouldTriggerChatOnSkip } from '../lib/episodeFlow';
+import { checkEpisodeLimit } from '../lib/usageLimits';
 
 interface EpisodeViewProps {
   episode: any;
@@ -14,6 +15,8 @@ interface EpisodeViewProps {
   onExit: () => void;
   onNavigateToEpisode?: (episodeId: number) => void;
   onNavigateBack?: () => void; // Add this new prop for history-based back navigation
+  onEpisodeCompleted?: (episodeId: number) => void; // Callback when episode is completed
+  onEpisodeLimitReached?: () => void; // Callback when episode limit is reached
   isChatOpen?: boolean;
   containerClassName?: string;
   preventAutoplay?: boolean;
@@ -32,6 +35,8 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
   onExit,
   onNavigateToEpisode,
   onNavigateBack, // Add this
+  onEpisodeCompleted, // Add this
+  onEpisodeLimitReached, // Add this
   isChatOpen = false,
   containerClassName = '',
   preventAutoplay = false,
@@ -594,12 +599,25 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
     };
   }, [episode.id, series.id, isMuted, endVideoSession, preventAutoplay]);
 
-  // Track video end
+  // Track video end and check episode limit
   useEffect(() => {
     if (isEnded && analyticsRecordId.current) {
       endVideoSession(true);
+      // Notify parent that episode is completed
+      if (onEpisodeCompleted) {
+        onEpisodeCompleted(episode.id);
+      }
+      
+      // Check episode limit after completion
+      const checkLimit = async () => {
+        const limitReached = await checkEpisodeLimit();
+        if (limitReached && onEpisodeLimitReached) {
+          onEpisodeLimitReached();
+        }
+      };
+      checkLimit();
     }
-  }, [isEnded, endVideoSession]);
+  }, [isEnded, endVideoSession, onEpisodeCompleted, onEpisodeLimitReached, episode.id]);
 
   // Auto-navigate to first step when sequence container ends
   // Exception: ep3 requires CTA-only progression, so skip auto-navigation

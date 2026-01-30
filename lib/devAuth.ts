@@ -46,6 +46,13 @@ export const createDevUser = () => {
     return null;
   }
   
+  // Check if dev auth is disabled (after sign-out)
+  const devAuthDisabled = localStorage.getItem('inscene_dev_auth_disabled') === 'true';
+  if (devAuthDisabled) {
+    console.log('[DevAuth] Dev auth is disabled - not creating dev user');
+    return null;
+  }
+  
   const devUser = {
     id: 'dev-user-local-testing',
     email: 'dev@local.test',
