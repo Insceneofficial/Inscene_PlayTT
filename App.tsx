@@ -222,6 +222,7 @@ const ReelItem: React.FC<{
   const [isScrubbing, setIsScrubbing] = useState(false);
   const [isUIHidden, setIsUIHidden] = useState(false);
   const lastEpisodeIdRef = useRef<string | number | null>(null);
+  const chatTriggeredBySwipeRef = useRef(false);
   
   // Debug: Log on every render
   useEffect(() => {
@@ -826,6 +827,9 @@ const ReelItem: React.FC<{
     
     // Check if episode requires chat on skip
     if (shouldTriggerChatOnSkip(episode)) {
+      // Mark that chat will be triggered by swipe (prevents onPause from also triggering)
+      chatTriggeredBySwipeRef.current = true;
+      
       // Pause the video immediately
       video.pause();
       setIsEnded(true); // Treat as completed
@@ -843,6 +847,14 @@ const ReelItem: React.FC<{
             chatConfig.prompt || '',
             'video_skip_auto'
           );
+          
+          // Reset flag after a delay to allow normal pause behavior later
+          setTimeout(() => {
+            chatTriggeredBySwipeRef.current = false;
+          }, 1000);
+        } else {
+          // Reset flag if no chat config
+          chatTriggeredBySwipeRef.current = false;
         }
       }, 100);
       return;
@@ -989,6 +1001,11 @@ const ReelItem: React.FC<{
           });
           handlePause();
           
+          // Skip pause-triggered chat if chat was already triggered by swipe
+          if (chatTriggeredBySwipeRef.current) {
+            return;
+          }
+          
           // Check if episode has postAction.chat and trigger chat on pause
           if (episode?.postAction?.chat && !isEnded && !isChatOpen && isActive) {
             const chatConfig = episode.postAction.chat;
@@ -997,8 +1014,8 @@ const ReelItem: React.FC<{
             
             // Trigger chat after 500ms delay
             setTimeout(() => {
-              // Double-check video is still paused and not ended
-              if (videoRef.current?.paused && !isEnded && isActive) {
+              // Double-check video is still paused and not ended, and chat wasn't triggered by swipe
+              if (videoRef.current?.paused && !isEnded && isActive && !chatTriggeredBySwipeRef.current) {
                 onEnterStory(
                   chatbotName,
                   chatConfig.prompt || '',
