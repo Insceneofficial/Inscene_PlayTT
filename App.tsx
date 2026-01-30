@@ -1674,7 +1674,12 @@ const AppContent: React.FC = () => {
     // Check if episode has postAction.chat config (from JSON flow)
     if (chatDataConfig.episodeId && selectedSeries) {
       const episode = selectedSeries.episodes.find((ep: any) => ep.id === chatDataConfig.episodeId);
+      
       if (episode?.postAction?.chat) {
+        // Update intro and hook from the episode's prompt for correct session context
+        chatDataConfig.intro = episode.postAction.chat.prompt || chatDataConfig.intro;
+        chatDataConfig.hook = episode.postAction.chat.prompt || chatDataConfig.hook;
+        
         chatDataConfig.isGuidedChat = true;
         // Use timerSeconds from globalRules if available, otherwise default to 45
         chatDataConfig.guidedChatDuration = globalRules.chatbot?.ui?.timerSeconds || 45;

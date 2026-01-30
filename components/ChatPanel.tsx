@@ -205,23 +205,26 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
         const savedMessages = await loadChatHistory(character);
         console.log('ChatPanel: Loaded messages:', savedMessages.length, savedMessages);
         
-        if (savedMessages.length > 0) {
-          // User has existing chat history - restore it
+        // For guided chat sessions (floating UI), ALWAYS start fresh with episode-specific prompt
+        // Do NOT load previous history - each episode session should be independent
+        if (savedMessages.length > 0 && !isGuidedChat) {
+          // User has existing chat history - restore it (only for NON-guided chats)
           setMessages(savedMessages.map(m => ({
             role: m.role,
             content: m.content,
             time: m.time || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
           })));
           initialMessagesSaved.current = true;
-        } else if (existingMessages && existingMessages.length > 0) {
+        } else if (existingMessages && existingMessages.length > 0 && !isGuidedChat) {
           // No saved history but have existing messages from props
           setMessages(existingMessages.map(m => ({
             ...m,
             time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
           })));
         } else {
-          // No history - check if we should send challenge message first
+          // No history or guided chat - use episode-specific greeting
           let firstMessage = instantGreeting;
+          
           if (entryPoint === 'video_end_screen' && seriesId && episodeId && episodeId > 1) {
             const challengeMessage = getFirstChallengeMessage(seriesId, episodeId);
             if (challengeMessage) {
@@ -229,7 +232,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
             }
           }
           
-          // For guided chat, use special greeting
+          // For guided chat, use special greeting only for Cover Drive episode 3
           if (isGuidedChat && episodeId === 3 && episodeLabel === "Cover Drive") {
             firstMessage = "Hi! I see you just finished the Cover Drive lesson. I'd love to help you improve your technique. Can you briefly explain what problem you're facing with your cover drive? Also, please upload an image of your cover drive so I can review it. We have 45 seconds for this quick review session.";
           }
@@ -245,22 +248,23 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
         }
         } else {
           // Not logged in - use existing messages or greeting
-          if (existingMessages && existingMessages.length > 0) {
+          // FIX: For guided chat sessions, ALWAYS start fresh with episode-specific prompt
+          if (existingMessages && existingMessages.length > 0 && !isGuidedChat) {
             setMessages(existingMessages.map(m => ({
               ...m,
               time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
             })));
           } else {
-            // Not logged in - check if we should send challenge message first
+            // Not logged in OR guided chat - use episode-specific greeting
             let firstMessage = instantGreeting;
-            if (entryPoint === 'video_end_screen' && seriesId && episodeId && episodeId > 1) {
+            if (entryPoint === 'video_end_screen' && seriesId && episodeId && episodeId > 1 && !isGuidedChat) {
               const challengeMessage = getFirstChallengeMessage(seriesId, episodeId);
               if (challengeMessage) {
                 firstMessage = challengeMessage;
               }
             }
             
-            // For guided chat, use special greeting
+            // For guided chat, use special greeting only for Cover Drive episode 3
             if (isGuidedChat && episodeId === 3 && episodeLabel === "Cover Drive") {
               firstMessage = "Hi! I see you just finished the Cover Drive lesson. I'd love to help you improve your technique. Can you briefly explain what problem you're facing with your cover drive? Also, please upload an image of your cover drive so I can review it. We have 45 seconds for this quick review session.";
             }
@@ -277,7 +281,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
     };
     
     loadHistory();
-  }, [character, existingMessages, instantGreeting, seriesId, episodeId, entryPoint]);
+  }, [character, existingMessages, instantGreeting, seriesId, episodeId, entryPoint, isGuidedChat, episodeLabel]);
   
   // Auto-send AI challenge message when chat opens after video ends
   const hasAutoSentRef = useRef(false);
