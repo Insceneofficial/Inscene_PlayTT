@@ -68,7 +68,7 @@
       "triggerChatOn": ["complete", "skip"],
       "postAction": {
         "chat": {
-          "prompt": "Tell me where you struggle with your cover drive."
+          "prompt": "Explain your issue—I'll help you correct it with clear cues and drills."
         },
         "returnTo": "ep1"
       }
@@ -82,7 +82,7 @@
       "triggerChatOn": ["complete", "skip"],
       "postAction": {
         "chat": {
-          "prompt": "Tell me what feels difficult in your cut shot."
+          "prompt": "Tell me what's going wrong—I'll guide you step by step."
         },
         "returnTo": "ep1"
       }
@@ -96,7 +96,7 @@
       "triggerChatOn": ["complete", "skip"],
       "postAction": {
         "chat": {
-          "prompt": "Share your issue with the on drive."
+          "prompt": "Share the problem—I'll help you fix balance and timing."
         },
         "returnTo": "ep1"
       }
@@ -110,7 +110,7 @@
       "triggerChatOn": ["complete", "skip"],
       "postAction": {
         "chat": {
-          "prompt": "Where do you lose power?"
+          "prompt": "Tell me where power drops—I'll help you generate more safely."
         },
         "returnTo": "ep1"
       }
@@ -124,7 +124,7 @@
       "triggerChatOn": ["complete", "skip"],
       "postAction": {
         "chat": {
-          "prompt": "Tell me your difficulty with the pull shot."
+          "prompt": "Tell me what fails or scares you—I'll help you fix it safely."
         },
         "returnTo": "ep1"
       }
@@ -147,7 +147,7 @@
       "next": "ep3b",
       "postAction": {
         "chat": {
-          "prompt": "Did you complete this speed exercise?"
+          "prompt": "Answer yes or no—I'll guide your next step."
         }
       }
     },
@@ -161,7 +161,7 @@
       "next": "ep3c",
       "postAction": {
         "chat": {
-          "prompt": "How did this exercise feel?"
+          "prompt": "Describe effort and fatigue—I'll adjust it for you."
         }
       }
     },
@@ -175,7 +175,7 @@
       "next": "ep3d",
       "postAction": {
         "chat": {
-          "prompt": "Any difficulty with footwork?"
+          "prompt": "Tell me where footwork breaks—I'll help you fix it."
         }
       }
     },
@@ -189,7 +189,7 @@
       "next": "ep3e",
       "postAction": {
         "chat": {
-          "prompt": "Did you maintain consistency?"
+          "prompt": "Tell me where consistency dropped—I'll help stabilize it."
         }
       }
     },
@@ -202,7 +202,7 @@
       "triggerChatOn": ["complete", "skip"],
       "postAction": {
         "chat": {
-          "prompt": "Great work completing all speed exercises."
+          "prompt": "Want to improve further or maintain this level?"
         },
         "returnTo": "ep1"
       }
@@ -216,7 +216,7 @@
       "triggerChatOn": ["complete", "skip"],
       "postAction": {
         "chat": {
-          "prompt": "What is your current Yo-Yo / Euro Test benchmark?"
+          "prompt": "Share your score—I'll tell you what it means and how to improve."
         },
         "returnTo": "ep1"
       }
@@ -240,7 +240,7 @@
       "triggerChatOn": ["complete", "skip"],
       "postAction": {
         "chat": {
-          "prompt": "Tell me your doubts about pursuing professional cricket."
+          "prompt": "Share your concern—I'll help you think clearly and practically."
         },
         "returnTo": "ep1"
       }
@@ -254,7 +254,7 @@
       "triggerChatOn": ["complete", "skip"],
       "postAction": {
         "chat": {
-          "prompt": "Based on your age, I'll tell you where and how to apply."
+          "prompt": "Tell me your age and level—I'll guide your exact pathway."
         },
         "returnTo": "ep1"
       }

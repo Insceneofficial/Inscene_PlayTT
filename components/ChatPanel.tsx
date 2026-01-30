@@ -5,6 +5,7 @@ import { getCharacterPrompt } from '../lib/characters';
 import { getGoalState, markTaskDone, createGoal, GoalWithStreak } from '../lib/goals';
 import { recordActivity, recordChatMessages, recordGoalCompletion } from '../lib/streaksAndPoints';
 import { getChallengePrompt, markChallengeCompleted, isChallengeCompleted, getFirstChallengeMessage, getChallengeForEpisode } from '../lib/challenges';
+import { getEpisodeCoachingInstructions } from '../lib/episodeFlow';
 import GoalsModal from './GoalsModal';
 
 interface ChatPanelProps {
@@ -262,11 +263,6 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
               if (challengeMessage) {
                 firstMessage = challengeMessage;
               }
-            }
-            
-            // For guided chat, use special greeting only for Cover Drive episode 3
-            if (isGuidedChat && episodeId === 3 && episodeLabel === "Cover Drive") {
-              firstMessage = "Hi! I see you just finished the Cover Drive lesson. I'd love to help you improve your technique. Can you briefly explain what problem you're facing with your cover drive? Also, please upload an image of your cover drive so I can review it. We have 45 seconds for this quick review session.";
             }
             
             setMessages([{
@@ -605,18 +601,12 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
     // Get system prompt from centralized character config, including goal context
     let basePrompt = getCharacterPrompt(character, episodeLabel, goalContext);
     
-    // Add guided chat instructions for Cover Drive episode
-    if (isGuidedChat && episodeId === 3 && episodeLabel === "Cover Drive") {
-      basePrompt += `\n\nIMPORTANT: This is a GUIDED CHAT SESSION for Cover Drive review. You have 45 seconds total.
-
-Your role:
-1. Prompt the user to briefly explain their problem with their cover drive technique
-2. Ask them to upload an image of their cover drive for review
-3. Keep responses concise and focused - you have limited time
-4. Guide them through the process efficiently
-5. After they provide their explanation and image, acknowledge receipt and let them know you'll review it
-
-The session will automatically end after 45 seconds. Make every message count!`;
+    // Add episode-specific coaching instructions for guided chat sessions
+    if (isGuidedChat && episodeLabel) {
+      const coachingInstructions = getEpisodeCoachingInstructions(episodeLabel);
+      if (coachingInstructions) {
+        basePrompt += '\n\n' + coachingInstructions;
+      }
     }
     
     // Add challenge prompt if episode has a challenge
