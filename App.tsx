@@ -988,6 +988,26 @@ const ReelItem: React.FC<{
             ended: video?.ended
           });
           handlePause();
+          
+          // Check if episode has postAction.chat and trigger chat on pause
+          if (episode?.postAction?.chat && !isEnded && !isChatOpen && isActive) {
+            const chatConfig = episode.postAction.chat;
+            const globalRules = getGlobalRules();
+            const chatbotName = globalRules.chatbot?.name || 'Chirag AI';
+            
+            // Trigger chat after 500ms delay
+            setTimeout(() => {
+              // Double-check video is still paused and not ended
+              if (videoRef.current?.paused && !isEnded && isActive) {
+                onEnterStory(
+                  chatbotName,
+                  chatConfig.prompt || '',
+                  chatConfig.prompt || '',
+                  'video_pause_auto'
+                );
+              }
+            }, 500);
+          }
         }}
         onEnded={() => {
           console.log('[Video] Ended - Episode:', episode.label);
@@ -1080,6 +1100,26 @@ const ReelItem: React.FC<{
               inactivityTimerRef.current = setTimeout(() => {
                 setIsUIHidden(true);
               }, 5000);
+            }
+            
+            // Check if episode has postAction.chat and trigger chat on pause
+            if (episode?.postAction?.chat && !isEnded && !isChatOpen && isActive) {
+              const chatConfig = episode.postAction.chat;
+              const globalRules = getGlobalRules();
+              const chatbotName = globalRules.chatbot?.name || 'Chirag AI';
+              
+              // Trigger chat after 500ms delay
+              setTimeout(() => {
+                // Double-check video is still paused and not ended
+                if (videoRef.current?.paused && !isEnded && isActive) {
+                  onEnterStory(
+                    chatbotName,
+                    chatConfig.prompt || '',
+                    chatConfig.prompt || '',
+                    'video_pause_auto'
+                  );
+                }
+              }, 500);
             }
           }
         }}
@@ -2646,6 +2686,26 @@ const AppContent: React.FC = () => {
           showTimer={chatData.showTimer}
           timerSeconds={chatData.timerSeconds}
           nextSessionButton={chatData.nextSessionButton}
+          onNavigateToMessages={() => {
+            // Navigate to messages/all chats view
+            setChatData(null);
+            setCurrentView('chats');
+            setSearchParams({ view: 'chats' });
+          }}
+          onNavigateToEpisode1={() => {
+            // Navigate to Chirag Episode 1
+            setChatData(null);
+            // Find cricket-coaching series
+            const cricketSeries = SERIES_CATALOG.find(s => s.id === 'cricket-coaching');
+            if (cricketSeries) {
+              // Set the series first (this is required for handleNavigateToEpisode)
+              setSelectedSeries(cricketSeries);
+              // Use setTimeout to ensure state is updated before navigation
+              setTimeout(() => {
+                handleNavigateToEpisode(1);
+              }, 0);
+            }
+          }}
           onGuidedChatComplete={() => {
             // Navigate to returnTo episode after guided chat completes
             if (selectedSeries && chatData.episodeId) {

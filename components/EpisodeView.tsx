@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import EpisodeSidebar from './EpisodeSidebar';
 import { trackVideoStart, updateVideoProgress, trackVideoEnd } from '../lib/analytics';
-import { getGlobalRules, getFirstInSequence, getNumericId, isEp3OrStep, shouldTriggerChatOnComplete, shouldTriggerChatOnSkip } from '../lib/episodeFlow';
+import { getGlobalRules, getFirstInSequence, getNumericId, getStringId, isEp3OrStep, shouldTriggerChatOnComplete, shouldTriggerChatOnSkip } from '../lib/episodeFlow';
 
 interface EpisodeViewProps {
   episode: any;
@@ -86,6 +86,16 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
   // Back navigation is available if we have more than 1 episode in history and onNavigateBack is provided
   const canNavigateBack = videoHistory.length > 1 && onNavigateBack !== undefined;
 
+  // Helper function to check if episode has CTAs (excluding episode 2A - Cover Drive)
+  const hasCTAs = useCallback(() => {
+    // Episode 2A (Cover Drive) should not have CTAs
+    const stringId = getStringId(episode.id);
+    if (stringId === 'ep2a') {
+      return false;
+    }
+    return (episode.ctas && episode.ctas.length > 0) || episode.ctaMapping;
+  }, [episode.id, episode.ctas, episode.ctaMapping]);
+
   // Auto-hide overlay after 3 seconds (but not when paused)
   useEffect(() => {
     if (!isOverlayVisible || isPaused) return;
@@ -151,8 +161,7 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
       video.play().catch(() => {});
       setIsPaused(false);
           // Hide CTA overlay when playback resumes (unless in last 4.5 seconds)
-          const hasCTAs = (episode.ctas && episode.ctas.length > 0) || episode.ctaMapping;
-          if (hasCTAs) {
+          if (hasCTAs()) {
             const current = video.currentTime;
             const total = video.duration;
             const lastSecondsThreshold = 4.5;
@@ -168,12 +177,31 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
       video.pause();
       setIsPaused(true);
         // Show CTA overlay when paused
-        const hasCTAs = (episode.ctas && episode.ctas.length > 0) || episode.ctaMapping;
-        if (hasCTAs) {
+        if (hasCTAs()) {
           setShowCTAOverlay(true);
         }
+      
+      // Check if episode has postAction.chat and trigger chat on pause
+      if (episode?.postAction?.chat && !isEnded && !isChatOpen) {
+        const chatConfig = episode.postAction.chat;
+        const globalRules = getGlobalRules();
+        const chatbotName = globalRules.chatbot?.name || 'Chirag AI';
+        
+        // Trigger chat after 500ms delay
+        setTimeout(() => {
+          // Double-check video is still paused and not ended
+          if (videoRef.current?.paused && !isEnded) {
+            onEnterStory(
+              chatbotName,
+              chatConfig.prompt || '',
+              chatConfig.prompt || '',
+              'video_pause_auto'
+            );
+          }
+        }, 500);
+      }
     }
-  }, [isPaused, isEnded, episode.id, episode.ctas, episode.ctaMapping]);
+  }, [isPaused, isEnded, episode, onEnterStory, isChatOpen]);
   
   // Handle swipe gestures - pause video and show CTA
   const handleSwipe = useCallback(() => {
@@ -211,8 +239,7 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
     
       // Show overlay and CTA
       setIsOverlayVisible(true);
-      const hasCTAs = (episode.ctas && episode.ctas.length > 0) || episode.ctaMapping;
-      if (hasCTAs) {
+      if (hasCTAs()) {
         setShowCTAOverlay(true);
       }
     
@@ -624,10 +651,9 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
       
       // Show CTA overlay in last 4-5 seconds (only when playing, not paused)
       // Check for both ctas array (JSON) and ctaMapping (legacy)
-      const hasCTAs = (episode.ctas && episode.ctas.length > 0) || episode.ctaMapping;
       const lastSecondsThreshold = 4.5;
       const shouldShowInLastSeconds = !paused && 
-                                      hasCTAs && 
+                                      hasCTAs() && 
                                       total > 0 && 
                                       current >= 1 && // Ensure video has started playing
                                       current >= total - lastSecondsThreshold && 
@@ -641,7 +667,7 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
       }
       
       // When video ends, keep CTA visible if it exists
-      if (isEnded && hasCTAs) {
+      if (isEnded && hasCTAs()) {
         setShowCTAOverlay(true);
       }
     }
@@ -657,8 +683,7 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
       wasUnmutedRef.current = true;
       setIsPaused(false);
       // Hide CTA overlay when playback resumes (unless in last seconds)
-      const hasCTAs = (episode.ctas && episode.ctas.length > 0) || episode.ctaMapping;
-      if (hasCTAs && video) {
+      if (hasCTAs() && video) {
         const current = video.currentTime;
         const total = video.duration;
         const lastSecondsThreshold = 4.5;
@@ -703,9 +728,8 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
       
       // Update CTA overlay visibility based on new position
       // Hide CTA if seeking away from last 4.5 seconds (unless paused or ended)
-      const hasCTAs = (episode.ctas && episode.ctas.length > 0) || episode.ctaMapping;
       const lastSecondsThreshold = 4.5;
-      if (hasCTAs) {
+      if (hasCTAs()) {
         if (!isPaused && !isEnded && (clampedTime < total - lastSecondsThreshold || clampedTime < 1)) {
           setShowCTAOverlay(false);
         } else if (isPaused && !isEnded) {
@@ -831,8 +855,7 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
           setShowPlayButton(false);
           setIsPaused(false);
           // Hide CTA overlay when playback resumes (unless video has ended or in last 4.5 seconds)
-          const hasCTAs = (episode.ctas && episode.ctas.length > 0) || episode.ctaMapping;
-          if (hasCTAs && !isEnded && videoRef.current) {
+          if (hasCTAs() && !isEnded && videoRef.current) {
             const current = videoRef.current.currentTime;
             const total = videoRef.current.duration;
             const lastSecondsThreshold = 4.5;
@@ -846,9 +869,28 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
           handlePause();
           setIsPaused(true);
           // Show CTA overlay when paused (but not if video has ended - that's handled by onEnded)
-          const hasCTAs = (episode.ctas && episode.ctas.length > 0) || episode.ctaMapping;
-          if (hasCTAs && !isEnded) {
+          if (hasCTAs() && !isEnded) {
             setShowCTAOverlay(true);
+          }
+          
+          // Check if episode has postAction.chat and trigger chat on pause
+          if (episode?.postAction?.chat && !isEnded && !isChatOpen) {
+            const chatConfig = episode.postAction.chat;
+            const globalRules = getGlobalRules();
+            const chatbotName = globalRules.chatbot?.name || 'Chirag AI';
+            
+            // Trigger chat after 500ms delay
+            setTimeout(() => {
+              // Double-check video is still paused and not ended
+              if (videoRef.current?.paused && !isEnded) {
+                onEnterStory(
+                  chatbotName,
+                  chatConfig.prompt || '',
+                  chatConfig.prompt || '',
+                  'video_pause_auto'
+                );
+              }
+            }, 500);
           }
         }}
         onEnded={() => {
@@ -880,8 +922,7 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
           }
           
           // Show CTA overlay when video ends (if episode has CTAs)
-          const hasCTAs = (episode.ctas && episode.ctas.length > 0) || episode.ctaMapping;
-          if (hasCTAs) {
+          if (hasCTAs()) {
             setShowCTAOverlay(true);
           }
         }}
@@ -1124,7 +1165,7 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
       )}
 
       {/* CTA Overlay - Shows when paused, in last seconds, or when video ends */}
-      {showCTAOverlay && ((episode.ctas && episode.ctas.length > 0) || episode.ctaMapping) && (
+      {showCTAOverlay && hasCTAs() && (
         <div 
           className="absolute bottom-0 left-0 right-0 z-[50] px-4 pb-6 pt-4 pointer-events-auto"
           style={{ paddingBottom: (isPaused || isEnded) ? '100px' : '24px' }}

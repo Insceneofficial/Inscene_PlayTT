@@ -39,6 +39,9 @@ interface ChatPanelProps {
     style: string;
     label: string;
   };
+  // Navigation props
+  onNavigateToMessages?: () => void; // Navigate to messages/all chats view
+  onNavigateToEpisode1?: () => void; // Navigate to Chirag Episode 1
 }
 
 const ChatPanel: React.FC<ChatPanelProps> = ({ 
@@ -65,12 +68,15 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
   startImmediately = true, // Default to immediate start
   showTimer = false,
   timerSeconds = 45,
-  nextSessionButton
+  nextSessionButton,
+  onNavigateToMessages,
+  onNavigateToEpisode1
 }) => {
   const [messages, setMessages] = useState<{ role: 'user' | 'assistant'; content: string; time: string }[]>([]);
   const [inputValue, setInputValue] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const [isLoadingHistory, setIsLoadingHistory] = useState(true);
+  const [avatarError, setAvatarError] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   
   // Guided chat timer
@@ -491,9 +497,10 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
     };
   }, [character, seriesId, seriesTitle, episodeId, episodeLabel, isWhatsApp, entryPoint]);
 
-  // Initialize guided chat timer
+  // Initialize guided chat timer (only for WhatsApp UI, not floating UI)
   useEffect(() => {
-    if (isGuidedChat && guidedChatDuration > 0) {
+    // Only start timer for WhatsApp UI, not for floating UI
+    if (isGuidedChat && guidedChatDuration > 0 && isWhatsApp) {
       // Use timerSeconds from props if provided, otherwise use guidedChatDuration
       const durationToUse = timerSeconds > 0 ? timerSeconds : guidedChatDuration;
       setGuidedChatTimeRemaining(durationToUse);
@@ -523,7 +530,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
         }
       };
     }
-  }, [isGuidedChat, guidedChatDuration, onGuidedChatComplete, onClose]);
+  }, [isGuidedChat, guidedChatDuration, onGuidedChatComplete, onClose, isWhatsApp]);
 
   useEffect(() => {
     conversationHistory.current = messages.map(m => ({
@@ -1250,24 +1257,61 @@ Keep it brief and friendly.`
 
         {/* Header - Minimal Elegance */}
         <div className="relative z-10 flex items-center gap-3 px-4 py-3 bg-white/80 backdrop-blur-xl border-b border-black/[0.06]">
-          {closeEnabled ? (
-            <button onClick={handleClose} className="p-1 hover:bg-black/[0.04] rounded-xl transition-colors active:scale-95 flex items-center gap-2">
-              <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" className="text-[#4A4A4A]"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"></path></svg>
-              <div className="w-10 h-10 rounded-full bg-[#4A7C59] flex items-center justify-center text-white font-semibold text-lg shadow-sm">
-                {seriesTitle ? seriesTitle.charAt(0).toUpperCase() : character.charAt(0).toUpperCase()}
-              </div>
-            </button>
-          ) : (
-            <div className="w-10 h-10 rounded-full bg-[#4A7C59] flex items-center justify-center text-white font-semibold text-lg shadow-sm">
-              {seriesTitle ? seriesTitle.charAt(0).toUpperCase() : character.charAt(0).toUpperCase()}
+          {/* Back Arrow with DP */}
+          <button 
+            onClick={() => {
+              if (onNavigateToMessages) {
+                onNavigateToMessages();
+              } else {
+                handleClose();
+              }
+            }}
+            className="flex items-center gap-2 p-1 hover:bg-black/[0.04] rounded-xl transition-colors active:scale-95 flex-shrink-0"
+            title="Back to Messages"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-5 h-5 text-[#8A8A8A]">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
+            </svg>
+            <div className="relative w-10 h-10 rounded-full overflow-hidden flex-shrink-0 shadow-sm">
+              {!avatarError ? (
+                <img 
+                  src={avatar} 
+                  alt={character}
+                  className="w-full h-full object-cover"
+                  onError={() => setAvatarError(true)}
+                />
+              ) : (
+                <div className="w-full h-full bg-[#4A7C59] flex items-center justify-center text-white font-semibold text-lg">
+                  {seriesTitle ? seriesTitle.charAt(0).toUpperCase() : character.charAt(0).toUpperCase()}
+                </div>
+              )}
             </div>
-          )}
-          <div className={`flex flex-col flex-1 ${closeEnabled ? 'cursor-pointer' : ''}`} onClick={closeEnabled ? handleClose : undefined}>
+          </button>
+          
+          {/* Character Name and Status */}
+          <div className="flex flex-col flex-1 min-w-0">
             <h4 className="text-[15px] font-semibold text-[#1A1A1A] leading-tight truncate tracking-tight">
               {character === 'Chirag' ? "Chirag's AI Avatar" : character}
             </h4>
             <p className="text-[12px] text-[#4A7C59] font-medium">{isTyping ? 'typing...' : 'online'}</p>
           </div>
+          
+          {/* Forward Arrow */}
+          <button
+            onClick={() => {
+              if (onNavigateToEpisode1) {
+                onNavigateToEpisode1();
+              }
+            }}
+            className="w-9 h-9 flex items-center justify-center hover:bg-black/[0.04] rounded-xl transition-all active:scale-95 flex-shrink-0"
+            title="Go to Chirag - Episode 1"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-5 h-5 text-[#8A8A8A]">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+            </svg>
+          </button>
+          
+          {/* Timer (if guided chat) */}
           {isGuidedChat && guidedChatTimeRemaining !== null && (
             <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[#4A7C59]/10 border border-[#4A7C59]/20">
               <div className="w-2 h-2 rounded-full bg-[#4A7C59] animate-pulse" />
@@ -1417,8 +1461,28 @@ Keep it brief and friendly.`
 
         <div className="relative z-10 px-5 py-4 flex justify-between items-center border-b border-black/[0.06] bg-white/90 backdrop-blur-sm">
           <div className="flex items-center gap-3">
-            <div className="relative w-11 h-11 rounded-full bg-[#4A7C59] flex items-center justify-center text-white font-semibold text-lg shadow-sm">
-              {seriesTitle ? seriesTitle.charAt(0).toUpperCase() : character.charAt(0).toUpperCase()}
+            <button 
+              onClick={onClose}
+              className="w-9 h-9 flex items-center justify-center hover:bg-black/[0.04] rounded-xl transition-all active:scale-95 flex-shrink-0"
+              title="Back"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-5 h-5 text-[#8A8A8A]">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
+              </svg>
+            </button>
+            <div className="relative w-11 h-11 rounded-full overflow-hidden flex-shrink-0 shadow-sm">
+              {!avatarError ? (
+                <img 
+                  src={avatar} 
+                  alt={character}
+                  className="w-full h-full object-cover"
+                  onError={() => setAvatarError(true)}
+                />
+              ) : (
+                <div className="w-full h-full bg-[#4A7C59] flex items-center justify-center text-white font-semibold text-lg">
+                  {seriesTitle ? seriesTitle.charAt(0).toUpperCase() : character.charAt(0).toUpperCase()}
+                </div>
+              )}
             </div>
             <div>
               <h4 className="text-[15px] font-semibold leading-tight text-[#1A1A1A] tracking-tight">
@@ -1428,28 +1492,25 @@ Keep it brief and friendly.`
             </div>
           </div>
           <div className="flex items-center gap-3">
-            {showTimer && isGuidedChat && guidedChatTimeRemaining !== null && (
-              <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[#4A7C59]/10 border border-[#4A7C59]/20">
-                <div className="w-2 h-2 rounded-full bg-[#4A7C59] animate-pulse" />
-                <span className="text-[12px] font-semibold text-[#4A7C59] tabular-nums">
-                  {guidedChatTimeRemaining}s
-                </span>
-              </div>
-            )}
-            {nextSessionButton?.enabled && onGuidedChatComplete && (
+            {nextSessionButton?.enabled && onGuidedChatComplete ? (
               <button
                 onClick={onGuidedChatComplete}
                 className="w-9 h-9 flex items-center justify-center hover:bg-black/[0.04] rounded-xl transition-all active:scale-95"
                 title={nextSessionButton.label || "Next Session"}
               >
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-5 h-5 text-[#8A8A8A]">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
                 </svg>
               </button>
-            )}
-            {closeEnabled && (
-              <button onClick={handleClose} className="w-9 h-9 flex items-center justify-center hover:bg-black/[0.04] rounded-xl transition-all active:scale-95">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4 text-[#8A8A8A]"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+            ) : (
+              <button
+                onClick={onClose}
+                className="w-9 h-9 flex items-center justify-center hover:bg-black/[0.04] rounded-xl transition-all active:scale-95"
+                title="Forward"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-5 h-5 text-[#8A8A8A]">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+                </svg>
               </button>
             )}
           </div>

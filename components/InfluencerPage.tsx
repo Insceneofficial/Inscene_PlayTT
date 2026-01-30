@@ -959,6 +959,26 @@ const ReelItem: React.FC<{
             ended: video?.ended
           });
           handlePause();
+          
+          // Check if episode has postAction.chat and trigger chat on pause
+          if (episode?.postAction?.chat && !isEnded && !isChatOpen && isActive) {
+            const chatConfig = episode.postAction.chat;
+            const globalRules = getGlobalRules();
+            const chatbotName = globalRules.chatbot?.name || 'Chirag AI';
+            
+            // Trigger chat after 500ms delay
+            setTimeout(() => {
+              // Double-check video is still paused and not ended
+              if (videoRef.current?.paused && !isEnded && isActive) {
+                onEnterStory(
+                  chatbotName,
+                  chatConfig.prompt || '',
+                  chatConfig.prompt || '',
+                  'video_pause_auto'
+                );
+              }
+            }, 500);
+          }
         }}
         onEnded={() => {
           console.log('[Video] Ended - Episode:', episode.label, 'Episode ID:', episode.id);
@@ -1080,6 +1100,26 @@ const ReelItem: React.FC<{
               inactivityTimerRef.current = setTimeout(() => {
                 setIsUIHidden(true);
               }, 5000);
+            }
+            
+            // Check if episode has postAction.chat and trigger chat on pause
+            if (episode?.postAction?.chat && !isEnded && !isChatOpen && isActive) {
+              const chatConfig = episode.postAction.chat;
+              const globalRules = getGlobalRules();
+              const chatbotName = globalRules.chatbot?.name || 'Chirag AI';
+              
+              // Trigger chat after 500ms delay
+              setTimeout(() => {
+                // Double-check video is still paused and not ended
+                if (videoRef.current?.paused && !isEnded && isActive) {
+                  onEnterStory(
+                    chatbotName,
+                    chatConfig.prompt || '',
+                    chatConfig.prompt || '',
+                    'video_pause_auto'
+                  );
+                }
+              }, 500);
             }
           }
         }}
