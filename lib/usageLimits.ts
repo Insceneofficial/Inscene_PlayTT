@@ -1,5 +1,5 @@
 import { getUserMessageCount } from './chatStorage';
-import { getCompletedEpisodesCount } from './analytics';
+import { getTotalEpisodeViewsCount } from './analytics';
 import { isUserLoggedIn } from './chatStorage';
 
 // ============================================
@@ -22,11 +22,12 @@ export const getChatMessageCount = async (): Promise<number> => {
 };
 
 /**
- * Get the current completed episodes count for the authenticated user
+ * Get the total episode views count for the authenticated user
+ * Counts ALL episode views (even rewatches) not just unique episodes
  */
-export const getCompletedEpisodesCountForUser = async (): Promise<number> => {
+export const getEpisodeViewsCountForUser = async (): Promise<number> => {
   if (!isUserLoggedIn()) return 0;
-  return await getCompletedEpisodesCount();
+  return await getTotalEpisodeViewsCount();
 };
 
 // ============================================
@@ -43,11 +44,12 @@ export const checkChatLimit = async (): Promise<boolean> => {
 };
 
 /**
- * Check if user has reached the episode completion limit
+ * Check if user has reached the episode view limit
+ * Counts ALL episode views (even rewatches) not just unique episodes
  */
 export const checkEpisodeLimit = async (): Promise<boolean> => {
   if (!isUserLoggedIn()) return false;
-  const count = await getCompletedEpisodesCountForUser();
+  const count = await getEpisodeViewsCountForUser();
   return count >= MAX_EPISODES;
 };
 

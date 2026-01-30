@@ -14,7 +14,7 @@ import LeaderboardDrawer from './components/LeaderboardDrawer.tsx';
 import EpisodeView from './components/EpisodeView.tsx';
 import { AuthProvider, useAuth } from './lib/auth';
 import { getUserMessageCount, hasUnlimitedMessages } from './lib/chatStorage';
-import { hasShownSignupPrompt, canAccessEpisode, MAX_CHAT_MESSAGES } from './lib/usageLimits';
+import { hasShownSignupPrompt, canAccessEpisode, MAX_CHAT_MESSAGES, checkEpisodeLimit } from './lib/usageLimits';
 import { Analytics } from "@vercel/analytics/react";
 import { PointsEarningProvider } from './lib/pointsEarningContext';
 import PointEarningAnimation from './components/PointEarningAnimation';
@@ -1800,7 +1800,7 @@ const AppContent: React.FC = () => {
     }
   };
 
-  const handleNavigateToEpisode = (episodeId: number, isBackNavigation: boolean = false) => {
+  const handleNavigateToEpisode = async (episodeId: number, isBackNavigation: boolean = false) => {
     if (!selectedSeries) return;
     
     // Validate episode ID
@@ -1813,6 +1813,16 @@ const AppContent: React.FC = () => {
     if (!isAuthenticated && !canAccessEpisode(episodeId, isAuthenticated)) {
       setIsMandatorySignInOpen(true);
       return;
+    }
+    
+    // Check episode view limit (skip for unlimited users)
+    if (isAuthenticated && !hasUnlimitedMessages()) {
+      const limitReached = await checkEpisodeLimit();
+      if (limitReached) {
+        setWaitlistLimitType('episode');
+        setIsWaitlistModalOpen(true);
+        return;
+      }
     }
     
     // Verify the episode exists in the series
@@ -2203,7 +2213,17 @@ const AppContent: React.FC = () => {
                       return (
                       <div
                         key={influencer.id}
-                        onClick={() => {
+                        onClick={async () => {
+                          // Check episode limit before starting (skip for unlimited users)
+                          if (isAuthenticated && !hasUnlimitedMessages()) {
+                            const limitReached = await checkEpisodeLimit();
+                            if (limitReached) {
+                              setWaitlistLimitType('episode');
+                              setIsWaitlistModalOpen(true);
+                              return;
+                            }
+                          }
+                          
                           // Directly start episode 1 if series found
                           if (influencerSeries) {
                             setSelectedSeries(influencerSeries);

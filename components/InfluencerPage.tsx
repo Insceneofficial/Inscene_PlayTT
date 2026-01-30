@@ -14,6 +14,7 @@ import EpisodeView from './EpisodeView.tsx';
 import { useAuth } from '../lib/auth';
 import { canProceedToEpisode } from '../lib/challenges';
 import { getUserMessageCount, MAX_USER_MESSAGES, hasUnlimitedMessages } from '../lib/chatStorage';
+import { checkEpisodeLimit } from '../lib/usageLimits';
 import { getInfluencerBySlug, getSeriesForInfluencer, setSeriesCatalog } from '../lib/influencerMapping';
 import { getCharacterAvatar } from '../lib/characters';
 import { SERIES_CATALOG } from '../App';
@@ -1483,13 +1484,22 @@ const InfluencerPage: React.FC = () => {
   }, [selectedEpisodeIndex, influencerEpisodes.length]);
 
   // Handler to navigate to specific episode by ID
-  const handleNavigateToEpisode = useCallback((episodeId: number) => {
+  const handleNavigateToEpisode = useCallback(async (episodeId: number) => {
+    // Check episode limit before navigation (skip for unlimited users)
+    if (isAuthenticated && !hasUnlimitedMessages()) {
+      const limitReached = await checkEpisodeLimit();
+      if (limitReached) {
+        setIsWaitlistModalOpen(true);
+        return;
+      }
+    }
+    
     const targetIndex = influencerEpisodes.findIndex((ep: any) => ep.id === episodeId);
     if (targetIndex !== -1) {
       setSelectedEpisodeIndex(targetIndex);
       setActiveIdx(targetIndex);
     }
-  }, [influencerEpisodes]);
+  }, [influencerEpisodes, isAuthenticated]);
 
   // Update activeIdx when selectedEpisodeIndex changes
   useEffect(() => {
@@ -1741,7 +1751,16 @@ const InfluencerPage: React.FC = () => {
                 return (
                   <div
                     key={ep.id}
-                    onClick={() => {
+                    onClick={async () => {
+                      // Check episode limit before starting (skip for unlimited users)
+                      if (isAuthenticated && !hasUnlimitedMessages()) {
+                        const limitReached = await checkEpisodeLimit();
+                        if (limitReached) {
+                          setIsWaitlistModalOpen(true);
+                          return;
+                        }
+                      }
+                      
                       const index = influencerEpisodes.findIndex(e => e.id === ep.id);
                       setSelectedEpisodeIndex(index);
                     }}

@@ -683,3 +683,29 @@ export const getCompletedEpisodesCount = async (): Promise<number> => {
     return 0;
   }
 };
+
+/**
+ * Get total count of ALL episode views (not unique) for the current user
+ * Every video session counts towards the limit, even rewatching the same episode
+ */
+export const getTotalEpisodeViewsCount = async (): Promise<number> => {
+  if (!isSupabaseConfigured()) return 0;
+  
+  const googleUserId = getGoogleUserId();
+  if (!googleUserId) return 0;
+  
+  try {
+    // Count ALL video sessions for this user (not unique episodes)
+    const { count, error } = await supabase
+      .from('video_sessions')
+      .select('*', { count: 'exact', head: true })
+      .eq('google_user_id', googleUserId);
+    
+    if (error) throw error;
+    
+    return count || 0;
+  } catch (error) {
+    console.warn('Analytics: Failed to get total episode views count', error);
+    return 0;
+  }
+};
