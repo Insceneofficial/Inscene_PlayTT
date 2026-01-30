@@ -753,25 +753,8 @@ Generate ONLY the follow-up message, nothing else.
     setInputValue(message);
   };
 
-  // Handle marking task as done (update backend + inject message)
-  const handleMarkDone = async () => {
-    if (currentGoal) {
-      await markTaskDone(currentGoal.id);
-      // Award points for completing goal task
-      const points = await recordGoalCompletion(character, currentGoal.id);
-      if (points > 0) {
-        console.log('[Goal Points] Awarded', points, 'points for completing task');
-      }
-      // Refresh goal state
-      const state = await getGoalState(character);
-      setCurrentGoal(state.goal);
-      setGoalContext(state.contextForAI);
-    }
-    injectMessage("Done! I completed today's task ✓");
-  };
-
   // Handle goal-related quick actions
-  const handleQuickAction = (action: 'my_goal' | 'mark_done' | 'adjust') => {
+  const handleQuickAction = (action: 'my_goal' | 'adjust') => {
     switch (action) {
       case 'my_goal':
         if (currentGoal) {
@@ -779,9 +762,6 @@ Generate ONLY the follow-up message, nothing else.
         } else {
           injectMessage("I want to set a challenge");
         }
-        break;
-      case 'mark_done':
-        handleMarkDone();
         break;
       case 'adjust':
         injectMessage("I need to adjust my challenge - it's too difficult");
@@ -836,15 +816,41 @@ Generate ONLY the follow-up message, nothing else.
         hasShownGoalInterestRef.current = true;
       }
       
-      // Check if user is marking task as done
-      const donePatterns = /\b(done|completed|finished|did it|i did|task done|marked done)\b/i;
-      if (currentGoal && donePatterns.test(userText)) {
-        await markTaskDone(currentGoal.id);
-        // Refresh goal state for next message
-        const state = await getGoalState(character);
-        setCurrentGoal(state.goal);
-        setGoalContext(state.contextForAI);
-        hasShownGoalInterestRef.current = true;
+      // Check if user is marking task as done OR asking about the task
+      if (currentGoal && !currentGoal.completed_today) {
+        const donePatterns = /\b(done|completed|finished|did it|i did|task done|marked done|i completed|finished it|completed it)\b/i;
+        const isCompletionStatement = donePatterns.test(userText);
+        
+        // Detect doubt/clarification questions about goal or episode task
+        const questionWords = /\b(how|what|why|when|where|can you|could you|would you|should i|do i|does it|is it|explain|clarify|help me|i don't|i'm not|confused|unsure|not sure)\b/i;
+        const taskKeywords = /\b(task|challenge|goal|episode|this|it|that)\b/i;
+        const isDoubtQuestion = questionWords.test(userText) && taskKeywords.test(userText);
+        
+        // Check if question is about episode challenge (if episodeId exists)
+        let isEpisodeTaskQuestion = false;
+        if (seriesId && episodeId) {
+          const episodeChallenge = getChallengeForEpisode(seriesId, episodeId);
+          if (episodeChallenge && questionWords.test(userText)) {
+            // Check if message references challenge-related terms
+            const challengeKeywords = /\b(challenge|episode|task|this|it|that)\b/i;
+            isEpisodeTaskQuestion = challengeKeywords.test(userText);
+          }
+        }
+        
+        if (isCompletionStatement || isDoubtQuestion || isEpisodeTaskQuestion) {
+          // Mark task as done
+          await markTaskDone(currentGoal.id);
+          // Award points for completing goal task
+          const points = await recordGoalCompletion(character, currentGoal.id);
+          if (points > 0) {
+            console.log('[Goal Points] Awarded', points, 'points for completing task');
+          }
+          // Refresh goal state for next message
+          const state = await getGoalState(character);
+          setCurrentGoal(state.goal);
+          setGoalContext(state.contextForAI);
+          hasShownGoalInterestRef.current = true;
+        }
       }
       
       // Check if user has completed the episode challenge
@@ -1357,14 +1363,6 @@ Keep it brief and friendly.`
         {/* Quick Action Buttons - Minimal */}
         {isUserLoggedIn() && currentGoal && (
           <div className="relative z-10 bg-white/80 backdrop-blur-xl border-t border-black/[0.06] px-4 pt-2 pb-0 flex items-center gap-2 overflow-x-auto hide-scrollbar">
-            {!currentGoal.completed_today && (
-              <button
-                onClick={() => handleQuickAction('mark_done')}
-                className="flex-shrink-0 px-3.5 py-2 rounded-lg text-[12px] font-medium bg-[#4A7C59] text-white hover:bg-[#3D6549] transition-all"
-              >
-                ✓ Done
-              </button>
-            )}
             <button
               onClick={() => handleQuickAction('adjust')}
               className="flex-shrink-0 px-3.5 py-2 rounded-lg text-[12px] font-medium bg-black/[0.04] text-[#8A8A8A] hover:text-[#C9A227] transition-all"
@@ -1400,7 +1398,6 @@ Keep it brief and friendly.`
           <GoalsModal
             goal={currentGoal}
             onClose={() => setShowGoalsModal(false)}
-            onMarkDone={handleMarkDone}
             onPause={async () => {
               const { pauseGoal } = await import('../lib/goals');
               await pauseGoal(currentGoal.id);
@@ -1547,14 +1544,6 @@ Keep it brief and friendly.`
         {/* Quick Action Buttons - Minimal */}
         {isUserLoggedIn() && currentGoal && (
           <div className="relative z-10 px-5 pb-2 pt-2 flex items-center gap-2 overflow-x-auto hide-scrollbar bg-white/90 backdrop-blur-sm border-t border-black/[0.06]">
-            {!currentGoal.completed_today && (
-              <button
-                onClick={() => handleQuickAction('mark_done')}
-                className="flex-shrink-0 px-3.5 py-2 rounded-lg text-[12px] font-medium bg-[#4A7C59] text-white hover:bg-[#3D6549] transition-all"
-              >
-                ✓ Done
-              </button>
-            )}
             <button
               onClick={() => handleQuickAction('adjust')}
               className="flex-shrink-0 px-3.5 py-2 rounded-lg text-[12px] font-medium bg-black/[0.04] text-[#8A8A8A] hover:text-[#C9A227] transition-all"
@@ -1587,7 +1576,6 @@ Keep it brief and friendly.`
           <GoalsModal
             goal={currentGoal}
             onClose={() => setShowGoalsModal(false)}
-            onMarkDone={handleMarkDone}
             onPause={async () => {
               const { pauseGoal } = await import('../lib/goals');
               await pauseGoal(currentGoal.id);

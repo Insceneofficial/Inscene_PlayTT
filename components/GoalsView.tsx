@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { getAllGoals, GoalWithStreak, markTaskDone } from '../lib/goals';
+import { getAllGoals, GoalWithStreak } from '../lib/goals';
 import { getCharacterAvatar } from '../lib/characters';
 
 interface GoalsViewProps {
@@ -22,12 +22,6 @@ const GoalsView: React.FC<GoalsViewProps> = ({ onClose, onGoalSelect }) => {
     loadData();
   }, []);
 
-  const handleMarkDone = async (goalId: string) => {
-    await markTaskDone(goalId);
-    // Reload goals to update completion status
-    const allGoals = await getAllGoals();
-    setGoals(allGoals);
-  };
 
   return (
     <div className="fixed inset-0 z-[900] flex flex-col bg-[#FAF9F6] animate-fade-in">
@@ -92,17 +86,6 @@ const GoalsView: React.FC<GoalsViewProps> = ({ onClose, onGoalSelect }) => {
                             )}
                           </div>
 
-                          {!goal.completed_today && (
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleMarkDone(goal.id);
-                              }}
-                              className="w-full py-2 rounded-xl bg-[#4A7C59] text-white font-medium text-[13px] hover:bg-[#3D6549] transition-colors"
-                            >
-                              Mark as Done
-                            </button>
-                          )}
 
                           {goal.completed_today && onGoalSelect && (
                             <button

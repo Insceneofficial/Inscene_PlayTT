@@ -4,10 +4,9 @@ import { getCharacterAvatar } from '../lib/characters';
 
 interface TodaysFocusCardProps {
   onTaskClick: (goal: GoalWithStreak) => void;
-  onMarkDone: (goalId: string) => void;
 }
 
-const TodaysFocusCard: React.FC<TodaysFocusCardProps> = ({ onTaskClick, onMarkDone }) => {
+const TodaysFocusCard: React.FC<TodaysFocusCardProps> = ({ onTaskClick }) => {
   const [goals, setGoals] = useState<GoalWithStreak[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showConfetti, setShowConfetti] = useState(false);
@@ -149,17 +148,6 @@ const TodaysFocusCard: React.FC<TodaysFocusCardProps> = ({ onTaskClick, onMarkDo
                   </div>
                 </div>
                 
-                {/* Big action button */}
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onMarkDone(nextTask.id);
-                  }}
-                  className="w-full mt-4 py-3 rounded-xl bg-[#4A7C59] text-white font-semibold text-[15px] hover:bg-[#3D6549] active:scale-[0.98] transition-all flex items-center justify-center gap-2"
-                >
-                  <span>✓</span>
-                  <span>I Did It!</span>
-                </button>
               </div>
             )}
 
@@ -181,15 +169,6 @@ const TodaysFocusCard: React.FC<TodaysFocusCardProps> = ({ onTaskClick, onMarkDo
                     <div className="flex-1 min-w-0">
                       <p className="text-[13px] font-medium text-[#1A1A1A] truncate">{goal.daily_task}</p>
                     </div>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onMarkDone(goal.id);
-                      }}
-                      className="px-3 py-1.5 rounded-lg bg-[#4A7C59]/10 text-[#4A7C59] text-[12px] font-semibold hover:bg-[#4A7C59]/20 transition-colors"
-                    >
-                      Done
-                    </button>
                   </div>
                 ))}
               </div>

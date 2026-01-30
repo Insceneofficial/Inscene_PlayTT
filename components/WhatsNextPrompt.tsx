@@ -7,7 +7,7 @@ interface WhatsNextPromptProps {
   goal?: GoalWithStreak | null;
   nextTask?: GoalWithStreak | null;
   streakCount?: number;
-  onAction: (action: 'continue_chat' | 'next_task' | 'mark_done' | 'dismiss') => void;
+  onAction: (action: 'continue_chat' | 'next_task' | 'dismiss') => void;
 }
 
 const WhatsNextPrompt: React.FC<WhatsNextPromptProps> = ({
@@ -106,13 +106,6 @@ const WhatsNextPrompt: React.FC<WhatsNextPromptProps> = ({
             </div>
           </div>
           
-          <button
-            onClick={() => onAction('mark_done')}
-            className="w-full mt-3 py-2.5 rounded-lg text-white font-semibold text-[13px] transition-all active:scale-[0.98]"
-            style={{ backgroundColor: content.accentColor }}
-          >
-            ✓ Mark as Done
-          </button>
         </div>
       )}
 

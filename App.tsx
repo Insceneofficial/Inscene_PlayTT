@@ -13,6 +13,8 @@ import EpisodeView from './components/EpisodeView.tsx';
 import { AuthProvider, useAuth } from './lib/auth';
 import { getUserMessageCount, MAX_USER_MESSAGES, hasUnlimitedMessages } from './lib/chatStorage';
 import { Analytics } from "@vercel/analytics/react";
+import { PointsEarningProvider } from './lib/pointsEarningContext';
+import PointEarningAnimation from './components/PointEarningAnimation';
 import { 
   trackViewer, 
   trackVideoStart, 
@@ -2805,10 +2807,13 @@ const AppContent: React.FC = () => {
 const App: React.FC = () => (
   <BrowserRouter>
     <AuthProvider>
-      <Routes>
-        <Route path="/" element={<AppContent />} />
-        <Route path="/:slug" element={<InfluencerPage />} />
-      </Routes>
+      <PointsEarningProvider>
+        <PointEarningAnimation />
+        <Routes>
+          <Route path="/" element={<AppContent />} />
+          <Route path="/:slug" element={<InfluencerPage />} />
+        </Routes>
+      </PointsEarningProvider>
     </AuthProvider>
   </BrowserRouter>
 );

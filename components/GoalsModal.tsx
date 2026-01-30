@@ -4,7 +4,6 @@ import { GoalWithStreak } from '../lib/goals';
 interface GoalsModalProps {
   goal: GoalWithStreak;
   onClose: () => void;
-  onMarkDone: () => void;
   onPause: () => void;
   onEdit: () => void;
 }
@@ -12,7 +11,6 @@ interface GoalsModalProps {
 const GoalsModal: React.FC<GoalsModalProps> = ({
   goal,
   onClose,
-  onMarkDone,
   onPause,
   onEdit
 }) => {
@@ -62,20 +60,13 @@ const GoalsModal: React.FC<GoalsModalProps> = ({
             </div>
             <p className="text-[#4A4A4A] text-[14px] leading-relaxed">{goal.daily_task}</p>
             
-            {goal.completed_today ? (
+            {goal.completed_today && (
               <div className="mt-4 flex items-center gap-2 text-[#4A7C59] text-[13px] bg-[#4A7C59]/10 rounded-lg px-3 py-2">
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
                   <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.857-9.809a.75.75 0 00-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 10-1.06 1.061l2.5 2.5a.75.75 0 001.137-.089l4-5.5z" clipRule="evenodd" />
                 </svg>
                 <span className="font-medium">Done for today</span>
               </div>
-            ) : (
-              <button
-                onClick={onMarkDone}
-                className="mt-4 w-full py-2.5 rounded-xl bg-[#4A7C59] text-white font-medium text-[14px] hover:bg-[#3D6549] transition-colors"
-              >
-                Mark as Done
-              </button>
             )}
           </div>
 

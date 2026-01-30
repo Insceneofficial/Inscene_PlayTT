@@ -1903,14 +1903,6 @@ const InfluencerPage: React.FC = () => {
             setIsGoalsModalOpen(false);
             setSelectedGoal(null);
           }}
-          onMarkDone={async () => {
-            // Mark the goal as done
-            const { markTaskDone, getActiveGoal } = await import('../lib/goals');
-            await markTaskDone(selectedGoal.id);
-            // Refresh the goal
-            const updatedGoal = await getActiveGoal(influencer?.name || '');
-            setSelectedGoal(updatedGoal);
-          }}
           onPause={async () => {
             const { pauseGoal } = await import('../lib/goals');
             await pauseGoal(selectedGoal.id);

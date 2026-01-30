@@ -1,4 +1,5 @@
 import { supabase, isSupabaseConfigured } from './supabase';
+import { triggerPointsAnimationGlobal } from './pointsEarningContext';
 
 // ============================================
 // Types
@@ -299,6 +300,10 @@ export const recordActivity = async (
       streak = newStreak;
       
       // Award first activity bonus
+      awardPointsCallCount++;
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/ac7c5e46-64d1-400e-8ce5-b517901614ef',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'streaksAndPoints.ts:303',message:'Calling awardPoints for first_activity',data:{callNumber:awardPointsCallCount,points:POINTS_CONFIG.FIRST_ACTIVITY,timeSinceStart:Date.now()-recordStartTime},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      // #endregion
       await awardPoints(creatorId, 'first_activity', POINTS_CONFIG.FIRST_ACTIVITY);
       totalPointsEarned += POINTS_CONFIG.FIRST_ACTIVITY;
     } else {
@@ -339,21 +344,41 @@ export const recordActivity = async (
       if (newStreak > (streak.current_streak || 0)) {
         // Award daily streak points only once per day (when streak increases)
         if (isNewDailyRecord) {
+          awardPointsCallCount++;
+          // #region agent log
+          fetch('http://127.0.0.1:7242/ingest/ac7c5e46-64d1-400e-8ce5-b517901614ef',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'streaksAndPoints.ts:343',message:'Calling awardPoints for streak_daily',data:{callNumber:awardPointsCallCount,points:POINTS_CONFIG.STREAK_DAILY,timeSinceStart:Date.now()-recordStartTime},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+          // #endregion
           await awardPoints(creatorId, 'streak_daily', POINTS_CONFIG.STREAK_DAILY);
           totalPointsEarned += POINTS_CONFIG.STREAK_DAILY;
         }
         
         // Check for milestone bonuses
         if (newStreak === 7) {
+          awardPointsCallCount++;
+          // #region agent log
+          fetch('http://127.0.0.1:7242/ingest/ac7c5e46-64d1-400e-8ce5-b517901614ef',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'streaksAndPoints.ts:349',message:'Calling awardPoints for streak_milestone_7',data:{callNumber:awardPointsCallCount,points:POINTS_CONFIG.STREAK_MILESTONE_7,timeSinceStart:Date.now()-recordStartTime},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+          // #endregion
           await awardPoints(creatorId, 'streak_milestone', POINTS_CONFIG.STREAK_MILESTONE_7, { milestone: 7 });
           totalPointsEarned += POINTS_CONFIG.STREAK_MILESTONE_7;
         } else if (newStreak === 14) {
+          awardPointsCallCount++;
+          // #region agent log
+          fetch('http://127.0.0.1:7242/ingest/ac7c5e46-64d1-400e-8ce5-b517901614ef',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'streaksAndPoints.ts:352',message:'Calling awardPoints for streak_milestone_14',data:{callNumber:awardPointsCallCount,points:POINTS_CONFIG.STREAK_MILESTONE_14,timeSinceStart:Date.now()-recordStartTime},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+          // #endregion
           await awardPoints(creatorId, 'streak_milestone', POINTS_CONFIG.STREAK_MILESTONE_14, { milestone: 14 });
           totalPointsEarned += POINTS_CONFIG.STREAK_MILESTONE_14;
         } else if (newStreak === 30) {
+          awardPointsCallCount++;
+          // #region agent log
+          fetch('http://127.0.0.1:7242/ingest/ac7c5e46-64d1-400e-8ce5-b517901614ef',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'streaksAndPoints.ts:355',message:'Calling awardPoints for streak_milestone_30',data:{callNumber:awardPointsCallCount,points:POINTS_CONFIG.STREAK_MILESTONE_30,timeSinceStart:Date.now()-recordStartTime},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+          // #endregion
           await awardPoints(creatorId, 'streak_milestone', POINTS_CONFIG.STREAK_MILESTONE_30, { milestone: 30 });
           totalPointsEarned += POINTS_CONFIG.STREAK_MILESTONE_30;
         } else if (newStreak === 100) {
+          awardPointsCallCount++;
+          // #region agent log
+          fetch('http://127.0.0.1:7242/ingest/ac7c5e46-64d1-400e-8ce5-b517901614ef',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'streaksAndPoints.ts:358',message:'Calling awardPoints for streak_milestone_100',data:{callNumber:awardPointsCallCount,points:POINTS_CONFIG.STREAK_MILESTONE_100,timeSinceStart:Date.now()-recordStartTime},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+          // #endregion
           await awardPoints(creatorId, 'streak_milestone', POINTS_CONFIG.STREAK_MILESTONE_100, { milestone: 100 });
           totalPointsEarned += POINTS_CONFIG.STREAK_MILESTONE_100;
         }
@@ -362,13 +387,25 @@ export const recordActivity = async (
     
     // 3. Award activity-specific points
     if (activityType === 'video') {
+      awardPointsCallCount++;
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/ac7c5e46-64d1-400e-8ce5-b517901614ef',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'streaksAndPoints.ts:366',message:'Calling awardPoints for video_watched',data:{callNumber:awardPointsCallCount,points:POINTS_CONFIG.VIDEO_WATCHED,timeSinceStart:Date.now()-recordStartTime},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      // #endregion
       await awardPoints(creatorId, 'video_watched', POINTS_CONFIG.VIDEO_WATCHED);
       totalPointsEarned += POINTS_CONFIG.VIDEO_WATCHED;
     } else if (activityType === 'chat' && isNewDailyRecord) {
       // Only award chat session points for first chat of the day
+      awardPointsCallCount++;
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/ac7c5e46-64d1-400e-8ce5-b517901614ef',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'streaksAndPoints.ts:370',message:'Calling awardPoints for chat_session',data:{callNumber:awardPointsCallCount,points:POINTS_CONFIG.CHAT_SESSION,timeSinceStart:Date.now()-recordStartTime},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      // #endregion
       await awardPoints(creatorId, 'chat_session', POINTS_CONFIG.CHAT_SESSION);
       totalPointsEarned += POINTS_CONFIG.CHAT_SESSION;
     }
+    
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/ac7c5e46-64d1-400e-8ce5-b517901614ef',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'streaksAndPoints.ts:378',message:'recordActivity completed',data:{creatorId,activityType,totalPointsEarned,awardPointsCallCount,totalTime:Date.now()-recordStartTime},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+    // #endregion
     
     console.log('[Streaks] Activity recorded:', { 
       creatorId, 
@@ -525,6 +562,13 @@ const awardPoints = async (
           [pointsCategory]: points,
         });
     }
+    
+    // 3. Trigger animation
+    const reason = getTransactionTypeName(transactionType);
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/ac7c5e46-64d1-400e-8ce5-b517901614ef',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'streaksAndPoints.ts:532',message:'awardPoints triggering animation',data:{points,transactionType,reason,creatorId},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+    // #endregion
+    triggerPointsAnimationGlobal(points, reason);
     
     return true;
   } catch (error) {
