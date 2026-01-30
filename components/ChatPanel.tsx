@@ -798,10 +798,6 @@ Generate ONLY the follow-up message, nothing else.
   const handleSend = async () => {
     if (!inputValue.trim() || isTyping) return;
     
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/ac7c5e46-64d1-400e-8ce5-b517901614ef',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ChatPanel.tsx:666',message:'handleSend entry',data:{hasInput:!!inputValue.trim(),isTyping},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H1,H2'})}).catch(()=>{});
-    // #endregion
-    
     // Check message count limit before sending (skip for unlimited users)
     if (isUserLoggedIn() && !hasUnlimitedMessages()) {
       const messageCount = await getUserMessageCount();
@@ -1194,18 +1190,6 @@ Keep it brief and friendly.`
       }
     } catch (error: any) {
       console.error("AI Error:", error);
-      // #region agent log
-      const errorDetails = {
-        errorType: error?.constructor?.name || typeof error,
-        errorMessage: error instanceof Error ? error.message : String(error),
-        errorStack: error instanceof Error ? error.stack : undefined,
-        errorString: String(error),
-        isNetworkError: error instanceof Error && (error.message.includes('network') || error.message.includes('fetch') || error.message.includes('Failed to fetch')),
-        isCorsError: error instanceof Error && (error.message.includes('CORS') || error.message.includes('cross-origin')),
-        errorName: error instanceof Error ? error.name : 'Unknown'
-      };
-      fetch('http://127.0.0.1:7242/ingest/ac7c5e46-64d1-400e-8ce5-b517901614ef',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ChatPanel.tsx:1071',message:'OpenAI API call failed - catch block',data:errorDetails,timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H1,H2,H3,H4'})}).catch(()=>{});
-      // #endregion
       
       // Check if API route is not available (dev mode issue)
       let errorMessage = "Network issue. Try again later.";
@@ -1267,6 +1251,7 @@ Keep it brief and friendly.`
               }
             }}
             className="flex items-center gap-2 p-1 hover:bg-black/[0.04] rounded-xl transition-colors active:scale-95 flex-shrink-0"
+            style={{ touchAction: 'manipulation' }}
             title="Back to Messages"
           >
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-5 h-5 text-[#8A8A8A]">
@@ -1448,6 +1433,7 @@ Keep it brief and friendly.`
     <div className="fixed inset-0 z-[5000] flex items-end justify-center p-4 md:p-8 animate-fade-in pointer-events-none">
       <div 
         className="w-full max-w-lg border border-black/[0.06] rounded-2xl overflow-hidden flex flex-col shadow-xl pointer-events-auto h-[80vh] max-h-[750px] mb-20 md:mb-0 transition-all duration-500 transform translate-y-0 bg-[#FAF9F6] relative"
+        style={{ touchAction: 'manipulation' }}
       >
         {/* Subtle background pattern */}
         <div 
@@ -1464,6 +1450,7 @@ Keep it brief and friendly.`
             <button 
               onClick={onClose}
               className="w-9 h-9 flex items-center justify-center hover:bg-black/[0.04] rounded-xl transition-all active:scale-95 flex-shrink-0"
+              style={{ touchAction: 'manipulation' }}
               title="Back"
             >
               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-5 h-5 text-[#8A8A8A]">

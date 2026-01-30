@@ -1915,15 +1915,9 @@ const AppContent: React.FC = () => {
     }, 2000);
     
     // Start transition: store previous episode and set transition state
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/ac7c5e46-64d1-400e-8ce5-b517901614ef',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'App.tsx:1518',message:'Transition starting',data:{currentEpisodeId:currentEpisode?.id,targetEpisodeId:episodeId,isMuted},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A,B,C'})}).catch(()=>{});
-    // #endregion
     // Aggressively stop all videos on the page before starting transition to prevent double audio
     const allVideos = document.querySelectorAll('video');
     allVideos.forEach((video) => {
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/ac7c5e46-64d1-400e-8ce5-b517901614ef',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'App.tsx:1523',message:'Stopping video before transition',data:{paused:video.paused,muted:video.muted},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
-      // #endregion
       // Aggressively stop the video: pause, mute, reset position
       // Don't call load() as it causes reload and blinking
       video.pause();
@@ -1936,9 +1930,6 @@ const AppContent: React.FC = () => {
     
     // After animation completes (550ms), update activeIdx and clear transition state
     setTimeout(() => {
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/ac7c5e46-64d1-400e-8ce5-b517901614ef',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'App.tsx:1527',message:'Transition ending',data:{targetIndex},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A,B,C'})}).catch(()=>{});
-      // #endregion
       // Before updating state, ensure all videos are stopped except the new active one
       // Use requestAnimationFrame to ensure smooth transition without blink
       requestAnimationFrame(() => {
@@ -2445,9 +2436,6 @@ const AppContent: React.FC = () => {
             );
           }
           
-          // #region agent log
-          fetch('http://127.0.0.1:7242/ingest/ac7c5e46-64d1-400e-8ce5-b517901614ef',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'App.tsx:2005',message:'Rendering dual videos during transition',data:{previousEpisodeId:previousEpisode.id,targetEpisodeId:targetEpisode.id,isMuted,transitionDirection},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A,B,C'})}).catch(()=>{});
-          // #endregion
           return (
             <div className="fixed inset-0 bg-black z-[500] overflow-hidden">
               {/* Old video - sliding out based on direction */}

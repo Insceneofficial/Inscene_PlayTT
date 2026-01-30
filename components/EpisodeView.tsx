@@ -56,6 +56,7 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
   const [showChatBubble, setShowChatBubble] = useState(false);
   const wasPlayingBeforeChatRef = useRef(false);
   const chatTriggeredBySwipeRef = useRef(false);
+  const chatTriggeredForEndRef = useRef(false);
   
   // Analytics tracking
   const analyticsRecordId = useRef<string | null>(null);
@@ -211,15 +212,18 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
     
     // Check if episode requires chat on skip
     if (shouldTriggerChatOnSkip(episode)) {
-      // Mark that chat will be triggered by swipe (prevents onPause from also triggering)
+      // Mark that chat will be triggered by swipe (prevents onPause and onEnded from also triggering)
       chatTriggeredBySwipeRef.current = true;
+      chatTriggeredForEndRef.current = true;
       
-      // Pause the video immediately
+      // Remember that video was playing before chat (so it can resume after chat closes)
+      wasPlayingBeforeChatRef.current = true;
+      
+      // Pause the video immediately (but DON'T set isEnded so video can resume after chat closes)
       video.pause();
       setIsPaused(true);
-      setIsEnded(true); // Treat as completed
       
-      // Trigger chat after a short delay
+      // Trigger chat after a delay to allow touch events to fully complete
       setTimeout(() => {
         if (episode?.postAction?.chat) {
           const chatConfig = episode.postAction.chat;
@@ -241,7 +245,7 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
           // Reset flag if no chat config
           chatTriggeredBySwipeRef.current = false;
         }
-      }, 100);
+      }, 350);
       return;
     }
     
@@ -352,9 +356,6 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
   // Aggressively stop video when preventAutoplay is true (during transitions)
   useEffect(() => {
     if (preventAutoplay && videoRef.current) {
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/ac7c5e46-64d1-400e-8ce5-b517901614ef',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'EpisodeView.tsx:311',message:'Stopping video due to preventAutoplay',data:{episodeId:episode.id,paused:videoRef.current?.paused,muted:videoRef.current?.muted},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
-      // #endregion
       const video = videoRef.current;
       // Aggressively stop: pause, mute, reset position
       // Don't call load() as it causes reload and blinking
@@ -386,9 +387,6 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
   // Cleanup: Pause video when component unmounts
   useEffect(() => {
     return () => {
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/ac7c5e46-64d1-400e-8ce5-b517901614ef',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'EpisodeView.tsx:310',message:'Component unmounting - pausing video',data:{episodeId:episode.id,paused:videoRef.current?.paused},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
-      // #endregion
       if (videoRef.current) {
         videoRef.current.pause();
         videoRef.current.muted = true;
@@ -434,9 +432,6 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
 
     // If preventAutoplay is true, ensure video is paused and muted
     if (preventAutoplay) {
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/ac7c5e46-64d1-400e-8ce5-b517901614ef',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'EpisodeView.tsx:335',message:'Pausing video in lifecycle useEffect due to preventAutoplay',data:{episodeId:episode.id},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
-      // #endregion
       video.pause();
       video.muted = true;
       setIsPaused(true);
@@ -632,7 +627,21 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
 
   // Auto-open chat after video ends if postAction.chat exists
   useEffect(() => {
+    // Reset the flag when isEnded becomes false (new video or replay)
+    if (!isEnded) {
+      chatTriggeredForEndRef.current = false;
+      return;
+    }
+    
+    // Skip if chat was already triggered by swipe OR already triggered for this end
+    if (chatTriggeredBySwipeRef.current || chatTriggeredForEndRef.current) {
+      return;
+    }
+    
     if (isEnded && episode?.postAction?.chat) {
+      // Mark chat as triggered to prevent duplicate calls
+      chatTriggeredForEndRef.current = true;
+      
       const chatConfig = episode.postAction.chat;
       const globalRules = getGlobalRules();
       const chatbotName = globalRules.chatbot.name || 'Chirag';
@@ -819,25 +828,16 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
           }
         }}
         onCanPlay={() => {
-          // #region agent log
-          fetch('http://127.0.0.1:7242/ingest/ac7c5e46-64d1-400e-8ce5-b517901614ef',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'EpisodeView.tsx:580',message:'onCanPlay triggered',data:{episodeId:episode.id,isMuted,hasAttemptedAutoplay:hasAttemptedAutoplay.current,paused:videoRef.current?.paused,muted:videoRef.current?.muted,containerClassName,preventAutoplay},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A,B'})}).catch(()=>{});
-          // #endregion
           // Only attempt to play if preventAutoplay is false and we haven't already attempted
           if (!hasAttemptedAutoplay.current && videoRef.current && !preventAutoplay) {
             hasAttemptedAutoplay.current = true;
             videoRef.current.play().then(() => {
-              // #region agent log
-              fetch('http://127.0.0.1:7242/ingest/ac7c5e46-64d1-400e-8ce5-b517901614ef',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'EpisodeView.tsx:583',message:'Video play success',data:{episodeId:episode.id,muted:videoRef.current?.muted},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A,B'})}).catch(()=>{});
-              // #endregion
               setIsPaused(false);
             }).catch(() => {
               setShowPlayButton(true);
               setIsPaused(true);
             });
           } else if (preventAutoplay && videoRef.current) {
-            // #region agent log
-            fetch('http://127.0.0.1:7242/ingest/ac7c5e46-64d1-400e-8ce5-b517901614ef',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'EpisodeView.tsx:592',message:'Autoplay prevented',data:{episodeId:episode.id},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-            // #endregion
             const video = videoRef.current;
             video.pause();
             video.muted = true;
@@ -847,14 +847,8 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
           }
         }}
         onPlaying={() => {
-          // #region agent log
-          fetch('http://127.0.0.1:7242/ingest/ac7c5e46-64d1-400e-8ce5-b517901614ef',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'EpisodeView.tsx:604',message:'Video playing',data:{episodeId:episode.id,isMuted,muted:videoRef.current?.muted,containerClassName,preventAutoplay},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A,B,C'})}).catch(()=>{});
-          // #endregion
           // If preventAutoplay is true, aggressively stop the video immediately
           if (preventAutoplay && videoRef.current) {
-            // #region agent log
-            fetch('http://127.0.0.1:7242/ingest/ac7c5e46-64d1-400e-8ce5-b517901614ef',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'EpisodeView.tsx:607',message:'Stopping video in onPlaying due to preventAutoplay',data:{episodeId:episode.id},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
-            // #endregion
             const video = videoRef.current;
             video.pause();
             video.muted = true;
@@ -919,7 +913,11 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
           }
           
           // Check if episode requires chat on completion
-          if (shouldTriggerChatOnComplete(episode)) {
+          // Skip if chat was already triggered by swipe or for this video end
+          if (shouldTriggerChatOnComplete(episode) && !chatTriggeredBySwipeRef.current && !chatTriggeredForEndRef.current) {
+            // Mark chat as triggered to prevent duplicate calls
+            chatTriggeredForEndRef.current = true;
+            
             // Trigger chat after a short delay
             setTimeout(() => {
               if (episode?.postAction?.chat) {
