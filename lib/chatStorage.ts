@@ -352,19 +352,31 @@ export const getLastMessages = async (): Promise<Record<string, ChatMessage>> =>
  * Check if user has any chat history with a character
  */
 /**
- * Check if user has unlimited messages (bypass limit)
+ * Check if user is a privileged/admin user (full access, no leaderboard)
  */
-export const hasUnlimitedMessages = (): boolean => {
+export const isPrivilegedUser = (): boolean => {
   try {
     const savedUser = localStorage.getItem('inscene_google_user');
     if (savedUser) {
       const user = JSON.parse(savedUser);
-      return user?.email === 'insceneofficial@gmail.com';
+      const privilegedEmails = [
+        'insceneofficial@gmail.com',
+        'Chiragcsaini09@gmail.com',
+        'rajatwork2000@gmail.com'
+      ];
+      return privilegedEmails.includes(user?.email);
     }
   } catch (error) {
-    console.warn('ChatStorage: Failed to check unlimited messages', error);
+    console.warn('ChatStorage: Failed to check privileged user', error);
   }
   return false;
+};
+
+/**
+ * Check if user has unlimited messages (bypass limit)
+ */
+export const hasUnlimitedMessages = (): boolean => {
+  return isPrivilegedUser();
 };
 
 /**

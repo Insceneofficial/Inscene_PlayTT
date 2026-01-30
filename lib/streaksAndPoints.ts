@@ -1,5 +1,6 @@
 import { supabase, isSupabaseConfigured } from './supabase';
 import { triggerPointsAnimationGlobal } from './pointsEarningContext';
+import { isPrivilegedUser } from './chatStorage';
 
 // ============================================
 // Types
@@ -201,6 +202,12 @@ export const recordActivity = async (
   metadata?: { videoWatchSeconds?: number; messageCount?: number }
 ): Promise<{ streak: UserStreak | null; pointsEarned: number }> => {
   if (!isSupabaseConfigured()) {
+    return { streak: null, pointsEarned: 0 };
+  }
+  
+  // Skip activity recording for privileged users (they shouldn't appear in leaderboard)
+  if (isPrivilegedUser()) {
+    console.log('[Activity] Skipping activity recording for privileged user');
     return { streak: null, pointsEarned: 0 };
   }
   
@@ -516,6 +523,12 @@ const awardPoints = async (
   metadata: Record<string, any> = {}
 ): Promise<boolean> => {
   if (!isSupabaseConfigured() || points <= 0) return false;
+  
+  // Skip awarding points for privileged users (they shouldn't appear in leaderboard)
+  if (isPrivilegedUser()) {
+    console.log('[Points] Skipping points award for privileged user');
+    return false;
+  }
   
   const googleUserId = getGoogleUserId();
   if (!googleUserId) return false;
