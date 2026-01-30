@@ -361,10 +361,13 @@ export const isPrivilegedUser = (): boolean => {
       const user = JSON.parse(savedUser);
       const privilegedEmails = [
         'insceneofficial@gmail.com',
-        'Chiragcsaini09@gmail.com',
+        'chiragcsaini09@gmail.com',
         'rajatwork2000@gmail.com'
       ];
-      return privilegedEmails.includes(user?.email);
+      // Case-insensitive comparison
+      return privilegedEmails.some(email => 
+        email.toLowerCase() === user?.email?.toLowerCase()
+      );
     }
   } catch (error) {
     console.warn('ChatStorage: Failed to check privileged user', error);
