@@ -45,12 +45,14 @@ const UserMenu: React.FC<UserMenuProps> = ({ onSignInClick }) => {
             <span>Dev Login</span>
           </button>
         )}
+        {/* Google Sign-In temporarily disabled - keeping code for future use
         <button
           onClick={onSignInClick}
           className="px-4 py-2 rounded-xl bg-[#4A7C59] text-white text-[13px] font-semibold hover:bg-[#3D6549] active:scale-[0.98] transition-all"
         >
           Sign In
         </button>
+        */}
       </div>
     );
   }

@@ -73,7 +73,7 @@ const SignupPromptModal: React.FC<SignupPromptModalProps> = ({ isOpen, onClose, 
 
         {/* Content */}
         <div className="px-8 pb-8 space-y-4 bg-[#FAF9F6]">
-          {/* Sign up / Log in Button */}
+          {/* Google Sign-In temporarily disabled - keeping code for future use
           <button
             onClick={handleSignIn}
             className="w-full py-3.5 rounded-xl bg-[#4A7C59] text-white font-semibold text-[15px] hover:bg-[#3D6549] active:scale-[0.98] transition-all"
@@ -81,12 +81,12 @@ const SignupPromptModal: React.FC<SignupPromptModalProps> = ({ isOpen, onClose, 
             Sign up / Log in
           </button>
 
-          {/* Divider */}
           <div className="flex items-center gap-4 py-2">
             <div className="flex-1 h-px bg-black/[0.06]" />
             <span className="text-[#ACACAC] text-[12px] font-medium">or</span>
             <div className="flex-1 h-px bg-black/[0.06]" />
           </div>
+          */}
 
           {/* Continue as Guest */}
           <button

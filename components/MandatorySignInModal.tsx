@@ -63,12 +63,11 @@ const MandatorySignInModal: React.FC<MandatorySignInModalProps> = ({ isOpen, onS
 
         {/* Content */}
         <div className="px-8 pb-8 space-y-4 bg-[#FAF9F6]">
-          {/* Google Sign-In Button Container */}
+          {/* Google Sign-In temporarily disabled - keeping code for future use
           <div className="flex justify-center pt-4">
             {GOOGLE_CLIENT_ID ? (
               <div ref={googleButtonRef} className="google-signin-container" />
             ) : (
-              // Fallback custom button if Google script not loaded
               <button
                 onClick={signInWithGoogle}
                 className="w-full max-w-[280px] py-3.5 rounded-xl bg-white text-[#1A1A1A] font-semibold flex items-center justify-center gap-3 hover:bg-black/[0.02] active:scale-[0.98] transition-all border border-black/[0.08] shadow-sm"
@@ -83,6 +82,7 @@ const MandatorySignInModal: React.FC<MandatorySignInModalProps> = ({ isOpen, onS
               </button>
             )}
           </div>
+          */}
 
           {/* Terms */}
           <p className="text-center text-[#ACACAC] text-[11px] leading-relaxed pt-2">

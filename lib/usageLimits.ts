@@ -70,6 +70,35 @@ export const checkGuestLimit = (): boolean => {
 };
 
 /**
+ * Check if user has engaged enough to show premium waitlist prompt
+ * Returns true when BOTH episodes > 5 AND chats > 5 (6+ of each)
+ */
+export const checkEngagedUserThreshold = (): boolean => {
+  const episodeCount = getGuestEpisodeCount();
+  const chatCount = getGuestChatCount();
+  return episodeCount > 5 && chatCount > 5;
+};
+
+// LocalStorage key for tracking if engaged user waitlist has been shown
+const ENGAGED_WAITLIST_SHOWN_KEY = 'inscene_engaged_waitlist_shown';
+
+/**
+ * Check if the engaged user waitlist prompt has been shown
+ */
+export const hasShownEngagedWaitlist = (): boolean => {
+  if (typeof window === 'undefined') return false;
+  return localStorage.getItem(ENGAGED_WAITLIST_SHOWN_KEY) === 'true';
+};
+
+/**
+ * Mark the engaged user waitlist prompt as shown
+ */
+export const markEngagedWaitlistShown = (): void => {
+  if (typeof window === 'undefined') return;
+  localStorage.setItem(ENGAGED_WAITLIST_SHOWN_KEY, 'true');
+};
+
+/**
  * Reset guest usage counts (used after sign-in)
  */
 export const resetGuestCounts = (): void => {

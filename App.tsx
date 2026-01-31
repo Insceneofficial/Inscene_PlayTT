@@ -16,7 +16,7 @@ import LeaderboardDrawer from './components/LeaderboardDrawer.tsx';
 import EpisodeView from './components/EpisodeView.tsx';
 import { AuthProvider, useAuth } from './lib/auth';
 import { getUserMessageCount, hasUnlimitedMessages, isOnWaitlist } from './lib/chatStorage';
-import { hasShownSignupPrompt, canAccessEpisode, MAX_CHAT_MESSAGES, checkEpisodeLimit, checkGuestLimit } from './lib/usageLimits';
+import { hasShownSignupPrompt, canAccessEpisode, MAX_CHAT_MESSAGES, checkEpisodeLimit, checkGuestLimit, checkEngagedUserThreshold, hasShownEngagedWaitlist, markEngagedWaitlistShown } from './lib/usageLimits';
 import { Analytics } from "@vercel/analytics/react";
 import { PointsEarningProvider } from './lib/pointsEarningContext';
 import PointEarningAnimation from './components/PointEarningAnimation';
@@ -1429,6 +1429,7 @@ const AppContent: React.FC = () => {
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [isWaitlistModalOpen, setIsWaitlistModalOpen] = useState(false);
   const [waitlistLimitType, setWaitlistLimitType] = useState<'chat' | 'episode'>('chat');
+  const [isEngagedWaitlistOpen, setIsEngagedWaitlistOpen] = useState(false);
   const [isSignupPromptOpen, setIsSignupPromptOpen] = useState(false);
   const [isMandatorySignInOpen, setIsMandatorySignInOpen] = useState(false);
   const [isGuestLimitModalOpen, setIsGuestLimitModalOpen] = useState(false);
@@ -1530,10 +1531,12 @@ const AppContent: React.FC = () => {
       if (isAuthLoading) return;
       
       if (!isAuthenticated) {
-        // Guest user - check if they've hit the guest limit
-        if (checkGuestLimit()) {
-          console.log('[App] Guest limit reached, showing guest limit modal');
-          setIsGuestLimitModalOpen(true);
+        // Guest user - check for engaged user threshold (>5 episodes AND >5 chats)
+        // Show dismissable waitlist prompt for highly engaged users
+        // Note: Google auth is temporarily disabled, so we use dismissable waitlist instead of blocking
+        if (checkEngagedUserThreshold() && !hasShownEngagedWaitlist()) {
+          console.log('[App] Engaged user threshold reached, showing waitlist prompt');
+          setIsEngagedWaitlistOpen(true);
         }
       } else {
         // Authenticated user - check if they're on the waitlist (blocked)
@@ -1830,11 +1833,12 @@ const AppContent: React.FC = () => {
       return;
     }
     
-    // For guests, check if they've hit the guest limit before allowing navigation
-    if (!isAuthenticated && checkGuestLimit()) {
-      console.log('[handleNavigateToEpisode] Guest limit reached, showing guest limit modal');
-      setIsGuestLimitModalOpen(true);
-      return;
+    // For guests, check if they've hit the engaged user threshold
+    // Note: Google auth is temporarily disabled, so we use dismissable waitlist instead of blocking
+    if (!isAuthenticated && checkEngagedUserThreshold() && !hasShownEngagedWaitlist()) {
+      console.log('[handleNavigateToEpisode] Engaged user threshold reached, showing waitlist prompt');
+      setIsEngagedWaitlistOpen(true);
+      // Don't block navigation - let them continue after seeing the prompt
     }
     
     // Check episode view limit (skip for unlimited users)
@@ -2505,7 +2509,13 @@ const AppContent: React.FC = () => {
                   setWaitlistLimitType('episode');
                   setIsWaitlistModalOpen(true);
                 }}
-                onGuestLimitReached={() => setIsGuestLimitModalOpen(true)}
+                onGuestLimitReached={() => {
+                  // Show engaged waitlist instead of blocking guest limit modal
+                  // (Google auth is temporarily disabled)
+                  if (checkEngagedUserThreshold() && !hasShownEngagedWaitlist()) {
+                    setIsEngagedWaitlistOpen(true);
+                  }
+                }}
                 isAuthenticated={isAuthenticated}
                 isChatOpen={!!chatData}
                 currentIndex={activeIdx}
@@ -2545,7 +2555,13 @@ const AppContent: React.FC = () => {
                   setWaitlistLimitType('episode');
                   setIsWaitlistModalOpen(true);
                 }}
-                onGuestLimitReached={() => setIsGuestLimitModalOpen(true)}
+                onGuestLimitReached={() => {
+                  // Show engaged waitlist instead of blocking guest limit modal
+                  // (Google auth is temporarily disabled)
+                  if (checkEngagedUserThreshold() && !hasShownEngagedWaitlist()) {
+                    setIsEngagedWaitlistOpen(true);
+                  }
+                }}
                 isAuthenticated={isAuthenticated}
                 isChatOpen={!!chatData}
                 containerClassName={transitionDirection === 'backward' ? 'video-transition-out-down' : 'video-transition-out'}
@@ -2582,7 +2598,13 @@ const AppContent: React.FC = () => {
                   setWaitlistLimitType('episode');
                   setIsWaitlistModalOpen(true);
                 }}
-                onGuestLimitReached={() => setIsGuestLimitModalOpen(true)}
+                onGuestLimitReached={() => {
+                  // Show engaged waitlist instead of blocking guest limit modal
+                  // (Google auth is temporarily disabled)
+                  if (checkEngagedUserThreshold() && !hasShownEngagedWaitlist()) {
+                    setIsEngagedWaitlistOpen(true);
+                  }
+                }}
                 isAuthenticated={isAuthenticated}
                 isChatOpen={!!chatData}
                 containerClassName={transitionDirection === 'backward' ? 'video-transition-in-up' : 'video-transition-in'}
@@ -2624,7 +2646,13 @@ const AppContent: React.FC = () => {
               setWaitlistLimitType('episode');
               setIsWaitlistModalOpen(true);
             }}
-            onGuestLimitReached={() => setIsGuestLimitModalOpen(true)}
+            onGuestLimitReached={() => {
+                  // Show engaged waitlist instead of blocking guest limit modal
+                  // (Google auth is temporarily disabled)
+                  if (checkEngagedUserThreshold() && !hasShownEngagedWaitlist()) {
+                    setIsEngagedWaitlistOpen(true);
+                  }
+                }}
             isAuthenticated={isAuthenticated}
             isChatOpen={!!chatData}
             currentIndex={activeIdx}
@@ -2787,7 +2815,13 @@ const AppContent: React.FC = () => {
             setWaitlistLimitType('chat');
             setIsWaitlistModalOpen(true);
           }}
-          onGuestLimitReached={() => setIsGuestLimitModalOpen(true)}
+          onGuestLimitReached={() => {
+                  // Show engaged waitlist instead of blocking guest limit modal
+                  // (Google auth is temporarily disabled)
+                  if (checkEngagedUserThreshold() && !hasShownEngagedWaitlist()) {
+                    setIsEngagedWaitlistOpen(true);
+                  }
+                }}
           isGuidedChat={chatData.isGuidedChat || false}
           guidedChatDuration={chatData.guidedChatDuration || 45}
           closeEnabled={chatData.closeEnabled !== undefined ? chatData.closeEnabled : true}
@@ -2842,6 +2876,16 @@ const AppContent: React.FC = () => {
         isOpen={isWaitlistModalOpen} 
         onClose={() => setIsWaitlistModalOpen(false)}
         limitType={waitlistLimitType}
+      />
+
+      {/* Engaged User Waitlist Modal - shown when user has >5 episodes AND >5 chats */}
+      <WaitlistModal 
+        isOpen={isEngagedWaitlistOpen} 
+        onClose={() => {
+          setIsEngagedWaitlistOpen(false);
+          markEngagedWaitlistShown();
+        }}
+        limitType="engaged"
       />
 
       {/* Sign-up Prompt Modal */}

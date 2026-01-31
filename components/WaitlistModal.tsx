@@ -5,7 +5,7 @@ import { useAuth } from '../lib/auth';
 interface WaitlistModalProps {
   isOpen: boolean;
   onClose: () => void;
-  limitType?: 'chat' | 'episode';
+  limitType?: 'chat' | 'episode' | 'engaged';
 }
 
 const WaitlistModal: React.FC<WaitlistModalProps> = ({ isOpen, onClose, limitType = 'chat' }) => {
@@ -16,10 +16,28 @@ const WaitlistModal: React.FC<WaitlistModalProps> = ({ isOpen, onClose, limitTyp
   if (!isOpen) return null;
 
   // Customize messaging based on limit type
-  const title = limitType === 'episode' ? 'Episode limit reached' : 'Message limit reached';
-  const description = limitType === 'episode' 
-    ? "You've completed your free episodes. Get personalized cricket exercise sessions — join the Premium Waitlist."
-    : "You've used your free credits. Get personalized cricket exercise sessions — join the Premium Waitlist.";
+  const getModalContent = () => {
+    switch (limitType) {
+      case 'episode':
+        return {
+          title: 'Episode limit reached',
+          description: "You've completed your free episodes. Get personalized cricket exercise sessions — join the Premium Waitlist."
+        };
+      case 'engaged':
+        return {
+          title: "You're on fire!",
+          description: "You've been really engaged with our content. Want early access to premium features? Join the waitlist!"
+        };
+      case 'chat':
+      default:
+        return {
+          title: 'Message limit reached',
+          description: "You've used your free credits. Get personalized cricket exercise sessions — join the Premium Waitlist."
+        };
+    }
+  };
+
+  const { title, description } = getModalContent();
 
   const handleJoinWaitlist = async () => {
     setIsSubmitting(true);
@@ -45,6 +63,16 @@ const WaitlistModal: React.FC<WaitlistModalProps> = ({ isOpen, onClose, limitTyp
   return (
     <div className="fixed inset-0 z-[7000] flex items-center justify-center p-6 bg-black/30 backdrop-blur-md animate-fade-in">
       <div className="relative w-full max-w-sm bg-white rounded-2xl overflow-hidden shadow-xl p-8 animate-slide-up">
+        {/* Close Button */}
+        <button 
+          onClick={onClose}
+          className="absolute top-4 right-4 w-8 h-8 rounded-lg bg-black/[0.04] hover:bg-black/[0.08] flex items-center justify-center transition-all active:scale-95 z-10"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4 text-[#8A8A8A]">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+
         <div className="flex flex-col items-center gap-5 mt-2">
           {isSuccess ? (
             <>
