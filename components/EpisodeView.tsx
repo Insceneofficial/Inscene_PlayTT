@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import EpisodeSidebar from './EpisodeSidebar';
 import { trackVideoStart, updateVideoProgress, trackVideoEnd } from '../lib/analytics';
 import { getGlobalRules, getFirstInSequence, getNumericId, getStringId, isEp3OrStep, shouldTriggerChatOnComplete, shouldTriggerChatOnSkip } from '../lib/episodeFlow';
-import { checkEpisodeLimit } from '../lib/usageLimits';
+import { checkEpisodeLimit, incrementGuestEpisodeCount, checkGuestLimit } from '../lib/usageLimits';
 
 interface EpisodeViewProps {
   episode: any;
@@ -17,6 +17,8 @@ interface EpisodeViewProps {
   onNavigateBack?: () => void; // Add this new prop for history-based back navigation
   onEpisodeCompleted?: (episodeId: number) => void; // Callback when episode is completed
   onEpisodeLimitReached?: () => void; // Callback when episode limit is reached
+  onGuestLimitReached?: () => void; // Callback when guest limit is reached
+  isAuthenticated?: boolean; // Whether user is authenticated
   isChatOpen?: boolean;
   containerClassName?: string;
   preventAutoplay?: boolean;
@@ -37,6 +39,8 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
   onNavigateBack, // Add this
   onEpisodeCompleted, // Add this
   onEpisodeLimitReached, // Add this
+  onGuestLimitReached, // Add this for guest limit tracking
+  isAuthenticated = false, // Add this for guest limit tracking
   isChatOpen = false,
   containerClassName = '',
   preventAutoplay = false,
@@ -612,7 +616,20 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
           onEpisodeCompleted(episode.id);
         }
         
-        // Check episode limit after completion is recorded
+        // For guests (not authenticated), track episode view and check guest limit
+        if (!isAuthenticated) {
+          const newCount = incrementGuestEpisodeCount();
+          console.log('[EpisodeView] Guest episode count:', newCount);
+          
+          // Check if guest limit is reached
+          if (checkGuestLimit() && onGuestLimitReached) {
+            console.log('[EpisodeView] Guest limit reached');
+            onGuestLimitReached();
+            return; // Don't check authenticated user limits
+          }
+        }
+        
+        // Check episode limit after completion is recorded (for authenticated users)
         // Add small delay to ensure database write is complete
         setTimeout(async () => {
           const limitReached = await checkEpisodeLimit();
@@ -624,7 +641,7 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
       };
       handleCompletion();
     }
-  }, [isEnded, endVideoSession, onEpisodeCompleted, onEpisodeLimitReached, episode.id]);
+  }, [isEnded, endVideoSession, onEpisodeCompleted, onEpisodeLimitReached, onGuestLimitReached, isAuthenticated, episode.id]);
 
   // Auto-navigate to first step when sequence container ends
   // Exception: ep3 requires CTA-only progression, so skip auto-navigation

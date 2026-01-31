@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { trackChatStart, updateChatMessages, trackChatEnd } from '../lib/analytics';
 import { saveMessage, loadChatHistory, isUserLoggedIn, debugListAllMessages, getUserMessageCount, hasUnlimitedMessages } from '../lib/chatStorage';
-import { MAX_CHAT_MESSAGES } from '../lib/usageLimits';
+import { MAX_CHAT_MESSAGES, incrementGuestChatCount, checkGuestLimit } from '../lib/usageLimits';
 import { getCharacterPrompt } from '../lib/characters';
 import { getGoalState, markTaskDone, createGoal, GoalWithStreak } from '../lib/goals';
 import { recordActivity, recordChatMessages, recordGoalCompletion } from '../lib/streaksAndPoints';
@@ -26,6 +26,7 @@ interface ChatPanelProps {
   seriesTitle?: string;
   episodeId?: number;
   onWaitlistRequired?: () => void;
+  onGuestLimitReached?: () => void; // Callback when guest limit is reached
   onChallengeCompleted?: (seriesId: string, episodeId: number) => void;
   // Guided chat props
   isGuidedChat?: boolean;
@@ -62,6 +63,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
   seriesTitle,
   episodeId,
   onWaitlistRequired,
+  onGuestLimitReached,
   onChallengeCompleted,
   isGuidedChat = false,
   guidedChatDuration = 45,
@@ -772,6 +774,19 @@ Generate ONLY the follow-up message, nothing else.
 
   const handleSend = async () => {
     if (!inputValue.trim() || isTyping) return;
+    
+    // For guests (not logged in), track chat and check guest limit
+    if (!isUserLoggedIn()) {
+      const newCount = incrementGuestChatCount();
+      console.log('[ChatPanel] Guest chat count:', newCount);
+      
+      // Check if guest limit is reached BEFORE processing the message
+      if (checkGuestLimit() && onGuestLimitReached) {
+        console.log('[ChatPanel] Guest limit reached');
+        onGuestLimitReached();
+        return;
+      }
+    }
     
     // Check message count limit before sending (skip for unlimited users)
     if (isUserLoggedIn() && !hasUnlimitedMessages()) {

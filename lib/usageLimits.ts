@@ -8,6 +8,75 @@ import { isUserLoggedIn } from './chatStorage';
 
 export const MAX_CHAT_MESSAGES = 5;
 export const MAX_EPISODES = 5;
+export const MAX_GUEST_EPISODES = 5;
+export const MAX_GUEST_CHATS = 5;
+
+// Guest tracking localStorage keys
+const GUEST_EPISODE_COUNT_KEY = 'inscene_guest_episode_count';
+const GUEST_CHAT_COUNT_KEY = 'inscene_guest_chat_count';
+
+// ============================================
+// Guest Usage Tracking Functions
+// ============================================
+
+/**
+ * Get the current episode count for guest users (from localStorage)
+ */
+export const getGuestEpisodeCount = (): number => {
+  if (typeof window === 'undefined') return 0;
+  const count = localStorage.getItem(GUEST_EPISODE_COUNT_KEY);
+  return count ? parseInt(count, 10) : 0;
+};
+
+/**
+ * Increment the guest episode count
+ */
+export const incrementGuestEpisodeCount = (): number => {
+  if (typeof window === 'undefined') return 0;
+  const currentCount = getGuestEpisodeCount();
+  const newCount = currentCount + 1;
+  localStorage.setItem(GUEST_EPISODE_COUNT_KEY, newCount.toString());
+  return newCount;
+};
+
+/**
+ * Get the current chat count for guest users (from localStorage)
+ */
+export const getGuestChatCount = (): number => {
+  if (typeof window === 'undefined') return 0;
+  const count = localStorage.getItem(GUEST_CHAT_COUNT_KEY);
+  return count ? parseInt(count, 10) : 0;
+};
+
+/**
+ * Increment the guest chat count
+ */
+export const incrementGuestChatCount = (): number => {
+  if (typeof window === 'undefined') return 0;
+  const currentCount = getGuestChatCount();
+  const newCount = currentCount + 1;
+  localStorage.setItem(GUEST_CHAT_COUNT_KEY, newCount.toString());
+  return newCount;
+};
+
+/**
+ * Check if guest has reached EITHER the episode OR chat limit
+ * Returns true when EITHER count >= 5
+ */
+export const checkGuestLimit = (): boolean => {
+  const episodeCount = getGuestEpisodeCount();
+  const chatCount = getGuestChatCount();
+  return episodeCount >= MAX_GUEST_EPISODES || chatCount >= MAX_GUEST_CHATS;
+};
+
+/**
+ * Reset guest usage counts (used after sign-in)
+ */
+export const resetGuestCounts = (): void => {
+  if (typeof window === 'undefined') return;
+  localStorage.removeItem(GUEST_EPISODE_COUNT_KEY);
+  localStorage.removeItem(GUEST_CHAT_COUNT_KEY);
+};
 
 // ============================================
 // Usage Tracking Functions
@@ -65,15 +134,12 @@ export const checkEpisodeLimit = async (): Promise<boolean> => {
 
 /**
  * Check if user can access a specific episode
- * - Guests can only access Episode 1
+ * - Guests can now access ALL episodes until they hit the guest limit
  * - Authenticated users can access any episode (subject to completion limits)
  */
 export const canAccessEpisode = (episodeId: number, isAuthenticated: boolean): boolean => {
-  if (!isAuthenticated) {
-    // Guest users can only access Episode 1
-    return episodeId === 1;
-  }
-  // Authenticated users can access any episode
+  // Both guests and authenticated users can access all episodes
+  // Guest limits are now handled by checkGuestLimit() instead
   return true;
 };
 

@@ -6,6 +6,8 @@ import AuthModal from './components/AuthModal.tsx';
 import WaitlistModal from './components/WaitlistModal.tsx';
 import SignupPromptModal from './components/SignupPromptModal.tsx';
 import MandatorySignInModal from './components/MandatorySignInModal.tsx';
+import GuestLimitModal from './components/GuestLimitModal.tsx';
+import PremiumBlockedModal from './components/PremiumBlockedModal.tsx';
 import UserMenu from './components/UserMenu.tsx';
 import InfluencerPage from './components/InfluencerPage.tsx';
 import ChatWidget from './components/ChatWidget.tsx';
@@ -13,8 +15,8 @@ import HamburgerMenu from './components/HamburgerMenu.tsx';
 import LeaderboardDrawer from './components/LeaderboardDrawer.tsx';
 import EpisodeView from './components/EpisodeView.tsx';
 import { AuthProvider, useAuth } from './lib/auth';
-import { getUserMessageCount, hasUnlimitedMessages } from './lib/chatStorage';
-import { hasShownSignupPrompt, canAccessEpisode, MAX_CHAT_MESSAGES, checkEpisodeLimit } from './lib/usageLimits';
+import { getUserMessageCount, hasUnlimitedMessages, isOnWaitlist } from './lib/chatStorage';
+import { hasShownSignupPrompt, canAccessEpisode, MAX_CHAT_MESSAGES, checkEpisodeLimit, checkGuestLimit } from './lib/usageLimits';
 import { Analytics } from "@vercel/analytics/react";
 import { PointsEarningProvider } from './lib/pointsEarningContext';
 import PointEarningAnimation from './components/PointEarningAnimation';
@@ -1429,6 +1431,8 @@ const AppContent: React.FC = () => {
   const [waitlistLimitType, setWaitlistLimitType] = useState<'chat' | 'episode'>('chat');
   const [isSignupPromptOpen, setIsSignupPromptOpen] = useState(false);
   const [isMandatorySignInOpen, setIsMandatorySignInOpen] = useState(false);
+  const [isGuestLimitModalOpen, setIsGuestLimitModalOpen] = useState(false);
+  const [isPremiumBlockedOpen, setIsPremiumBlockedOpen] = useState(false);
   const [ctaNavigatedEpisodes, setCtaNavigatedEpisodes] = useState<Set<number>>(new Set());
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [transitioningToEpisodeId, setTransitioningToEpisodeId] = useState<number | null>(null);
@@ -1518,13 +1522,30 @@ const AppContent: React.FC = () => {
     trackPageView({ viewType: 'app_open' });
   }, []);
 
-  // Show sign-up prompt on app entry if not shown before and user is not authenticated
+  // Check guest limit on app entry (for non-authenticated users)
+  // Also check if authenticated user is on waitlist and should be blocked
   useEffect(() => {
-    // Wait for auth to finish loading before showing prompt
-    if (!isAuthLoading && !isAuthenticated && !hasShownSignupPrompt()) {
-      console.log('[App] Showing sign-up prompt');
-      setIsSignupPromptOpen(true);
-    }
+    const checkLimitsOnEntry = async () => {
+      // Wait for auth to finish loading
+      if (isAuthLoading) return;
+      
+      if (!isAuthenticated) {
+        // Guest user - check if they've hit the guest limit
+        if (checkGuestLimit()) {
+          console.log('[App] Guest limit reached, showing guest limit modal');
+          setIsGuestLimitModalOpen(true);
+        }
+      } else {
+        // Authenticated user - check if they're on the waitlist (blocked)
+        const onWaitlist = await isOnWaitlist();
+        if (onWaitlist) {
+          console.log('[App] User is on waitlist, blocking access');
+          setIsPremiumBlockedOpen(true);
+        }
+      }
+    };
+    
+    checkLimitsOnEntry();
   }, [isAuthenticated, isAuthLoading]);
 
   // Load chat histories when user logs in
@@ -1809,9 +1830,10 @@ const AppContent: React.FC = () => {
       return;
     }
     
-    // Guest episode restriction: Guests can only access Episode 1
-    if (!isAuthenticated && !canAccessEpisode(episodeId, isAuthenticated)) {
-      setIsMandatorySignInOpen(true);
+    // For guests, check if they've hit the guest limit before allowing navigation
+    if (!isAuthenticated && checkGuestLimit()) {
+      console.log('[handleNavigateToEpisode] Guest limit reached, showing guest limit modal');
+      setIsGuestLimitModalOpen(true);
       return;
     }
     
@@ -2478,15 +2500,13 @@ const AppContent: React.FC = () => {
                 }}
                 onNavigateToEpisode={handleNavigateToEpisode}
                 onNavigateBack={handleNavigateBack}
-                onEpisodeCompleted={(episodeId) => {
-                  if (episodeId === 1 && !isAuthenticated) {
-                    setIsMandatorySignInOpen(true);
-                  }
-                }}
+                onEpisodeCompleted={() => {}}
                 onEpisodeLimitReached={() => {
                   setWaitlistLimitType('episode');
                   setIsWaitlistModalOpen(true);
                 }}
+                onGuestLimitReached={() => setIsGuestLimitModalOpen(true)}
+                isAuthenticated={isAuthenticated}
                 isChatOpen={!!chatData}
                 currentIndex={activeIdx}
                 ctaNavigatedEpisodes={ctaNavigatedEpisodes}
@@ -2520,15 +2540,13 @@ const AppContent: React.FC = () => {
                 }}
                 onNavigateToEpisode={handleNavigateToEpisode}
                 onNavigateBack={handleNavigateBack}
-                onEpisodeCompleted={(episodeId) => {
-                  if (episodeId === 1 && !isAuthenticated) {
-                    setIsMandatorySignInOpen(true);
-                  }
-                }}
+                onEpisodeCompleted={() => {}}
                 onEpisodeLimitReached={() => {
                   setWaitlistLimitType('episode');
                   setIsWaitlistModalOpen(true);
                 }}
+                onGuestLimitReached={() => setIsGuestLimitModalOpen(true)}
+                isAuthenticated={isAuthenticated}
                 isChatOpen={!!chatData}
                 containerClassName={transitionDirection === 'backward' ? 'video-transition-out-down' : 'video-transition-out'}
                 preventAutoplay={true}
@@ -2559,15 +2577,13 @@ const AppContent: React.FC = () => {
                 }}
                 onNavigateToEpisode={handleNavigateToEpisode}
                 onNavigateBack={handleNavigateBack}
-                onEpisodeCompleted={(episodeId) => {
-                  if (episodeId === 1 && !isAuthenticated) {
-                    setIsMandatorySignInOpen(true);
-                  }
-                }}
+                onEpisodeCompleted={() => {}}
                 onEpisodeLimitReached={() => {
                   setWaitlistLimitType('episode');
                   setIsWaitlistModalOpen(true);
                 }}
+                onGuestLimitReached={() => setIsGuestLimitModalOpen(true)}
+                isAuthenticated={isAuthenticated}
                 isChatOpen={!!chatData}
                 containerClassName={transitionDirection === 'backward' ? 'video-transition-in-up' : 'video-transition-in'}
                 preventAutoplay={true}
@@ -2603,15 +2619,13 @@ const AppContent: React.FC = () => {
             }}
             onNavigateToEpisode={handleNavigateToEpisode}
             onNavigateBack={handleNavigateBack}
-            onEpisodeCompleted={(episodeId) => {
-              if (episodeId === 1 && !isAuthenticated) {
-                setIsMandatorySignInOpen(true);
-              }
-            }}
+            onEpisodeCompleted={() => {}}
             onEpisodeLimitReached={() => {
               setWaitlistLimitType('episode');
               setIsWaitlistModalOpen(true);
             }}
+            onGuestLimitReached={() => setIsGuestLimitModalOpen(true)}
+            isAuthenticated={isAuthenticated}
             isChatOpen={!!chatData}
             currentIndex={activeIdx}
             ctaNavigatedEpisodes={ctaNavigatedEpisodes}
@@ -2773,6 +2787,7 @@ const AppContent: React.FC = () => {
             setWaitlistLimitType('chat');
             setIsWaitlistModalOpen(true);
           }}
+          onGuestLimitReached={() => setIsGuestLimitModalOpen(true)}
           isGuidedChat={chatData.isGuidedChat || false}
           guidedChatDuration={chatData.guidedChatDuration || 45}
           closeEnabled={chatData.closeEnabled !== undefined ? chatData.closeEnabled : true}
@@ -2845,6 +2860,21 @@ const AppContent: React.FC = () => {
         onSuccess={() => {
           setIsMandatorySignInOpen(false);
         }}
+      />
+
+      {/* Guest Limit Modal - Shows when guest hits 5 episodes OR 5 chats */}
+      <GuestLimitModal
+        isOpen={isGuestLimitModalOpen}
+        onSignInSuccess={() => {
+          setIsGuestLimitModalOpen(false);
+          // After successful sign-in from guest limit modal, show blocked modal
+          setIsPremiumBlockedOpen(true);
+        }}
+      />
+
+      {/* Premium Blocked Modal - Shows for users on waitlist */}
+      <PremiumBlockedModal
+        isOpen={isPremiumBlockedOpen}
       />
 
       <Analytics />
