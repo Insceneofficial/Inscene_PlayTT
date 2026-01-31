@@ -446,12 +446,12 @@ Your coaching flow:
 
 Keep responses concise and forward-looking.`,
 
-    'Stamina (Yo-Yo Test)': `IMPORTANT: This is a GUIDED CHAT SESSION for Stamina coaching.
+    'Endurance (Yo-Yo Test)': `IMPORTANT: This is a GUIDED CHAT SESSION for Endurance coaching.
 
 Your coaching flow:
 1. First, LISTEN: Get their Yo-Yo / Euro Test benchmark score
 2. Then, EXPLAIN: Honestly interpret what their score means
-3. Then, CORRECT: Provide a simple weekly stamina improvement plan
+3. Then, CORRECT: Provide a simple weekly endurance improvement plan
 4. Finally, ASK: End by asking them to try it and report back
 
 Keep responses concise and actionable. Be realistic about their current level.`,

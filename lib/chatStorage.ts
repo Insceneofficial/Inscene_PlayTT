@@ -1,4 +1,5 @@
 import { supabase, isSupabaseConfigured } from './supabase';
+import { isDevUser } from './devAuth';
 
 // ============================================
 // Constants
@@ -353,8 +354,14 @@ export const getLastMessages = async (): Promise<Record<string, ChatMessage>> =>
  */
 /**
  * Check if user is a privileged/admin user (full access, no leaderboard)
+ * Includes dev users in development mode
  */
 export const isPrivilegedUser = (): boolean => {
+  // Dev users always have privileged access in dev mode
+  if (isDevUser()) {
+    return true;
+  }
+  
   try {
     const savedUser = localStorage.getItem('inscene_google_user');
     if (savedUser) {

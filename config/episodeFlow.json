@@ -42,7 +42,7 @@
       "ctas": [
         { "label": "Shots", "target": "ep2" },
         { "label": "Speed", "target": "ep3" },
-        { "label": "Stamina", "target": "ep4" },
+        { "label": "Endurance", "target": "ep4" },
         { "label": "Professional Cricket Journey", "target": "ep5" }
       ]
     },
@@ -209,7 +209,7 @@
     },
 
     "ep4": {
-      "title": "Stamina (Yo-Yo Test)",
+      "title": "Endurance (Yo-Yo Test)",
       "videoUrl": "https://rgmeakgorodicnqgrffu.supabase.co/storage/v1/object/public/inscene-videos/Chirag/Ep4%20Stamina(Yoyo).mp4",
       "type": "single",
       "chatRequired": true,

@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useAuth, getUserDisplayName, getUserAvatar } from '../lib/auth';
+import { isDevMode, isDevUser, signInWithDevAccount } from '../lib/devAuth';
 
 interface UserMenuProps {
   onSignInClick: () => void;
@@ -9,6 +10,8 @@ const UserMenu: React.FC<UserMenuProps> = ({ onSignInClick }) => {
   const { user, isAuthenticated, signOut, isLoading } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const isDev = isDevMode();
+  const isDevAccount = isDevUser();
 
   // Close menu when clicking outside
   useEffect(() => {
@@ -30,12 +33,25 @@ const UserMenu: React.FC<UserMenuProps> = ({ onSignInClick }) => {
 
   if (!isAuthenticated) {
     return (
-      <button
-        onClick={onSignInClick}
-        className="px-4 py-2 rounded-xl bg-[#4A7C59] text-white text-[13px] font-semibold hover:bg-[#3D6549] active:scale-[0.98] transition-all"
-      >
-        Sign In
-      </button>
+      <div className="flex items-center gap-2">
+        {/* Dev Login Button - Only visible in dev mode */}
+        {isDev && (
+          <button
+            onClick={signInWithDevAccount}
+            className="px-3 py-2 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-600 text-[12px] font-semibold hover:bg-amber-500/20 active:scale-[0.98] transition-all flex items-center gap-1.5"
+            title="Sign in with Dev Account (Local Testing Only)"
+          >
+            <span>🔧</span>
+            <span>Dev Login</span>
+          </button>
+        )}
+        <button
+          onClick={onSignInClick}
+          className="px-4 py-2 rounded-xl bg-[#4A7C59] text-white text-[13px] font-semibold hover:bg-[#3D6549] active:scale-[0.98] transition-all"
+        >
+          Sign In
+        </button>
+      </div>
     );
   }
 
@@ -44,10 +60,18 @@ const UserMenu: React.FC<UserMenuProps> = ({ onSignInClick }) => {
   const initials = displayName.charAt(0).toUpperCase();
 
   return (
-    <div className="relative" ref={menuRef}>
+    <div className="relative flex items-center gap-2" ref={menuRef}>
+      {/* Dev Account Badge */}
+      {isDevAccount && (
+        <span className="px-2 py-1 rounded-lg bg-amber-500/15 border border-amber-500/30 text-amber-600 text-[10px] font-bold uppercase tracking-wide">
+          🔧 DEV
+        </span>
+      )}
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-2 p-0.5 rounded-xl bg-white border border-black/[0.06] hover:border-black/[0.12] active:scale-[0.98] transition-all shadow-sm"
+        className={`flex items-center gap-2 p-0.5 rounded-xl bg-white border hover:border-black/[0.12] active:scale-[0.98] transition-all shadow-sm ${
+          isDevAccount ? 'border-amber-500/40' : 'border-black/[0.06]'
+        }`}
       >
         {avatarUrl ? (
           <img 
@@ -57,8 +81,10 @@ const UserMenu: React.FC<UserMenuProps> = ({ onSignInClick }) => {
             referrerPolicy="no-referrer"
           />
         ) : (
-          <div className="w-8 h-8 rounded-lg bg-[#4A7C59] flex items-center justify-center text-white font-semibold text-sm">
-            {initials}
+          <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-white font-semibold text-sm ${
+            isDevAccount ? 'bg-amber-500' : 'bg-[#4A7C59]'
+          }`}>
+            {isDevAccount ? '🔧' : initials}
           </div>
         )}
       </button>

@@ -1214,8 +1214,11 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
           <div className="bg-gradient-to-t from-black/80 via-black/60 to-transparent backdrop-blur-sm rounded-t-2xl pointer-events-auto">
             <div className="px-4 py-3 pointer-events-auto">
               <p className="text-white text-center text-sm font-medium mb-4 pointer-events-none">
+                {/* #region agent log */}
+                {(() => { fetch('http://127.0.0.1:7242/ingest/ac7c5e46-64d1-400e-8ce5-b517901614ef',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'EpisodeView.tsx:1217',message:'CTA text render',data:{episodeId:episode.id,stringId:getStringId(episode.id),ctasLength:episode.ctas?.length,ctaLabels:episode.ctas?.map((c:any)=>c.label)},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H3-H4'})}).catch(()=>{}); return null; })()}
+                {/* #endregion */}
                 {episode.ctas && episode.ctas.length > 0 
-                  ? (episode.ctas.length === 1 ? 'Continue?' : 'What would you like to do?')
+                  ? (episode.ctas.length === 1 ? 'Continue?' : (getStringId(episode.id) === 'ep1' ? 'What area would you like to focus on?' : 'What would you like to do?'))
                   : episode.id === 1 
                     ? 'What problems are you facing?' 
                     : episode.id === 3 
@@ -1295,7 +1298,7 @@ const EpisodeView: React.FC<EpisodeViewProps> = ({
                         className="relative px-4 py-3 rounded-xl bg-white/10 backdrop-blur-sm border border-white/20 text-white text-xs font-medium hover:bg-white/20 active:scale-95 transition-all text-center min-h-[44px] flex items-center justify-center pointer-events-auto cursor-pointer w-full"
                         style={{ touchAction: 'manipulation' }}
                       >
-                        Stamina
+                        Endurance
                       </button>
                       <button
                         onClick={(e) => {

@@ -1,6 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import { supabase, isSupabaseConfigured } from './supabase';
-import { isDevMode, createDevUser, shouldUseDevAuth } from './devAuth';
 
 // ============================================
 // Types
@@ -89,11 +88,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         localStorage.setItem('inscene_google_user', JSON.stringify(googleUser));
         localStorage.setItem('inscene_google_token', response.credential);
         
-        // Re-enable dev auth if user signs in again (clear the disabled flag)
-        if (shouldUseDevAuth()) {
-          localStorage.removeItem('inscene_dev_auth_disabled');
-        }
-        
         setUser(googleUser);
 
         // Save user to Supabase (if configured)
@@ -107,56 +101,17 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   // Load Google Identity Services script
   useEffect(() => {
-    // DEVELOPMENT BYPASS: Auto-login in dev mode
-    if (shouldUseDevAuth()) {
-      // Check if dev auth is disabled (after sign-out)
-      const devAuthDisabled = localStorage.getItem('inscene_dev_auth_disabled') === 'true';
-      
-      if (devAuthDisabled) {
-        console.log('[DevAuth] Dev auth auto-login is disabled - user signed out for testing');
-        setIsLoading(false);
-        // Don't auto-login, allow user to test as guest
-        // Continue to normal flow below - user will be null, which is correct for guest
-      } else {
-        const existingDevUser = localStorage.getItem('inscene_google_user');
-        if (!existingDevUser) {
-          const devUser = createDevUser();
-          if (devUser) {
-            setUser(devUser);
-            setIsLoading(false);
-            console.warn('[DevAuth] ⚠️ DEVELOPMENT MODE: Auto-logged in with dev user');
-            console.warn('[DevAuth] This bypass is ONLY active in npm run dev');
-            return; // Skip Google script loading in dev mode
-          }
-        } else {
-          // Dev user already exists, just load it
-          try {
-            const parsed = JSON.parse(existingDevUser);
-            // Verify it's actually a dev user (not a real Google user)
-            if (parsed.id === 'dev-user-local-testing' || parsed.email === 'dev@local.test') {
-              setUser(parsed);
-              setIsLoading(false);
-              console.log('[DevAuth] Loaded existing dev user');
-              return; // Skip Google script loading in dev mode
-            }
-          } catch {
-            // If parsing fails, create new dev user
-            const devUser = createDevUser();
-            if (devUser) {
-              setUser(devUser);
-              setIsLoading(false);
-              return; // Skip Google script loading in dev mode
-            }
-          }
-        }
-      }
-    }
-    
-    // PRODUCTION CODE: Check for existing session (normal flow)
+    // Check for existing session (works for both real Google users and dev users)
     const savedUser = localStorage.getItem('inscene_google_user');
     if (savedUser) {
       try {
-        setUser(JSON.parse(savedUser));
+        const parsed = JSON.parse(savedUser);
+        setUser(parsed);
+        
+        // Log if it's a dev user
+        if (parsed.id === 'dev-user-local-testing' || parsed.email === 'dev@local.test') {
+          console.log('[DevAuth] 🔧 Loaded existing dev user session');
+        }
       } catch {
         localStorage.removeItem('inscene_google_user');
       }
@@ -216,22 +171,21 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const signOut = async () => {
     const userEmail = user?.email;
+    const wasDevUser = user?.id === 'dev-user-local-testing';
     
     // Clear local storage
     localStorage.removeItem('inscene_google_user');
     localStorage.removeItem('inscene_google_token');
     localStorage.removeItem('inscene_signup_prompt_shown');
     
-    // Disable dev auth auto-login after sign-out (for testing purposes)
-    if (shouldUseDevAuth()) {
-      localStorage.setItem('inscene_dev_auth_disabled', 'true');
-      console.log('[DevAuth] Dev auth auto-login disabled after sign-out');
+    if (wasDevUser) {
+      console.log('[DevAuth] 🔧 Signed out of dev account');
     }
     
     setUser(null);
 
-    // Revoke Google token
-    if (window.google && userEmail) {
+    // Revoke Google token (only for real Google users)
+    if (window.google && userEmail && !wasDevUser) {
       window.google.accounts.id.revoke(userEmail, () => {
         console.log('Google session revoked');
       });

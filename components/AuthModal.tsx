@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { useAuth } from '../lib/auth';
-import { isDevMode, createDevUser } from '../lib/devAuth';
+import { isDevMode, signInWithDevAccount } from '../lib/devAuth';
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -14,17 +14,6 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess }) => 
   const { isAuthenticated, signInWithGoogle } = useAuth();
   const googleButtonRef = useRef<HTMLDivElement>(null);
   const isDev = isDevMode();
-  
-  const handleDevLogin = () => {
-    // Clear the disabled flag
-    localStorage.removeItem('inscene_dev_auth_disabled');
-    // Create and set dev user
-    const devUser = createDevUser();
-    if (devUser) {
-      // Reload to apply the auth state
-      window.location.reload();
-    }
-  };
 
   // Close modal on successful auth
   useEffect(() => {
@@ -129,14 +118,15 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess }) => 
             <>
               <div className="flex items-center gap-4 py-2">
                 <div className="flex-1 h-px bg-black/[0.06]" />
-                <span className="text-[#ACACAC] text-[12px] font-medium">or</span>
+                <span className="text-[#ACACAC] text-[12px] font-medium">dev only</span>
                 <div className="flex-1 h-px bg-black/[0.06]" />
               </div>
               <button
-                onClick={handleDevLogin}
-                className="w-full py-3 rounded-xl bg-[#C9A227]/10 border border-[#C9A227]/20 text-[#C9A227] font-medium hover:bg-[#C9A227]/20 active:scale-[0.98] transition-all text-[14px]"
+                onClick={signInWithDevAccount}
+                className="w-full py-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-600 font-medium hover:bg-amber-500/20 active:scale-[0.98] transition-all text-[14px] flex items-center justify-center gap-2"
               >
-                🔧 Dev Account (Local Only)
+                <span>🔧</span>
+                <span>Dev Account (Local Only)</span>
               </button>
             </>
           )}

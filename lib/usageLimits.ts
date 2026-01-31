@@ -1,4 +1,4 @@
-import { getUserMessageCount } from './chatStorage';
+import { getUserMessageCount, hasUnlimitedMessages } from './chatStorage';
 import { getTotalEpisodeViewsCount } from './analytics';
 import { isUserLoggedIn } from './chatStorage';
 
@@ -36,9 +36,12 @@ export const getEpisodeViewsCountForUser = async (): Promise<number> => {
 
 /**
  * Check if user has reached the chat message limit
+ * Returns false for privileged/dev users (unlimited access)
  */
 export const checkChatLimit = async (): Promise<boolean> => {
   if (!isUserLoggedIn()) return false;
+  // Privileged/dev users have unlimited messages
+  if (hasUnlimitedMessages()) return false;
   const count = await getChatMessageCount();
   return count >= MAX_CHAT_MESSAGES;
 };
@@ -46,9 +49,12 @@ export const checkChatLimit = async (): Promise<boolean> => {
 /**
  * Check if user has reached the episode view limit
  * Counts ALL episode views (even rewatches) not just unique episodes
+ * Returns false for privileged/dev users (unlimited access)
  */
 export const checkEpisodeLimit = async (): Promise<boolean> => {
   if (!isUserLoggedIn()) return false;
+  // Privileged/dev users have unlimited episodes
+  if (hasUnlimitedMessages()) return false;
   const count = await getEpisodeViewsCountForUser();
   return count >= MAX_EPISODES;
 };
