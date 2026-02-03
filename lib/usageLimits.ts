@@ -61,22 +61,18 @@ export const incrementGuestChatCount = (): number => {
 
 /**
  * Check if guest has reached EITHER the episode OR chat limit
- * Returns true when EITHER count >= 5
+ * DISABLED: All users now have unlimited access
  */
 export const checkGuestLimit = (): boolean => {
-  const episodeCount = getGuestEpisodeCount();
-  const chatCount = getGuestChatCount();
-  return episodeCount >= MAX_GUEST_EPISODES || chatCount >= MAX_GUEST_CHATS;
+  return false; // Unlimited access for all users
 };
 
 /**
  * Check if user has engaged enough to show premium waitlist prompt
- * Returns true when BOTH episodes > 5 AND chats > 5 (6+ of each)
+ * DISABLED: All users now have unlimited access
  */
 export const checkEngagedUserThreshold = (): boolean => {
-  const episodeCount = getGuestEpisodeCount();
-  const chatCount = getGuestChatCount();
-  return episodeCount > 5 && chatCount > 5;
+  return false; // Unlimited access for all users
 };
 
 // LocalStorage key for tracking if engaged user waitlist has been shown
@@ -134,27 +130,18 @@ export const getEpisodeViewsCountForUser = async (): Promise<number> => {
 
 /**
  * Check if user has reached the chat message limit
- * Returns false for privileged/dev users (unlimited access)
+ * DISABLED: All users now have unlimited access
  */
 export const checkChatLimit = async (): Promise<boolean> => {
-  if (!isUserLoggedIn()) return false;
-  // Privileged/dev users have unlimited messages
-  if (hasUnlimitedMessages()) return false;
-  const count = await getChatMessageCount();
-  return count >= MAX_CHAT_MESSAGES;
+  return false; // Unlimited access for all users
 };
 
 /**
  * Check if user has reached the episode view limit
- * Counts ALL episode views (even rewatches) not just unique episodes
- * Returns false for privileged/dev users (unlimited access)
+ * DISABLED: All users now have unlimited access
  */
 export const checkEpisodeLimit = async (): Promise<boolean> => {
-  if (!isUserLoggedIn()) return false;
-  // Privileged/dev users have unlimited episodes
-  if (hasUnlimitedMessages()) return false;
-  const count = await getEpisodeViewsCountForUser();
-  return count >= MAX_EPISODES;
+  return false; // Unlimited access for all users
 };
 
 // ============================================

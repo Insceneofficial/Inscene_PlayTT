@@ -384,9 +384,10 @@ export const isPrivilegedUser = (): boolean => {
 
 /**
  * Check if user has unlimited messages (bypass limit)
+ * ENABLED FOR ALL: All users now have unlimited access
  */
 export const hasUnlimitedMessages = (): boolean => {
-  return isPrivilegedUser();
+  return true; // Unlimited access for all users
 };
 
 /**
@@ -443,26 +444,10 @@ export const addToWaitlist = async (email?: string, name?: string): Promise<bool
 
 /**
  * Check if user is on the premium waitlist
+ * DISABLED: All users now have unlimited access, waitlist blocking removed
  */
 export const isOnWaitlist = async (): Promise<boolean> => {
-  if (!isSupabaseConfigured()) return false;
-  
-  const googleUserId = getGoogleUserId();
-  if (!googleUserId) return false;
-  
-  try {
-    const { data, error } = await supabase
-      .from('premium_waitlist')
-      .select('id')
-      .eq('google_user_id', googleUserId)
-      .limit(1);
-    
-    if (error) throw error;
-    return data && data.length > 0;
-  } catch (error) {
-    console.warn('ChatStorage: Failed to check waitlist status', error);
-    return false;
-  }
+  return false; // Unlimited access for all users
 };
 
 export const hasChatHistory = async (characterName: string): Promise<boolean> => {

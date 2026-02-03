@@ -1508,20 +1508,8 @@ const InfluencerPage: React.FC = () => {
     }
   }, [selectedEpisodeIndex]);
 
+  // Authentication check removed - all users have unlimited access
   const handleChatInit = async (chatDataConfig: any) => {
-    if (!isAuthenticated) {
-      setIsAuthModalOpen(true);
-      return;
-    }
-    
-    // Check message count limit (skip for unlimited users)
-    if (!hasUnlimitedMessages()) {
-      const messageCount = await getUserMessageCount();
-      if (messageCount >= MAX_USER_MESSAGES) {
-        setIsWaitlistModalOpen(true);
-        return;
-      }
-    }
     
     // Get global rules for chat configuration
     const globalRules = getGlobalRules();

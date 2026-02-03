@@ -1691,24 +1691,9 @@ const AppContent: React.FC = () => {
     };
   }, [selectedSeries, chatData]);
 
-  // Helper function to handle chat initiation with authentication check
+  // Helper function to handle chat initiation (no authentication required)
   const handleChatInit = async (chatDataConfig: any) => {
-    if (!isAuthenticated) {
-      // User not authenticated - show auth modal
-      setIsAuthModalOpen(true);
-      return;
-    }
-    
-    // Check message count limit (skip for unlimited users)
-    if (!hasUnlimitedMessages()) {
-      const messageCount = await getUserMessageCount();
-      if (messageCount >= MAX_CHAT_MESSAGES) {
-        // User has reached message limit - show waitlist modal
-        setWaitlistLimitType('chat');
-        setIsWaitlistModalOpen(true);
-        return;
-      }
-    }
+    // Authentication check removed - all users have unlimited access
     
     // Get global rules for chat configuration
     const globalRules = getGlobalRules();
